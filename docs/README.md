@@ -14,10 +14,12 @@ Read in this order:
    writes, failure taxonomy and the parity gates.
 6. [`FRONTEND.md`](FRONTEND.md) — the React app, wallet and keystore, claim links, and why
    freshness-gated reads are signed.
-7. [`THREAT_MODEL.md`](THREAT_MODEL.md) — assets, adversaries, mitigations and residual risks.
-8. [`STATUS.md`](STATUS.md) — what is implemented, measured, and deferred.
-9. [`LEGAL.md`](LEGAL.md) — regulatory and compliance boundaries (not legal advice).
-10. [`SPIKE-METAMASK.md`](SPIKE-METAMASK.md) — the MetaMask signing experiment: method and
+7. [`LANGUAGES.md`](LANGUAGES.md) — the language policy: Rust, Rholang, Python and
+   TypeScript only; C/C++ sources are rejected by `make check-languages` and CI.
+8. [`THREAT_MODEL.md`](THREAT_MODEL.md) — assets, adversaries, mitigations and residual risks.
+9. [`STATUS.md`](STATUS.md) — what is implemented, measured, and deferred.
+10. [`LEGAL.md`](LEGAL.md) — regulatory and compliance boundaries (not legal advice).
+11. [`SPIKE-METAMASK.md`](SPIKE-METAMASK.md) — the MetaMask signing experiment: method and
     go/no-go criteria; not run.
 
 The protocol reference implementation is `contracts/src/` (Rholang) and `contracts/deploy/`
