@@ -607,6 +607,11 @@ impl Client {
                         .ok_or_else(|| decode("balance is not an integer"))?;
                     amounts.insert((*asset).to_string(), Amount::raw(amount));
                 }
+                // A purse is created on first deposit, so an Account that has never held
+                // this asset reports `no purse`. That is a zero balance, not a failure.
+                Reply::Refused(reason) if reason == "no purse" => {
+                    amounts.insert((*asset).to_string(), Amount::raw(0));
+                }
                 Reply::Refused(reason) => {
                     return Err(ChainError::Refused(format!("{asset}: {reason}")))
                 }

@@ -16,3 +16,6 @@ tests/parity/node_modules/
 web/node_modules/
 web/dist/
 web/src/wasm/pkg/
+web/public/devnet.json
+web/test-results/
+web/playwright-report/

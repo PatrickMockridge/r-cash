@@ -22,6 +22,7 @@ thiserror.workspace = true
 bs58.workspace = true
 zeroize.workspace = true
 getrandom.workspace = true
+async-trait.workspace = true
 rchain-crypto.workspace = true
 rchain-models.workspace = true
 rchain-shared.workspace = true
@@ -29,6 +30,8 @@ rchain-shared.workspace = true
 reqwest = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true }
 
-# `std::time::SystemTime::now()` compiles but panics on wasm32-unknown-unknown.
+# `std::time::{Instant, SystemTime}` compile but panic on wasm32-unknown-unknown.
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 web-time = "1"
+gloo-net = { version = "0.6", default-features = false, features = ["http"] }
+gloo-timers = { version = "0.3", features = ["futures"] }

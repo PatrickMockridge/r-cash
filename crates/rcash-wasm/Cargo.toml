@@ -12,10 +12,19 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 rcash-core.workspace = true
-# Declared by path rather than inherited: a workspace-inherited dependency keeps the
-# workspace's default features, which would pull the native HTTP client into wasm.
 rcash-chain = { path = "../rcash-chain", default-features = false, features = ["wasm"] }
+rcash-sdk = { path = "../rcash-sdk", default-features = false, features = ["wasm"] }
 wasm-bindgen.workspace = true
+wasm-bindgen-futures.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+js-sys = "0.3"
+getrandom.workspace = true
+zeroize.workspace = true
+scrypt = "0.12"
+aes = "0.9"
+ctr = "0.10"
+sha3.workspace = true
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3"

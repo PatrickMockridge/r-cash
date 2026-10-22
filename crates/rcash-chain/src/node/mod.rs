@@ -5,16 +5,26 @@
 //! - `GET /api/v1/deploy-status/{sig}` returns an externally tagged status enum.
 //! - Finality is a separate route: `GET /api/is-finalized/{blockHash}`.
 //! - `POST /api/v1/explore-deploy` takes a bare JSON string and does not bind
-//!   `deployerId`.
+//!   `deployerId`; `rho:block:data` reports height 0 there.
 //! - The public API enables permissive CORS; the admin API does not.
 
-use std::time::{Duration, Instant};
+use std::sync::Arc;
+use std::time::Duration;
+
+#[cfg(not(target_arch = "wasm32"))]
+use std::time::Instant;
+#[cfg(target_arch = "wasm32")]
+use web_time::Instant;
 
 use serde::Deserialize;
 
 use crate::error::ChainError;
 use crate::poll::PollPolicy;
 use crate::sign::SignedDeploy;
+
+pub mod transport;
+
+use transport::{HttpRequest, Method, Transport};
 
 /// A block summary, reduced to the fields a client needs.
 #[derive(Clone, Debug, Deserialize)]
@@ -92,7 +102,7 @@ pub struct ExploreResponse {
 #[derive(Clone)]
 pub struct NodeClient {
     base: String,
-    http: reqwest::Client,
+    transport: Arc<dyn Transport>,
 }
 
 impl std::fmt::Debug for NodeClient {
@@ -108,41 +118,55 @@ impl NodeClient {
         if base.is_empty() {
             return Err(ChainError::Transport("node URL is empty".into()));
         }
-        let http = reqwest::Client::builder()
-            .timeout(Duration::from_secs(30))
-            .build()
-            .map_err(|e| ChainError::Transport(e.to_string()))?;
-        Ok(Self { base, http })
+        #[cfg(target_arch = "wasm32")]
+        let transport: Arc<dyn Transport> = Arc::new(transport::WasmTransport);
+        #[cfg(not(target_arch = "wasm32"))]
+        let transport: Arc<dyn Transport> = Arc::new(transport::NativeTransport::new()?);
+        Ok(Self { base, transport })
+    }
+
+    /// Build a client with a caller-supplied transport (tests, alternate backends).
+    pub fn with_transport(
+        base: impl Into<String>,
+        transport: Arc<dyn Transport>,
+    ) -> Result<Self, ChainError> {
+        let base = base.into().trim_end_matches('/').to_string();
+        if base.is_empty() {
+            return Err(ChainError::Transport("node URL is empty".into()));
+        }
+        Ok(Self { base, transport })
     }
 
     pub fn base_url(&self) -> &str {
         &self.base
     }
 
-    async fn send(&self, request: reqwest::RequestBuilder) -> Result<String, ChainError> {
-        let response = request
-            .send()
-            .await
-            .map_err(|e| ChainError::Transport(e.to_string()))?;
-        let status = response.status();
-        let body = response
-            .text()
-            .await
-            .map_err(|e| ChainError::Transport(e.to_string()))?;
-        if !status.is_success() {
-            return Err(ChainError::Http {
-                status: status.as_u16(),
+    async fn request(
+        &self,
+        method: Method,
+        path: &str,
+        body: Option<String>,
+    ) -> Result<String, ChainError> {
+        let response = self
+            .transport
+            .send(HttpRequest {
+                method,
+                url: format!("{}{path}", self.base),
                 body,
+            })
+            .await?;
+        if !(200..300).contains(&response.status) {
+            return Err(ChainError::Http {
+                status: response.status,
+                body: response.body,
             });
         }
-        Ok(body)
+        Ok(response.body)
     }
 
     /// `GET /api/v1/status`.
     pub async fn status(&self) -> Result<serde_json::Value, ChainError> {
-        let body = self
-            .send(self.http.get(format!("{}/api/v1/status", self.base)))
-            .await?;
+        let body = self.request(Method::Get, "/api/v1/status", None).await?;
         serde_json::from_str(&body).map_err(Into::into)
     }
 
@@ -159,24 +183,18 @@ impl NodeClient {
     }
 
     /// Submit a signed deploy. Returns its locally computed deploy id.
-    ///
-    /// The node's success message embeds the same id; the client does not parse prose.
     pub async fn deploy(&self, signed: &SignedDeploy) -> Result<String, ChainError> {
-        let body = signed.request_body();
+        let body = serde_json::to_string(&signed.request_body())?;
         let response = self
-            .http
-            .post(format!("{}/api/v1/deploy", self.base))
-            .json(&body)
-            .send()
-            .await
-            .map_err(|e| ChainError::Transport(e.to_string()))?;
-        let status = response.status();
-        let text = response
-            .text()
-            .await
-            .map_err(|e| ChainError::Transport(e.to_string()))?;
-        if !status.is_success() {
-            return Err(ChainError::DeployRejected(text));
+            .transport
+            .send(HttpRequest {
+                method: Method::Post,
+                url: format!("{}/api/v1/deploy", self.base),
+                body: Some(body),
+            })
+            .await?;
+        if !(200..300).contains(&response.status) {
+            return Err(ChainError::DeployRejected(response.body));
         }
         Ok(signed.deploy_id.clone())
     }
@@ -184,9 +202,10 @@ impl NodeClient {
     /// `GET /api/v1/deploy-status/{signature}`.
     pub async fn deploy_status(&self, deploy_id: &str) -> Result<DeployStatus, ChainError> {
         let body = self
-            .send(
-                self.http
-                    .get(format!("{}/api/v1/deploy-status/{deploy_id}", self.base)),
+            .request(
+                Method::Get,
+                &format!("/api/v1/deploy-status/{deploy_id}"),
+                None,
             )
             .await?;
         serde_json::from_str(&body).map_err(Into::into)
@@ -214,16 +233,17 @@ impl NodeClient {
                 Err(ChainError::Transport(e)) => last = e,
                 Err(e) => return Err(e),
             }
-            tokio::time::sleep(policy.interval).await;
+            sleep(policy.interval).await;
         }
     }
 
     /// `GET /api/is-finalized/{blockHash}`.
     pub async fn is_finalized(&self, block_hash: &str) -> Result<bool, ChainError> {
         let body = self
-            .send(
-                self.http
-                    .get(format!("{}/api/is-finalized/{block_hash}", self.base)),
+            .request(
+                Method::Get,
+                &format!("/api/is-finalized/{block_hash}"),
+                None,
             )
             .await?;
         serde_json::from_str(&body).map_err(Into::into)
@@ -250,52 +270,79 @@ impl NodeClient {
                 Err(ChainError::Transport(e)) => last = e,
                 Err(e) => return Err(e),
             }
-            tokio::time::sleep(policy.interval).await;
+            sleep(policy.interval).await;
         }
     }
 
     /// `POST /api/v1/explore-deploy` with a bare JSON string term.
     ///
-    /// This does not bind `deployerId`, so owner-authenticated reads cannot use it.
+    /// This does not bind `deployerId`, and `rho:block:data` reports height 0.
     pub async fn explore(&self, term: &str) -> Result<ExploreResponse, ChainError> {
-        let body = self
-            .send(
-                self.http
-                    .post(format!("{}/api/v1/explore-deploy", self.base))
-                    .json(term),
-            )
+        let body = serde_json::to_string(term)?;
+        let response = self
+            .transport
+            .send(HttpRequest {
+                method: Method::Post,
+                url: format!("{}/api/v1/explore-deploy", self.base),
+                body: Some(body),
+            })
             .await?;
-        serde_json::from_str(&body).map_err(Into::into)
+        if !(200..300).contains(&response.status) {
+            return Err(ChainError::Http {
+                status: response.status,
+                body: response.body,
+            });
+        }
+        serde_json::from_str(&response.body).map_err(Into::into)
     }
 
     /// `POST /api/v1/faucet` with a REV address.
     pub async fn faucet(&self, address: &str) -> Result<serde_json::Value, ChainError> {
-        let body = self
-            .send(
-                self.http
-                    .post(format!("{}/api/v1/faucet", self.base))
-                    .json(&serde_json::json!({ "address": address })),
-            )
+        let body = serde_json::to_string(&serde_json::json!({ "address": address }))?;
+        let response = self
+            .transport
+            .send(HttpRequest {
+                method: Method::Post,
+                url: format!("{}/api/v1/faucet", self.base),
+                body: Some(body),
+            })
             .await?;
-        serde_json::from_str(&body).map_err(Into::into)
+        if !(200..300).contains(&response.status) {
+            return Err(ChainError::Http {
+                status: response.status,
+                body: response.body,
+            });
+        }
+        serde_json::from_str(&response.body).map_err(Into::into)
     }
 
     /// `GET /api/last-finalized-block`.
     pub async fn last_finalized_block(&self) -> Result<BlockInfo, ChainError> {
         let body = self
-            .send(
-                self.http
-                    .get(format!("{}/api/last-finalized-block", self.base)),
-            )
+            .request(Method::Get, "/api/last-finalized-block", None)
             .await?;
-        serde_json::from_str(&body).map_err(Into::into)
+        // The route wraps the block: `{"blockInfo": {...}}`.
+        #[derive(Deserialize)]
+        struct Wrapped {
+            #[serde(rename = "blockInfo")]
+            block_info: BlockInfo,
+        }
+        let wrapped: Wrapped = serde_json::from_str(&body)?;
+        Ok(wrapped.block_info)
     }
 
     /// `GET /api/v1/block/{hash}`.
     pub async fn block(&self, hash: &str) -> Result<serde_json::Value, ChainError> {
         let body = self
-            .send(self.http.get(format!("{}/api/v1/block/{hash}", self.base)))
+            .request(Method::Get, &format!("/api/v1/block/{hash}"), None)
             .await?;
         serde_json::from_str(&body).map_err(Into::into)
     }
+}
+
+async fn sleep(duration: Duration) {
+    #[cfg(target_arch = "wasm32")]
+    gloo_timers::future::TimeoutFuture::new(duration.as_millis() as u32).await;
+    #[cfg(not(target_arch = "wasm32"))]
+    tokio::time::sleep(duration).await;
 }

@@ -14,10 +14,11 @@ pub mod poll;
 pub mod rho_expr;
 pub mod sign;
 
-#[cfg(feature = "native")]
 pub mod node;
 
-pub use address::{rev_address_from_eth_address, rev_address_from_public_key};
+pub use address::{
+    eth_address_from_public_key, rev_address_from_eth_address, rev_address_from_public_key,
+};
 pub use deploy::{DeployOptions, MAX_DEPLOY_TERM_BYTES};
 pub use error::ChainError;
 pub use sign::{KeyPair, SignedDeploy};

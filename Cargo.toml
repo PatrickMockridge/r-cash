@@ -34,6 +34,7 @@ serde_json = "1"
 thiserror = "2"
 bs58 = "0.5"
 zeroize = "1"
+async-trait = "0.1"
 # Keep the wasm-safe feature set here. `rt-multi-thread` is native-only and is enabled
 # by the CLI crate, the only place that needs it.
 tokio = { version = "1", features = ["macros", "time"] }

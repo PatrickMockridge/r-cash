@@ -1,0 +1,125 @@
+import { useEffect, useState } from "react";
+import { useWallet } from "../lib/store";
+import { listKeystores, type StoredKeystore } from "../lib/db";
+import { shortId } from "../lib/format";
+
+export default function Settings() {
+  const { status, node, manifest, address, setNode, setManifest, lock, exportKeystore } =
+    useWallet();
+  const [nodeInput, setNodeInput] = useState(node);
+  const [manifestInput, setManifestInput] = useState(manifest ?? "");
+  const [password, setPassword] = useState("");
+  const [saved, setSaved] = useState<StoredKeystore[]>([]);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    void listKeystores().then(setSaved);
+  }, [address]);
+
+  const saveConfig = () => {
+    setError(null);
+    setMessage(null);
+    try {
+      if (nodeInput !== node) setNode(nodeInput.trim());
+      setManifest(manifestInput);
+      setMessage("Configuration saved. Unlock again if the node changed.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    }
+  };
+
+  const exportWallet = async () => {
+    setError(null);
+    setMessage(null);
+    try {
+      const document = await exportKeystore(password);
+      const blob = new Blob([document], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = window.document.createElement("a");
+      link.href = url;
+      link.download = "rcash-keystore.json";
+      link.click();
+      URL.revokeObjectURL(url);
+      setPassword("");
+      setMessage("Encrypted keystore downloaded.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    }
+  };
+
+  return (
+    <div className="stack">
+      <section className="panel">
+        <h2>Settings</h2>
+        <label className="field">
+          Node public API
+          <input
+            value={nodeInput}
+            onChange={(event) => setNodeInput(event.target.value)}
+            className="mono"
+          />
+        </label>
+        <label className="field">
+          Deployment manifest
+          <textarea
+            value={manifestInput}
+            onChange={(event) => setManifestInput(event.target.value)}
+            rows={8}
+            className="mono"
+            placeholder="deployments/devnet.json"
+          />
+        </label>
+        {message && <p className="ok">{message}</p>}
+        {error && <p className="error">{error}</p>}
+        <button className="primary" onClick={saveConfig}>
+          Save configuration
+        </button>
+      </section>
+
+      <section className="panel">
+        <h3>Wallet</h3>
+        <p className="muted small">
+          {status === "unlocked" && address
+            ? `Unlocked: ${address}`
+            : "Locked. Unlock from any screen."}
+        </p>
+        <div className="row gap">
+          <input
+            type="password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            placeholder="Password to export"
+            autoComplete="current-password"
+          />
+          <button className="ghost" onClick={exportWallet} disabled={status !== "unlocked"}>
+            Export keystore
+          </button>
+          <button className="ghost" onClick={lock} disabled={status !== "unlocked"}>
+            Lock
+          </button>
+        </div>
+      </section>
+
+      <section className="panel">
+        <h3>Saved accounts</h3>
+        {saved.length === 0 ? (
+          <p className="muted">No encrypted keystores in this browser.</p>
+        ) : (
+          <ul className="plain">
+            {saved.map((entry) => (
+              <li key={entry.address} className="mono small">
+                {shortId(entry.address, 10)}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className="panel muted small">
+        Never store a private key, mnemonic or password in localStorage, and never share a
+        claim secret except through the claim link itself.
+      </section>
+    </div>
+  );
+}

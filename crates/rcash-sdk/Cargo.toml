@@ -7,9 +7,16 @@ license.workspace = true
 rust-version.workspace = true
 repository.workspace = true
 
+[features]
+default = ["native"]
+native = ["rcash-chain/native"]
+wasm = ["rcash-chain/wasm"]
+
 [dependencies]
 rcash-core.workspace = true
-rcash-chain.workspace = true
+# Path + `default-features = false` so the wasm build does not inherit the native HTTP
+# client; the features above select the transport.
+rcash-chain = { path = "../rcash-chain", default-features = false }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

@@ -74,6 +74,11 @@ impl KeyPair {
         base16::encode(&self.secret)
     }
 
+    /// The raw secret bytes, for the encrypted keystore. Never log or return these to JS.
+    pub fn secret_bytes(&self) -> &[u8] {
+        &self.secret
+    }
+
     /// The hex-encoded 65-byte uncompressed public key.
     pub fn public_hex(&self) -> String {
         base16::encode(&self.public)

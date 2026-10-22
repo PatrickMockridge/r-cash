@@ -41,6 +41,17 @@ cargo run -p rcash-cli -- deploy --term 'Nil' --key deployer
 cargo run -p rcash-cli -- devnet demo
 ```
 
+The web client is React + Vite + TypeScript over the same Rust SDK compiled to WASM:
+
+```sh
+cd web
+npm install
+npm run dev        # builds the wasm module and serves http://localhost:5173
+npm run test:e2e   # Playwright journey against the running devnet
+```
+
+See [`docs/CLIENT.md`](docs/CLIENT.md) and [`docs/FRONTEND.md`](docs/FRONTEND.md).
+
 `rcash devnet demo` is the end-to-end client journey (oracle, vaults, liquidity, convert,
 send/claim/refund) against the running devnet.
 

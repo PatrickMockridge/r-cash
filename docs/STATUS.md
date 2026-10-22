@@ -68,7 +68,17 @@ A platform finding changed the read design: `explore-deploy` runs with no block 
 The CLI does that; the SDK keeps public variants only for values that do not depend on
 freshness. Documented in `CLIENT.md`.
 
-Next: R3 wasm wallet and the React UI, R4 docs/CI and legacy-harness retirement.
+**R3 (wasm wallet and React UI) is complete.** `crates/rcash-wasm` exposes the wallet,
+encrypted Web3 v3 keystore and the SDK operations; `web/` is a React + Vite + TypeScript
+app with Accounts, Receive, Convert, Pay, Claim, Liquidity, Mint and Settings screens.
+Batch and Ramps are explicitly disabled. The Playwright journey passes on the devnet:
+create a wallet, fund it from the faucet, deposit REV, open a vault, deposit collateral,
+borrow NGN and convert NGN→KES, all through the UI and the wasm module.
+
+Secrets never reach the DOM: the key stays in wasm, the keystore is encrypted into
+IndexedDB, and a claim secret lives only in the URL fragment.
+
+Next: R4 CI, remaining docs and legacy-harness retirement.
 
 ## Specification
 

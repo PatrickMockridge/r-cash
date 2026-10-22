@@ -28,6 +28,21 @@ pub fn rev_address_from_public_key(public_key: &[u8]) -> Result<String, ChainErr
     rev_address_from_eth_address(eth_address)
 }
 
+/// The 20-byte Ethereum address (hex, no `0x`) of a 65-byte uncompressed public key.
+///
+/// This is the address field a Web3 Secret Storage v3 keystore carries.
+pub fn eth_address_from_public_key(public_key: &[u8]) -> Result<String, ChainError> {
+    if public_key.len() != 65 || public_key[0] != 0x04 {
+        return Err(ChainError::BadKey(format!(
+            "expected a 65-byte uncompressed public key, got {} bytes",
+            public_key.len()
+        )));
+    }
+    let hash = keccak256::hash(&public_key[1..]);
+    let hex = base16::encode(&hash);
+    Ok(hex[hex.len() - ETH_ADDRESS_HEX_LENGTH..].to_string())
+}
+
 /// Derive the REV address the node derives from an Ethereum address.
 pub fn rev_address_from_eth_address(eth_address: &str) -> Result<String, ChainError> {
     let stripped = eth_address
