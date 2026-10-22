@@ -1,0 +1,13 @@
+[package]
+name = "rcash-core"
+description = "R-Cash domain types, fixed-point amounts and Rholang term encoding"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true

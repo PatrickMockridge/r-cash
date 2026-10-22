@@ -1,0 +1,21 @@
+[package]
+name = "rcash-cli"
+description = "The R-Cash command-line client"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "rcash"
+path = "src/main.rs"
+
+[dependencies]
+rcash-core.workspace = true
+rcash-chain.workspace = true
+rcash-sdk.workspace = true
+clap.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread"] }

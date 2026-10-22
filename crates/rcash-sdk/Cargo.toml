@@ -1,0 +1,15 @@
+[package]
+name = "rcash-sdk"
+description = "Typed R-Cash protocol operations over a signed-deploy client"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+rcash-core.workspace = true
+rcash-chain.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true

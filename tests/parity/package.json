@@ -1,0 +1,11 @@
+{
+  "name": "rcash-sign-parity",
+  "private": true,
+  "type": "module",
+  "license": "AGPL-3.0-only",
+  "description": "Independent TypeScript signer used to prove Rust↔TS byte parity",
+  "dependencies": {
+    "@noble/curves": "^2.4.0",
+    "@noble/hashes": "^2.4.0"
+  }
+}

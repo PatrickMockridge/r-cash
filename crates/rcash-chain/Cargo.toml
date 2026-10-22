@@ -1,0 +1,33 @@
+[package]
+name = "rcash-chain"
+description = "R-Cash deploy encoding, secp256k1 signing, REV addresses and the rnode HTTP client"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[features]
+default = ["native"]
+native = ["dep:reqwest", "dep:tokio"]
+# The wasm transport is added in R3a; the crate's signing and encoding path is
+# transport-independent and compiles for wasm32 behind this flag.
+wasm = []
+
+[dependencies]
+rcash-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+bs58.workspace = true
+zeroize.workspace = true
+rchain-crypto.workspace = true
+rchain-models.workspace = true
+rchain-shared.workspace = true
+
+reqwest = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true }
+
+# `std::time::SystemTime::now()` compiles but panics on wasm32-unknown-unknown.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+web-time = "1"

@@ -6,3 +6,13 @@ deployments/*.json
 !deployments/README.md
 *.log
 .DS_Store
+
+# Rust
+target/
+
+# JavaScript / TypeScript
+node_modules/
+tests/parity/node_modules/
+web/node_modules/
+web/dist/
+web/src/wasm/pkg/

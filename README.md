@@ -20,7 +20,30 @@ and get paid — while liquidity providers earn the FX spread.
 
 **Devnet only.** The node is pre-testnet (rchain-rust #242); no real funds, no fiat custody.
 
-## Quickstart
+## Client stack
+
+The client is Rust, shared by a native CLI and a browser WASM module:
+
+- `crates/rcash-core` — amounts, validated identifiers, Rholang quoting, the manifest.
+- `crates/rcash-chain` — deploy encoding, secp256k1 signing, REV addresses, rnode HTTP.
+- `crates/rcash-sdk` — connected client and protocol operations.
+- `crates/rcash-cli` — the `rcash` binary.
+- `crates/rcash-wasm` — wasm-bindgen facade for the React + Vite + TypeScript UI (R3).
+
+Signature parity with the node is a blocking gate and is green: the node's REV address and
+secp256k1 vectors, DeployData golden bytes, an independent TypeScript signer, and wasm32
+all produce identical bytes. See [`docs/CLIENT.md`](docs/CLIENT.md).
+
+```sh
+cargo build --workspace
+cargo test --workspace --exclude rcash-wasm
+cargo run -p rcash-cli -- deploy --term 'Nil' --key deployer
+```
+
+The Python harness below remains the legacy devnet scenarios until the CLI's `devnet demo`
+replaces it in R2.
+
+## Quickstart (legacy harness)
 
 Prerequisites: Docker, Python 3.12, and rchain-rust at `../RNodeRust` (override `RCHAIN_RUST_DIR`).
 
@@ -62,4 +85,7 @@ node, hard limits, measured costs), [`docs/STATUS.md`](docs/STATUS.md) (verdict 
 
 ## License
 
-Apache-2.0.
+AGPL-3.0-only. Code committed through `d5d613b` was Apache-2.0; those grants are not
+revoked. Third-party notices — including the pinned AGPL-3.0 node crates and the
+Apache-2.0 RhoGov signer used as a parity reference — are in
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).

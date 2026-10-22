@@ -1,0 +1,55 @@
+[workspace]
+resolver = "2"
+members = [
+  "crates/rcash-core",
+  "crates/rcash-chain",
+  "crates/rcash-sdk",
+  "crates/rcash-cli",
+  "crates/rcash-wasm",
+]
+# `rcash-wasm` is a wasm32-only artifact. Excluding it from the default members keeps
+# `cargo build`/`cargo test` from trying to link it on the host; `-p rcash-wasm
+# --target wasm32-unknown-unknown` still works.
+default-members = [
+  "crates/rcash-core",
+  "crates/rcash-chain",
+  "crates/rcash-sdk",
+  "crates/rcash-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0-only"
+rust-version = "1.95"
+repository = "https://github.com/PatrickMockridge/r-cash"
+
+[workspace.dependencies]
+rcash-core = { path = "crates/rcash-core" }
+rcash-chain = { path = "crates/rcash-chain" }
+rcash-sdk = { path = "crates/rcash-sdk" }
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+bs58 = "0.5"
+zeroize = "1"
+# Keep the wasm-safe feature set here. `rt-multi-thread` is native-only and is enabled
+# by the CLI crate, the only place that needs it.
+tokio = { version = "1", features = ["macros", "time"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+clap = { version = "4", features = ["derive", "env"] }
+k256 = { version = "0.14", features = ["ecdsa", "arithmetic"] }
+sha3 = "0.12"
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+serde-wasm-bindgen = "0.6"
+getrandom = { version = "0.4", features = ["wasm_js"] }
+
+# Pinned to the node commit the v0.1 protocol was measured against. The crates are
+# AGPL-3.0-only; see THIRD_PARTY_NOTICES.md. Path dependencies cannot read an env var, so
+# local hacking against ../RNodeRust uses the documented `--config patch` invocation in
+# docs/CLIENT.md rather than a path in this file.
+rchain-crypto = { git = "https://github.com/rchain-community/rchain-rust", rev = "e2d073dcd02f1e560ccb84749937138a1e184b0b", default-features = false }
+rchain-models = { git = "https://github.com/rchain-community/rchain-rust", rev = "e2d073dcd02f1e560ccb84749937138a1e184b0b", default-features = false }
+rchain-shared = { git = "https://github.com/rchain-community/rchain-rust", rev = "e2d073dcd02f1e560ccb84749937138a1e184b0b", default-features = false }

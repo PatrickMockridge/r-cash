@@ -32,6 +32,27 @@ URIs/installation markers.
 5. A sender sends local currency with a claim hash; the recipient claims with the secret; an
    expired transfer refunds to the sender.
 
+## Client migration
+
+**R0a (signature parity) is complete.** The repo now carries a Rust workspace
+(`rcash-core`, `rcash-chain`, `rcash-sdk`, `rcash-cli`, `rcash-wasm`) and an AGPL-3.0-only
+license.
+
+- A Rust-signed deploy was accepted, processed and finalized by the local devnet.
+- Parity is byte-identical across Rust native, wasm32 and an independent TypeScript signer
+  for encoded DeployData bytes, public key, DER signature and REV address.
+- The node's own REV-address and secp256k1 known-answer vectors are pinned as tests.
+- Two platform facts discovered during the work are documented in `CLIENT.md`: the shard
+  id is `/root`, and `validAfterBlockNumber` anchors the 50-block lifespan, so a deploy
+  anchored at 0 is never proposed.
+- The `rcash` CLI can generate devnet keys, read node status, deploy/explore terms, poll
+  status and use the faucet.
+- MetaMask is **read-only** in the supported path; the `secp256k1:eth` signing spike is
+  specified but not run (`SPIKE-METAMASK.md`).
+
+Next: R1 typed reads, R2 protocol writes and `rcash devnet demo`, R3 wasm wallet and the
+React UI, R4 docs/CI and legacy-harness retirement.
+
 ## Specification
 
 `docs/INTENT.md` is the product intent; `docs/SPEC.md` is the normative v0.1 specification. The spec

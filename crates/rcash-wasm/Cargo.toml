@@ -1,0 +1,21 @@
+[package]
+name = "rcash-wasm"
+description = "WASM facade over the R-Cash SDK for the browser wallet and UI"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+rcash-core.workspace = true
+# Declared by path rather than inherited: a workspace-inherited dependency keeps the
+# workspace's default features, which would pull the native HTTP client into wasm.
+rcash-chain = { path = "../rcash-chain", default-features = false, features = ["wasm"] }
+wasm-bindgen.workspace = true
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3"
