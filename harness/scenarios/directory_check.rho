@@ -1,0 +1,19 @@
+// Phase-1 scenario: the Directory resolves the accounts component and refuses registration
+// after the bootstrap lock.
+// Placeholders: __DIRECTORY_URI__
+new
+  rl(`rho:registry:lookup`),
+  ch,
+  getCh,
+  regCh,
+  deployId(`rho:rchain:deployId`)
+in {
+  rl!(`__DIRECTORY_URI__`, *ch) |
+  for (directory <- ch) {
+    directory!("get", "component:accounts", *getCh) |
+    directory!("register", "probe:after-lock", "rho:id:none", *regCh) |
+    for (@g <- getCh; @r <- regCh) {
+      deployId!((g, r))
+    }
+  }
+}

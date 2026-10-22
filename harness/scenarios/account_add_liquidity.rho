@@ -1,0 +1,46 @@
+// Add liquidity to the NGN/KES pool. Placeholders: __DIRECTORY_URI__, __FACTORY_URI__,
+// __BASE_AMT__, __QUOTE_AMT__
+new
+  deployerId(`rho:rchain:deployerId`),
+  deployerIdOps(`rho:rchain:deployerId:ops`),
+  rl(`rho:registry:lookup`),
+  dirCh, compsUriCh, compCh, poolCh, factoryCh, accountCh, pkCh,
+  baseWdCh, quoteWdCh, lpCh, depCh,
+  deployId(`rho:rchain:deployId`)
+in {
+  rl!(`__DIRECTORY_URI__`, *dirCh) |
+  for (Directory <- dirCh) {
+    Directory!("get", "component:pools", *compsUriCh) |
+    for (@(true, compsUri) <- compsUriCh) {
+      rl!(compsUri, *compCh) |
+      for (comps <- compCh) {
+        comps!("get", "pool:NGN/KES:fpmm", *poolCh) |
+        for (@(true, pool) <- poolCh) {
+          rl!(`__FACTORY_URI__`, *factoryCh) |
+          deployerIdOps!("pubKeyBytes", *deployerId, *pkCh) |
+          for (factory <- factoryCh; @pk <- pkCh) {
+            factory!("getOrCreate", pk, *accountCh) |
+            for (@(true, account, ownerId) <- accountCh) {
+              @account!("withdraw", *deployerId, "NGN", __BASE_AMT__, *baseWdCh) |
+              for (@(true, basePay) <- baseWdCh) {
+                @account!("withdraw", *deployerId, "KES", __QUOTE_AMT__, *quoteWdCh) |
+                for (@(true, quotePay) <- quoteWdCh) {
+                  @pool!("addLiquidity", basePay, quotePay, 0, *lpCh) |
+                  for (@lp <- lpCh) {
+                    match lp {
+                      (true, shares, lpPay) => {
+                        @account!("deposit", "LP:NGN/KES:fpmm", lpPay, *depCh) |
+                        for (@d <- depCh) { deployId!((ownerId, shares, d)) }
+                      }
+                      _ => deployId!(lp)
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,18 @@
+// Claim a transfer with the secret. Placeholders: __FACTORY_URI__, __ID__, __DEST__, __SECRET__
+new
+  deployerId(`rho:rchain:deployerId`),
+  deployerIdOps(`rho:rchain:deployerId:ops`),
+  rl(`rho:registry:lookup`),
+  factoryCh, accountCh, pkCh, sCh,
+  deployId(`rho:rchain:deployId`)
+in {
+  rl!(`__FACTORY_URI__`, *factoryCh) |
+  deployerIdOps!("pubKeyBytes", *deployerId, *pkCh) |
+  for (factory <- factoryCh; @pk <- pkCh) {
+    factory!("getOrCreate", pk, *accountCh) |
+    for (@(true, account, ownerId) <- accountCh) {
+      @account!("claimTransfer", __ID__, "__DEST__", "__SECRET__".hexToBytes(), *sCh) |
+      for (@r <- sCh) { deployId!((ownerId, r)) }
+    }
+  }
+}

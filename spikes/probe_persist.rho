@@ -1,0 +1,21 @@
+// Phase-0 gate: a deploy-installed contract keeps a private state cell across blocks.
+new
+  counter,
+  state,
+  uri,
+  rs(`rho:registry:insertArbitrary`),
+  deployId(`rho:rchain:deployId`)
+in {
+  state!(0) |
+  contract counter(@"inc", ret) = {
+    for (@n <- state) {
+      state!(n + 1) |
+      ret!(n + 1)
+    }
+  } |
+  contract counter(@"get", ret) = {
+    for (@n <<- state) { ret!(n) }
+  } |
+  rs!(bundle+{*counter}, *uri) |
+  for (@u <- uri) { deployId!(u) }
+}

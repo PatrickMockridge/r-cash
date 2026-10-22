@@ -1,0 +1,54 @@
+VENV := .venv
+PY := $(VENV)/bin/python
+RCHAIN_RUST_DIR ?= ../RNodeRust
+export RCHAIN_RUST_DIR
+
+.PHONY: venv image devnet down status keys build probes deploy logs clean bootstrap pool book demo
+
+venv:
+	python3 -m venv $(VENV)
+	$(VENV)/bin/pip -q install -r harness/requirements.txt
+
+image:
+	cd $(RCHAIN_RUST_DIR) && tools/devnet.sh build
+
+devnet:
+	cd $(RCHAIN_RUST_DIR) && tools/devnet.sh up --validators 1
+
+down:
+	cd $(RCHAIN_RUST_DIR) && tools/devnet.sh down -v
+
+status:
+	@curl -s http://localhost:40403/api/v1/status | $(PY) -m json.tool || echo "devnet not running"
+
+keys:
+	$(PY) tools/keygen.py --out .devnet/keys.json --faucet
+
+build:
+	$(PY) tools/build_contracts.py
+
+probes: build
+	$(PY) harness/rcash.py probes
+
+deploy: build
+	@test -n "$(FILE)" || (echo "usage: make deploy FILE=path/to.term.rho" && exit 1)
+	$(PY) harness/rcash.py deploy "$(FILE)"
+
+logs:
+	cd $(RCHAIN_RUST_DIR) && tools/devnet.sh logs devnet-bootstrap
+
+clean:
+	rm -rf contracts/build harness/__pycache__ tools/__pycache__
+
+bootstrap: build
+	$(PY) harness/bootstrap.py
+
+pool: bootstrap
+	$(PY) harness/pool_bootstrap.py
+
+book: pool
+	$(PY) harness/transfer_bootstrap.py
+
+demo: book
+	$(PY) harness/scenarios/pool.py
+	$(PY) harness/scenarios/transfer.py

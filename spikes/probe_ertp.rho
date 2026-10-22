@@ -1,0 +1,51 @@
+// Phase-0 gate: a contract-held ERTP kit and purse survive blocks; mint/deposit/withdraw and a
+// deposit-only burn facet work. The purse's full capability never leaves the contract.
+new
+  rl(`rho:registry:lookup`),
+  ERTPCh,
+  kitCh,
+  purseCh,
+  burnPurseCh,
+  burnFacetCh,
+  probe,
+  uri,
+  rs(`rho:registry:insertArbitrary`),
+  deployId(`rho:rchain:deployId`)
+in {
+  rl!(`rho:rchain:ertp`, *ERTPCh) |
+  for (@(_, ERTP) <- ERTPCh) {
+    @ERTP!("makeIssuerKit", *kitCh) |
+    for (@(brand, mint, issuer) <- kitCh) {
+      @issuer!("makeEmptyPurse", *purseCh) |
+      for (@(true, purse) <- purseCh) {
+        @issuer!("makeEmptyPurse", *burnPurseCh) |
+        for (@(true, burnPurse) <- burnPurseCh) {
+          @burnPurse!("getDepositFacet", *burnFacetCh) |
+          for (@(true, burnFacet) <- burnFacetCh) {
+            contract probe(@"mint", @amount, ret) = {
+              new payCh in {
+                @mint!("mintPayment", (brand, amount), *payCh) |
+                for (@(true, payment) <- payCh) {
+                  @purse!("deposit", payment, *ret)
+                }
+              }
+            } |
+            contract probe(@"balance", ret) = {
+              @purse!("getCurrentAmount", *ret)
+            } |
+            contract probe(@"burn", @amount, ret) = {
+              new payCh in {
+                @mint!("mintPayment", (brand, amount), *payCh) |
+                for (@(true, payment) <- payCh) {
+                  @burnFacet!("deposit", payment, *ret)
+                }
+              }
+            } |
+            rs!(bundle+{*probe}, *uri) |
+            for (@u <- uri) { deployId!(u) }
+          }
+        }
+      }
+    }
+  }
+}

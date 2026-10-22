@@ -1,0 +1,45 @@
+// Phase-1 scenario: create/load the caller's Account, fund it with REV from the caller's native
+// vault, deposit into the Account, and report (ownerId, accountBalance).
+// Placeholders: __FACTORY_URI__, __AMOUNT__
+new
+  deployerId(`rho:rchain:deployerId`),
+  deployerIdOps(`rho:rchain:deployerId:ops`),
+  rl(`rho:registry:lookup`),
+  factoryCh,
+  accountCh,
+  pkCh,
+  ertpCh,
+  issuerCh,
+  purseCh,
+  fundCh,
+  wdCh,
+  depCh,
+  deployId(`rho:rchain:deployId`)
+in {
+  rl!(`__FACTORY_URI__`, *factoryCh) |
+  deployerIdOps!("pubKeyBytes", *deployerId, *pkCh) |
+  for (factory <- factoryCh; @pk <- pkCh) {
+    factory!("getOrCreate", pk, *accountCh) |
+    for (@(true, account, ownerId) <- accountCh) {
+      rl!(`rho:rchain:ertp`, *ertpCh) |
+      for (@(_, ERTP) <- ertpCh) {
+        @ERTP!("getRevIssuer", *issuerCh) |
+        for (@(revBrand, issuer) <- issuerCh) {
+          @issuer!("makeEmptyPurse", *purseCh) |
+          for (@(true, purse) <- purseCh) {
+            @purse!("revFund", *deployerId, __AMOUNT__, *fundCh) |
+            for (@_ <- fundCh) {
+              @purse!("withdraw", (revBrand, __AMOUNT__), *wdCh) |
+              for (@(true, payment) <- wdCh) {
+                @account!("deposit", "REV", payment, *depCh) |
+                for (@d <- depCh) {
+                  deployId!((ownerId, d))
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

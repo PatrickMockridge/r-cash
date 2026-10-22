@@ -1,0 +1,5 @@
+// Phase-0 gate: Rholang's blake2b256 over the claim secret matches the off-chain claim hash.
+// __SECRET_HEX__ is substituted by the harness.
+new hash(`rho:crypto:blake2b256Hash`), deployId(`rho:rchain:deployId`) in {
+  hash!("__SECRET_HEX__".hexToBytes(), *deployId)
+}

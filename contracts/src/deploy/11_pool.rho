@@ -1,0 +1,97 @@
+// Pool deploy: create the rNGN/rKES FxPool and publish its live name in Components.
+// Placeholders: __DIRECTORY_URI__, __COMPONENTS_URI__, __ADMIN_KEYS__, __POOL_PARAMS__
+// The pool contract is NOT bundled: Components holds the live name (the node's bundle check
+// rejects this contract's nested captures).
+new
+  rl(`rho:registry:lookup`),
+  dirCh,
+  compCh,
+  oracleUriCh,
+  oracleCh,
+  baseCh,
+  quoteCh,
+  paramsCh,
+  baseBrandCh,
+  baseIssuerCh,
+  basePurseCh,
+  quoteBrandCh,
+  quoteIssuerCh,
+  quotePurseCh,
+  lpBrandCh,
+  lpMintCh,
+  lpIssuerCh,
+  lpBurnFacetCh,
+  pool,
+  poolState,
+  poolRate,
+  poolValue,
+  poolWeight,
+  poolFee,
+  poolOut,
+  poolUpdate,
+  poolAdminApply,
+  verifyAdmin,
+  hash(`rho:crypto:blake2b256Hash`),
+  verify(`rho:crypto:secp256k1Verify`),
+  guardArgsToString,
+  guardArgsAppend,
+  guardAnySig,
+  guardCount,
+  ack,
+  deployId(`rho:rchain:deployId`)
+in {
+  rl!(`__DIRECTORY_URI__`, *dirCh) |
+  rl!(`__COMPONENTS_URI__`, *compCh) |
+  baseCh!("NGN") |
+  quoteCh!("KES") |
+  paramsCh!(__POOL_PARAMS__) |
+  for (Directory <- dirCh; Components <- compCh;
+       @base <- baseCh; @quote <- quoteCh; @params <- paramsCh) {
+    Directory!("get", "component:oracle", *oracleUriCh) |
+    for (@(true, oracleUri) <- oracleUriCh) {
+      rl!(oracleUri, *oracleCh) |
+      for (OracleHub <- oracleCh) {
+        Components!("get", "pool:NGN/KES:baseBrand", *baseBrandCh) |
+        Components!("get", "pool:NGN/KES:baseIssuer", *baseIssuerCh) |
+        Components!("get", "pool:NGN/KES:basePurse", *basePurseCh) |
+        Components!("get", "pool:NGN/KES:quoteBrand", *quoteBrandCh) |
+        Components!("get", "pool:NGN/KES:quoteIssuer", *quoteIssuerCh) |
+        Components!("get", "pool:NGN/KES:quotePurse", *quotePurseCh) |
+        Components!("get", "pool:NGN/KES:lpBrand", *lpBrandCh) |
+        Components!("get", "pool:NGN/KES:lpMint", *lpMintCh) |
+        Components!("get", "pool:NGN/KES:lpIssuer", *lpIssuerCh) |
+        Components!("get", "pool:NGN/KES:lpBurnFacet", *lpBurnFacetCh) |
+        for (@(true, baseBrand) <- baseBrandCh; @(true, baseIssuer) <- baseIssuerCh;
+             @(true, basePurse) <- basePurseCh; @(true, quoteBrand) <- quoteBrandCh;
+             @(true, quoteIssuer) <- quoteIssuerCh; @(true, quotePurse) <- quotePurseCh;
+             @(true, lpBrand) <- lpBrandCh; @(true, lpMint) <- lpMintCh;
+             @(true, lpIssuer) <- lpIssuerCh; @(true, lpBurnFacet) <- lpBurnFacetCh) {
+          poolState!({
+            "base": base,
+            "quote": quote,
+            "reserveBase": 0,
+            "reserveQuote": 0,
+            "totalShares": 0,
+            "params": {
+              "baseSpreadBps": params.nth(0),
+              "skewSpreadBps": params.nth(1),
+              "maxTradeBps": params.nth(2),
+              "minLiquidity": 100000000
+            },
+            "paused": false,
+            "admins": __ADMIN_KEYS__,
+            "threshold": 2,
+            "govNonce": 0
+          }) |
+
+          // @@INLINE:lib/Guard.inc@@
+
+          // @@INLINE:dex/FxPool.inc@@
+
+          Components!("set", "pool:NGN/KES:fpmm", *pool, *ack) |
+          for (@_ <- ack) { deployId!("pool-installed") }
+        }
+      }
+    }
+  }
+}

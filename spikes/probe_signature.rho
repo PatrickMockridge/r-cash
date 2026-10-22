@@ -1,0 +1,21 @@
+// Phase-0 gate: a contract verifies a DER secp256k1 signature over blake2b256(payload).
+new
+  sigCheck,
+  uri,
+  rs(`rho:registry:insertArbitrary`),
+  hash(`rho:crypto:blake2b256Hash`),
+  verify(`rho:crypto:secp256k1Verify`),
+  deployId(`rho:rchain:deployId`)
+in {
+  contract sigCheck(@"verify", @payload, @sig, @pub, ret) = {
+    new hCh, vCh in {
+      hash!(payload, *hCh) |
+      for (@h <- hCh) {
+        verify!(h, sig, pub, *vCh) |
+        for (@ok <- vCh) { ret!(ok) }
+      }
+    }
+  } |
+  rs!(bundle+{*sigCheck}, *uri) |
+  for (@u <- uri) { deployId!(u) }
+}

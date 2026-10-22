@@ -1,0 +1,20 @@
+// Phase-1 scenario: a different key obtains the victim's public account channel and tries to
+// withdraw with its own deployerId. The Account must refuse with (false, "not owner").
+// Placeholders: __FACTORY_URI__, __VICTIM_PUBKEY__
+new
+  deployerId(`rho:rchain:deployerId`),
+  rl(`rho:registry:lookup`),
+  factoryCh,
+  accountCh,
+  wdCh,
+  deployId(`rho:rchain:deployId`)
+in {
+  rl!(`__FACTORY_URI__`, *factoryCh) |
+  for (factory <- factoryCh) {
+    factory!("getOrCreate", "__VICTIM_PUBKEY__".hexToBytes(), *accountCh) |
+    for (@(true, account, ownerId) <- accountCh) {
+      @account!("withdraw", *deployerId, "REV", 1, *wdCh) |
+      for (@w <- wdCh) { deployId!(w) }
+    }
+  }
+}

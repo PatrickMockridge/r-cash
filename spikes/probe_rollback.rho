@@ -1,0 +1,57 @@
+// Phase-0 gate: a deploy that consumes a state cell, mints ERTP, deposits it and revFunds REV,
+// then errors, must roll back tuple space AND native ERTP/REV state.
+new
+  c,
+  state,
+  rl(`rho:registry:lookup`),
+  ERTPCh,
+  kitCh,
+  revIssuerCh,
+  purseCh,
+  revPurseCh,
+  payCh,
+  depCh,
+  fundCh,
+  uri,
+  rs(`rho:registry:insertArbitrary`),
+  deployId(`rho:rchain:deployId`)
+in {
+  state!(0) |
+  rl!(`rho:rchain:ertp`, *ERTPCh) |
+  for (@(_, ERTP) <- ERTPCh) {
+    @ERTP!("makeIssuerKit", *kitCh) |
+    @ERTP!("getRevIssuer", *revIssuerCh) |
+    for (@(brand, mint, issuer) <- kitCh; @(revBrand, revIssuer) <- revIssuerCh) {
+      @issuer!("makeEmptyPurse", *purseCh) |
+      @revIssuer!("makeEmptyPurse", *revPurseCh) |
+      for (@(true, purse) <- purseCh; @(true, revPurse) <- revPurseCh) {
+        contract c(@"boom", deployerId, ret) = {
+          for (@n <- state) {
+            state!(n + 1) |
+            @mint!("mintPayment", (brand, 5), *payCh) |
+            for (@(true, payment) <- payCh) {
+              @purse!("deposit", payment, *depCh) |
+              for (@d <- depCh) {
+                @revPurse!("revFund", *deployerId, 10000000, *fundCh) |
+                for (@f <- fundCh) {
+                  ret!(1 / 0)
+                }
+              }
+            }
+          }
+        } |
+        contract c(@"get", ret) = {
+          for (@n <<- state) { ret!(n) }
+        } |
+        contract c(@"balance", ret) = {
+          @purse!("getCurrentAmount", *ret)
+        } |
+        contract c(@"revBalance", ret) = {
+          @revPurse!("getCurrentAmount", *ret)
+        } |
+        rs!(bundle+{*c}, *uri) |
+        for (@u <- uri) { deployId!(u) }
+      }
+    }
+  }
+}

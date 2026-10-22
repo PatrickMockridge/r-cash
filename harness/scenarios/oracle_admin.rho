@@ -1,0 +1,13 @@
+// Admin action. Placeholders: __ORACLE_URI__, __NONCE__, __ACTION__, __ARGS__, __SIGS__.
+new
+  rl(`rho:registry:lookup`),
+  ch,
+  ret,
+  deployId(`rho:rchain:deployId`)
+in {
+  rl!(`__ORACLE_URI__`, *ch) |
+  for (oracle <- ch) {
+    oracle!("admin", __NONCE__, "__ACTION__", __ARGS__, __SIGS__, *ret) |
+    for (@r <- ret) { deployId!(r) }
+  }
+}

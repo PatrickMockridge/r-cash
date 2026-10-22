@@ -1,0 +1,4 @@
+// Phase-0 gate: rho:block:data replies (blockNumber, senderBytes, timestamp).
+new bd(`rho:block:data`), deployId(`rho:rchain:deployId`) in {
+  bd!(*deployId)
+}

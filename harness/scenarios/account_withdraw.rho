@@ -1,0 +1,46 @@
+// Phase-1 scenario: the owner withdraws REV from their Account and deposits the payment into a
+// per-deploy REV purse, reporting the resulting purse balance.
+// Placeholders: __FACTORY_URI__, __AMOUNT__
+new
+  deployerId(`rho:rchain:deployerId`),
+  deployerIdOps(`rho:rchain:deployerId:ops`),
+  rl(`rho:registry:lookup`),
+  factoryCh,
+  accountCh,
+  pkCh,
+  ertpCh,
+  issuerCh,
+  purseCh,
+  wdCh,
+  depCh,
+  deployId(`rho:rchain:deployId`)
+in {
+  rl!(`__FACTORY_URI__`, *factoryCh) |
+  deployerIdOps!("pubKeyBytes", *deployerId, *pkCh) |
+  for (factory <- factoryCh; @pk <- pkCh) {
+    factory!("getOrCreate", pk, *accountCh) |
+    for (@(true, account, ownerId) <- accountCh) {
+      @account!("withdraw", *deployerId, "REV", __AMOUNT__, *wdCh) |
+      for (@w <- wdCh) {
+        match w {
+          (true, payment) => {
+            rl!(`rho:rchain:ertp`, *ertpCh) |
+            for (@(_, ERTP) <- ertpCh) {
+              @ERTP!("getRevIssuer", *issuerCh) |
+              for (@(revBrand, issuer) <- issuerCh) {
+                @issuer!("makeEmptyPurse", *purseCh) |
+                for (@(true, purse) <- purseCh) {
+                  @purse!("deposit", payment, *depCh) |
+                  for (@d <- depCh) {
+                    deployId!((ownerId, d))
+                  }
+                }
+              }
+            }
+          }
+          _ => deployId!(w)
+        }
+      }
+    }
+  }
+}

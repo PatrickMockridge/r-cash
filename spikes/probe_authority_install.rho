@@ -1,0 +1,21 @@
+// Phase-0 gate: the Account auth pattern. The contract compares the caller's
+// deployerId-derived public key with the owner recorded at install.
+// __OWNER_PUBKEY__ is substituted with the owner's 65-byte uncompressed public key, hex.
+new
+  auth,
+  uri,
+  rs(`rho:registry:insertArbitrary`),
+  deployerIdOps(`rho:rchain:deployerId:ops`),
+  deployId(`rho:rchain:deployId`)
+in {
+  contract auth(@"check", deployerId, ret) = {
+    new pkCh in {
+      deployerIdOps!("pubKeyBytes", *deployerId, *pkCh) |
+      for (@pk <- pkCh) {
+        ret!(pk == "__OWNER_PUBKEY__".hexToBytes())
+      }
+    }
+  } |
+  rs!(bundle+{*auth}, *uri) |
+  for (@u <- uri) { deployId!(u) }
+}

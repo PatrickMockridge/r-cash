@@ -1,0 +1,11 @@
+// Phase-0 gate: insertArbitrary stores a bundle and returns a URI.
+new
+  echo,
+  uri,
+  rs(`rho:registry:insertArbitrary`),
+  deployId(`rho:rchain:deployId`)
+in {
+  contract echo(@"say", @msg, ret) = { ret!(msg) } |
+  rs!(bundle+{*echo}, *uri) |
+  for (@u <- uri) { deployId!(u) }
+}

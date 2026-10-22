@@ -1,0 +1,203 @@
+// Phase-3 bootstrap: Directory + AccountFactory + OracleHub + rNGN/rKES CurrencyZones.
+// Seeds the REV/NGN/KES assets and the component names, locks the Directory, publishes its URI,
+// and returns (directory, accounts, oracle, zoneNGN, zoneKES) URIs on deployId.
+//
+// Placeholders substituted by harness/bootstrap.py:
+//   __REPORTER_KEYS__  -> [ "hex".hexToBytes(), ... ] (three reporter public keys)
+//   __ADMIN_KEYS__     -> [ "hex".hexToBytes(), ... ] (three admin public keys)
+//   __ZONE_PARAMS__    -> [mcrBps, bonusBps, closeFactorBps, ratePerBlock, ceiling, minDebt, maxDebt]
+//
+// This is one atomic deploy. Directory registration is only open while `locked` is false, and
+// the lock happens in the same term.
+new
+  Directory,
+  AccountFactory,
+  OracleHub,
+  Components,
+  state,
+  componentsState,
+  factoryState,
+  oracleState,
+  uriDirCh,
+  uriFactoryCh,
+  uriOracleCh,
+  uriComponentsCh,
+  zNgnCh,
+  zKesCh,
+  seedCh,
+  rs(`rho:registry:insertArbitrary`),
+  revAddress(`rho:rev:address`),
+  deployerIdOps(`rho:rchain:deployerId:ops`),
+  bd(`rho:block:data`),
+  hash(`rho:crypto:blake2b256Hash`),
+  verify(`rho:crypto:secp256k1Verify`),
+  guardArgsToString,
+  guardArgsAppend,
+  guardAnySig,
+  guardCount,
+  verifyAdmin,
+  oracleNow,
+  oracleEntry,
+  oracleValue,
+  oracleMedian3,
+  oracleMax3,
+  oracleMin3,
+  oracleIsFresh,
+  oracleB2I,
+  oracleDecide,
+  oracleStore,
+  oracleAdminApply,
+  oraclePairReply,
+  createCurrencyZone,
+  directorySeed,
+  deployId(`rho:rchain:deployId`)
+in {
+  state!({
+    "names": {},
+    "assets": {},
+    "locked": false,
+    "admins": [],
+    "threshold": 2,
+    "govNonce": 0
+  }) |
+
+  // @@INLINE:core/Directory.inc@@
+
+  componentsState!({"locked": false}) |
+
+  // @@INLINE:core/ComponentRegistry.inc@@
+
+  factoryState!({}) |
+
+  // @@INLINE:core/AccountFactory.inc@@
+
+  oracleState!({
+    "reporters": __REPORTER_KEYS__,
+    "prices": {},
+    "params": {
+      "quorum": 2,
+      "maxAgeBlocks": 50,
+      "maxSpreadBps": 200,
+      "minPrice": 1,
+      "maxPrice": 1000000000000
+    },
+    "admins": __ADMIN_KEYS__,
+    "threshold": 2,
+    "govNonce": 0
+  }) |
+
+  // @@INLINE:lib/Guard.inc@@
+
+  // @@INLINE:oracle/OracleHub.inc@@
+
+  // A trusted bootstrap helper: create a CurrencyZone, install it, return (uri, zone, brand, issuer).
+  contract createCurrencyZone(@currency, @params, @admins, @threshold, ret) = {
+    new
+      rl(`rho:registry:lookup`),
+      ertpCh,
+      kitCh,
+      revIssuerCh,
+      burnPurseCh,
+      revPurseCh,
+      burnFacetCh,
+      zone,
+      zoneState,
+      uriCh,
+      zoneNow,
+      zoneAccrue,
+      zoneRate,
+      zoneHealth,
+      zoneBadInc,
+      zoneUpdate,
+      zoneAdminApply,
+      zonePayout
+    in {
+      rl!(`rho:rchain:ertp`, *ertpCh) |
+      for (@(_, ERTP) <- ertpCh) {
+        @ERTP!("makeIssuerKit", *kitCh) |
+        @ERTP!("getRevIssuer", *revIssuerCh) |
+        for (@(brand, mint, issuer) <- kitCh; @(revBrand, revIssuer) <- revIssuerCh) {
+          @issuer!("makeEmptyPurse", *burnPurseCh) |
+          @revIssuer!("makeEmptyPurse", *revPurseCh) |
+          for (@(true, burnPurse) <- burnPurseCh; @(true, revPurse) <- revPurseCh) {
+            @burnPurse!("getDepositFacet", *burnFacetCh) |
+            for (@(true, burnFacet) <- burnFacetCh) {
+              zoneState!({
+                "currency": currency,
+                "vaults": {},
+                "totalDebt": 0,
+                "totalCollateral": 0,
+                "badDebt": 0,
+                "params": {
+                  "mcrBps": params.nth(0),
+                  "bonusBps": params.nth(1),
+                  "closeFactorBps": params.nth(2),
+                  "ratePerBlock": params.nth(3),
+                  "debtCeiling": params.nth(4),
+                  "minDebt": params.nth(5),
+                  "maxDebt": params.nth(6)
+                },
+                "paused": false,
+                "admins": admins,
+                "threshold": threshold,
+                "govNonce": 0
+              }) |
+
+              // @@INLINE:stable/CurrencyZone.inc@@
+
+              rs!(bundle+{*zone}, *uriCh) |
+              for (@uri <- uriCh) { ret!((uri, brand, issuer)) }
+            }
+          }
+        }
+      }
+    }
+  } |
+
+
+  // A trusted bootstrap helper: seed the Directory and lock it in one state transition.
+  contract directorySeed(@names, @assets, ret) = {
+    for (@s <- state) {
+      match s.set("names", names) {
+        s1 => {
+          match s1.set("assets", assets) {
+            s2 => {
+              match s2.set("locked", true) {
+                s3 => { state!(s3) | ret!((true, Nil)) }
+              }
+            }
+          }
+        }
+      }
+    }
+  } |
+
+  rs!(bundle+{*Directory}, *uriDirCh) |
+  rs!(bundle+{*AccountFactory}, *uriFactoryCh) |
+  rs!(bundle+{*OracleHub}, *uriOracleCh) |
+  rs!(bundle+{*Components}, *uriComponentsCh) |
+
+  for (@uriDir <- uriDirCh; @uriFactory <- uriFactoryCh; @uriOracle <- uriOracleCh;
+       @uriComponents <- uriComponentsCh) {
+    createCurrencyZone!("NGN", __ZONE_PARAMS__, __ADMIN_KEYS__, 2, *zNgnCh) |
+    createCurrencyZone!("KES", __ZONE_PARAMS__, __ADMIN_KEYS__, 2, *zKesCh) |
+    for (@(uriNgn, _, _) <- zNgnCh; @(uriKes, _, _) <- zKesCh) {
+      directorySeed!({
+        "component:accounts": uriFactory,
+        "component:oracle": uriOracle,
+        "component:zone:NGN": uriNgn,
+        "component:zone:KES": uriKes,
+        "component:pools": uriComponents
+      }, {
+        "REV": {"kind": "rev", "controllerKey": "system:ertp", "decimals": 8},
+        "NGN": {"kind": "stable", "controllerKey": "component:zone:NGN", "decimals": 8},
+        "KES": {"kind": "stable", "controllerKey": "component:zone:KES", "decimals": 8},
+        "LP:NGN/KES:fpmm": {"kind": "lp", "controllerKey": "pool:NGN/KES:fpmm", "decimals": 8}
+      }, *seedCh) |
+      for (@_ <- seedCh) {
+        @"rcash:directory"!(uriDir) |
+        deployId!((uriDir, uriFactory, uriOracle, uriNgn, uriKes, uriComponents))
+      }
+    }
+  }
+}

@@ -1,0 +1,46 @@
+// Remove liquidity. Placeholders: __DIRECTORY_URI__, __FACTORY_URI__, __SHARES__,
+// __MIN_BASE__, __MIN_QUOTE__
+new
+  deployerId(`rho:rchain:deployerId`),
+  deployerIdOps(`rho:rchain:deployerId:ops`),
+  rl(`rho:registry:lookup`),
+  dirCh, compsUriCh, compCh, poolCh, factoryCh, accountCh, pkCh,
+  wdCh, remCh, baseDepCh, quoteDepCh,
+  deployId(`rho:rchain:deployId`)
+in {
+  rl!(`__DIRECTORY_URI__`, *dirCh) |
+  for (Directory <- dirCh) {
+    Directory!("get", "component:pools", *compsUriCh) |
+    for (@(true, compsUri) <- compsUriCh) {
+      rl!(compsUri, *compCh) |
+      for (comps <- compCh) {
+        comps!("get", "pool:NGN/KES:fpmm", *poolCh) |
+        for (@(true, pool) <- poolCh) {
+          rl!(`__FACTORY_URI__`, *factoryCh) |
+          deployerIdOps!("pubKeyBytes", *deployerId, *pkCh) |
+          for (factory <- factoryCh; @pk <- pkCh) {
+            factory!("getOrCreate", pk, *accountCh) |
+            for (@(true, account, ownerId) <- accountCh) {
+              @account!("withdraw", *deployerId, "LP:NGN/KES:fpmm", __SHARES__, *wdCh) |
+              for (@(true, lpPay) <- wdCh) {
+                @pool!("removeLiquidity", lpPay, __MIN_BASE__, __MIN_QUOTE__, *remCh) |
+                for (@r <- remCh) {
+                  match r {
+                    (true, basePay, quotePay, shares) => {
+                      @account!("deposit", "NGN", basePay, *baseDepCh) |
+                      for (@db <- baseDepCh) {
+                        @account!("deposit", "KES", quotePay, *quoteDepCh) |
+                        for (@dq <- quoteDepCh) { deployId!((ownerId, shares, db, dq)) }
+                      }
+                    }
+                    _ => deployId!(r)
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

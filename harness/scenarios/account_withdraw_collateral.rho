@@ -1,0 +1,21 @@
+// Withdraw collateral. Placeholders: __FACTORY_URI__, __CURRENCY__, __AMOUNT__
+new
+  deployerId(`rho:rchain:deployerId`),
+  deployerIdOps(`rho:rchain:deployerId:ops`),
+  rl(`rho:registry:lookup`),
+  factoryCh,
+  accountCh,
+  pkCh,
+  vCh,
+  deployId(`rho:rchain:deployId`)
+in {
+  rl!(`__FACTORY_URI__`, *factoryCh) |
+  deployerIdOps!("pubKeyBytes", *deployerId, *pkCh) |
+  for (factory <- factoryCh; @pk <- pkCh) {
+    factory!("getOrCreate", pk, *accountCh) |
+    for (@(true, account, ownerId) <- accountCh) {
+      @account!("withdrawCollateral", *deployerId, "__CURRENCY__", __AMOUNT__, *vCh) |
+      for (@r <- vCh) { deployId!((ownerId, r)) }
+    }
+  }
+}

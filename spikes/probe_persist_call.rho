@@ -1,0 +1,14 @@
+// Phase-0 gate: call a registry-installed counter in a later deploy.
+// __URI__ is substituted by the harness. insertArbitrary lookup returns the value alone.
+new
+  rl(`rho:registry:lookup`),
+  ch,
+  ret,
+  deployId(`rho:rchain:deployId`)
+in {
+  rl!(`__URI__`, *ch) |
+  for (counter <- ch) {
+    counter!("inc", *ret) |
+    for (@n <- ret) { deployId!(n) }
+  }
+}

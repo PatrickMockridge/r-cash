@@ -1,0 +1,38 @@
+// Phase-0 gate: a per-deploy REV purse can revFund from the deployer's native vault and
+// revRedeem back to the deployer's address. The before/after balance pair is read in the same
+// deploy, so phlo does not distort it.
+// __AMOUNT__ (drops) and __ADDRESS__ are substituted by the harness.
+new
+  deployerId(`rho:rchain:deployerId`),
+  revVault(`rho:rchain:revVault`),
+  rl(`rho:registry:lookup`),
+  ertpCh,
+  issuerCh,
+  purseCh,
+  beforeCh,
+  fundCh,
+  redeemCh,
+  afterCh,
+  deployId(`rho:rchain:deployId`)
+in {
+  revVault!("getBalance", "__ADDRESS__", *beforeCh) |
+  rl!(`rho:rchain:ertp`, *ertpCh) |
+  for (@(_, ERTP) <- ertpCh; @before <- beforeCh) {
+    @ERTP!("getRevIssuer", *issuerCh) |
+    for (@(revBrand, issuer) <- issuerCh) {
+      @issuer!("makeEmptyPurse", *purseCh) |
+      for (@(true, purse) <- purseCh) {
+        @purse!("revFund", *deployerId, __AMOUNT__, *fundCh) |
+        for (@f <- fundCh) {
+          @purse!("revRedeem", __AMOUNT__, "__ADDRESS__", *redeemCh) |
+          for (@r <- redeemCh) {
+            revVault!("getBalance", "__ADDRESS__", *afterCh) |
+            for (@after <- afterCh) {
+              deployId!((before, f, r, after))
+            }
+          }
+        }
+      }
+    }
+  }
+}

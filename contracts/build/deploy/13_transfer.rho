@@ -1,0 +1,384 @@
+// TransferBook deploy. Placeholders: __DIRECTORY_URI__, __COMPONENTS_URI__
+// The book is NOT bundled: Components holds its live name.
+new
+  rl(`rho:registry:lookup`),
+  dirCh,
+  compCh,
+  accountsUriCh,
+  accountsCh,
+  ngnUriCh,
+  kesUriCh,
+  ngnCapCh,
+  kesCapCh,
+  ngnBrandCh,
+  ngnIssuerCh,
+  kesBrandCh,
+  kesIssuerCh,
+  poolCh,
+  escrowNgnCh,
+  escrowKesCh,
+  baseCh,
+  quoteCh,
+  book,
+  bookState,
+  bookNow,
+  bookRecord,
+  bookSetStatus,
+  bookTransfer,
+  bookEscrowDeposit,
+  bookEscrowWithdraw,
+  hash(`rho:crypto:blake2b256Hash`),
+  bd(`rho:block:data`),
+  ack,
+  lockAck,
+  deployId(`rho:rchain:deployId`)
+in {
+  rl!(`__DIRECTORY_URI__`, *dirCh) |
+  rl!(`__COMPONENTS_URI__`, *compCh) |
+  baseCh!("NGN") |
+  quoteCh!("KES") |
+  for (Directory <- dirCh; Components <- compCh; @base <- baseCh; @quote <- quoteCh) {
+    Directory!("get", "component:accounts", *accountsUriCh) |
+    Directory!("get", "component:zone:NGN", *ngnUriCh) |
+    Directory!("get", "component:zone:KES", *kesUriCh) |
+    Components!("get", "pool:NGN/KES:fpmm", *poolCh) |
+    for (@(true, accountsUri) <- accountsUriCh; @(true, ngnUri) <- ngnUriCh;
+         @(true, kesUri) <- kesUriCh; @(true, pool) <- poolCh) {
+      rl!(accountsUri, *accountsCh) |
+      rl!(ngnUri, *ngnCapCh) |
+      rl!(kesUri, *kesCapCh) |
+      for (AccountFactory <- accountsCh; ngnZone <- ngnCapCh; kesZone <- kesCapCh) {
+        ngnZone!("brand", *ngnBrandCh) |
+        ngnZone!("issuer", *ngnIssuerCh) |
+        kesZone!("brand", *kesBrandCh) |
+        kesZone!("issuer", *kesIssuerCh) |
+        for (@(true, baseBrand) <- ngnBrandCh; @(true, baseIssuer) <- ngnIssuerCh;
+             @(true, quoteBrand) <- kesBrandCh; @(true, quoteIssuer) <- kesIssuerCh) {
+          @baseIssuer!("makeEmptyPurse", *escrowNgnCh) |
+          @quoteIssuer!("makeEmptyPurse", *escrowKesCh) |
+          for (@(true, escrowNgn) <- escrowNgnCh; @(true, escrowKes) <- escrowKesCh) {
+            bookState!({"transfers": {}, "nextId": 0}) |
+// ---- begin transfer/TransferBook.inc ----
+// TransferBook: quote/send/claim/refund for the NGN<->KES corridor.
+//
+// Captured by the deploy term: bookState, pool, AccountFactory, baseIssuer, quoteIssuer,
+// baseBrand, quoteBrand, escrowNgn, escrowKes, hash (`rho:crypto:blake2b256Hash`), bd.
+//
+// State: {transfers: Map(id -> {sender, source, dest, amount, claimHash, expiry, status}),
+//         nextId: Int}
+// Claim/refund return the payment on ret; the caller's Account deposits it. The book never awaits
+// a caller-supplied channel while holding state.
+
+contract bookNow(ret) = {
+  new ch in {
+    bd!(*ch) |
+    for (@h, @s, @t <- ch) { ret!(h) }
+  }
+} |
+
+contract bookRecord(@s, @source, @dest, @amount, @claimHash, @expiry, @sender, ret) = {
+  match s.get("nextId") {
+    id => {
+      match s.get("transfers") {
+        ts => {
+          match ts.set(id, {
+            "sender": sender,
+            "source": source,
+            "dest": dest,
+            "amount": amount,
+            "claimHash": claimHash,
+            "expiry": expiry,
+            "status": "open"
+          }) {
+            ts2 => {
+              match s.set("transfers", ts2) {
+                s2 => {
+                  match s2.set("nextId", id + 1) {
+                    s3 => ret!((s3, id))
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+} |
+
+contract bookSetStatus(@s, @id, @t, @status, ret) = {
+  match t.set("status", status) {
+    t2 => {
+      match s.get("transfers") {
+        ts => {
+          match ts.set(id, t2) {
+            ts2 => {
+              match s.set("transfers", ts2) {
+                s2 => ret!(s2)
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+} |
+
+contract bookTransfer(@s, @id, ret) = {
+  match s.get("transfers") {
+    Nil => ret!(Nil)
+    ts => {
+      match ts.get(id) {
+        Nil => ret!(Nil)
+        t => ret!(t)
+      }
+    }
+  }
+} |
+
+contract bookEscrowDeposit(@dest, @payOut, ret) = {
+  if (dest == "NGN") {
+    @escrowNgn!("deposit", payOut, *ret)
+  } else {
+    @escrowKes!("deposit", payOut, *ret)
+  }
+} |
+
+contract bookEscrowWithdraw(@dest, @amount, ret) = {
+  if (dest == "NGN") {
+    @escrowNgn!("withdraw", (baseBrand, amount), *ret)
+  } else {
+    @escrowKes!("withdraw", (quoteBrand, amount), *ret)
+  }
+} |
+
+contract book(@"quote", @sourceAsset, @destAsset, @amountIn, ret) = {
+  if (sourceAsset == "NGN" && destAsset == "KES") {
+    @pool!("quote", "NGN", amountIn, *ret)
+  } else {
+    if (sourceAsset == "KES" && destAsset == "NGN") {
+      @pool!("quote", "KES", amountIn, *ret)
+    } else {
+      ret!((false, "unsupported corridor"))
+    }
+  }
+} |
+
+contract book(@"send", @sourceAsset, @destAsset, payment, @minDest, @claimHash, @expiry,
+              @senderOwnerId, proof, ret) = {
+  new pvCh, amtCh, swapCh in {
+    AccountFactory!("verify", senderOwnerId, *proof, *pvCh) |
+    if (sourceAsset == "NGN") {
+      @baseIssuer!("getAmountOf", *payment, *amtCh)
+    } else {
+      @quoteIssuer!("getAmountOf", *payment, *amtCh)
+    } |
+    for (@pv <- pvCh; @amt <- amtCh) {
+      match (pv, amt) {
+        ((true, true), (true, amount)) => {
+          if (amount <= 0) { ret!((false, "amount")) }
+          else {
+            for (@s <- bookState) {
+              @pool!("swap", sourceAsset, *payment, minDest, *swapCh) |
+              for (@sr <- swapCh) {
+                match sr {
+                  (true, out, payOut, fee) => {
+                    new depCh in {
+                      bookEscrowDeposit!(destAsset, payOut, *depCh) |
+                      for (@d <- depCh) {
+                        match d {
+                          (true, bal) => {
+                            new recCh in {
+                              bookRecord!(s, sourceAsset, destAsset, out, claimHash, expiry,
+                                          senderOwnerId, *recCh) |
+                              for (@rec <- recCh) {
+                                match rec {
+                                  (ns, id) => { bookState!(ns) | ret!((true, id)) }
+                                }
+                              }
+                            }
+                          }
+                          _ => { bookState!(s) | ret!((false, "escrow deposit")) }
+                        }
+                      }
+                    }
+                  }
+                  _ => { bookState!(s) | ret!(sr) }
+                }
+              }
+            }
+          }
+        }
+        _ => ret!((false, "auth or payment"))
+      }
+    }
+  }
+} |
+
+contract book(@"claim", @transferId, @secret, ret) = {
+  new hCh, nowCh in {
+    hash!(secret, *hCh) |
+    bookNow!(*nowCh) |
+    for (@h <- hCh; @now <- nowCh) {
+      for (@s <- bookState) {
+        new tCh in {
+          bookTransfer!(s, transferId, *tCh) |
+          for (@found <- tCh) {
+            match found {
+              Nil => { bookState!(s) | ret!((false, "no transfer")) }
+              t => {
+                match t.get("status") {
+                  status => {
+                    match t.get("expiry") {
+                      expiry => {
+                        match t.get("claimHash") {
+                          ch => {
+                            match t.get("dest") {
+                              dest => {
+                                match t.get("amount") {
+                                  amount => {
+                                    if (status == "open") {
+                                      if (now > expiry) { bookState!(s) | ret!((false, "expired")) }
+                                      else {
+                                        if (h == ch) {
+                                          new wdCh in {
+                                            bookEscrowWithdraw!(dest, amount, *wdCh) |
+                                            for (@w <- wdCh) {
+                                              match w {
+                                                (true, pay) => {
+                                                  new stCh in {
+                                                    bookSetStatus!(s, transferId, t, "claimed", *stCh) |
+                                                    for (@ns <- stCh) {
+                                                      bookState!(ns) |
+                                                      ret!((true, amount, pay))
+                                                    }
+                                                  }
+                                                }
+                                                _ => { bookState!(s) | ret!((false, "escrow withdraw")) }
+                                              }
+                                            }
+                                          }
+                                        } else { bookState!(s) | ret!((false, "bad secret")) }
+                                      }
+                                    } else { bookState!(s) | ret!((false, "not open")) }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+} |
+
+contract book(@"refund", @transferId, @senderOwnerId, proof, ret) = {
+  new pvCh, nowCh in {
+    AccountFactory!("verify", senderOwnerId, *proof, *pvCh) |
+    bookNow!(*nowCh) |
+    for (@pv <- pvCh; @now <- nowCh) {
+      match pv {
+        (true, true) => {
+          for (@s <- bookState) {
+            new tCh in {
+              bookTransfer!(s, transferId, *tCh) |
+              for (@found <- tCh) {
+                match found {
+                  Nil => { bookState!(s) | ret!((false, "no transfer")) }
+                  t => {
+                    match t.get("status") {
+                      status => {
+                        match t.get("sender") {
+                          sender => {
+                            match t.get("expiry") {
+                              expiry => {
+                                match t.get("dest") {
+                                  dest => {
+                                    match t.get("amount") {
+                                      amount => {
+                                        if (status == "open") {
+                                          if (sender != senderOwnerId) {
+                                            bookState!(s) | ret!((false, "not sender"))
+                                          } else {
+                                            if (now <= expiry) {
+                                              bookState!(s) | ret!((false, "not expired"))
+                                            } else {
+                                              new wdCh in {
+                                                bookEscrowWithdraw!(dest, amount, *wdCh) |
+                                                for (@w <- wdCh) {
+                                                  match w {
+                                                    (true, pay) => {
+                                                      new stCh in {
+                                                        bookSetStatus!(s, transferId, t, "refunded", *stCh) |
+                                                        for (@ns <- stCh) {
+                                                          bookState!(ns) |
+                                                          ret!((true, amount, pay))
+                                                        }
+                                                      }
+                                                    }
+                                                    _ => { bookState!(s) | ret!((false, "escrow withdraw")) }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        } else { bookState!(s) | ret!((false, "not open")) }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        _ => ret!((false, "auth"))
+      }
+    }
+  }
+} |
+
+contract book(@"info", @transferId, ret) = {
+  for (@s <<- bookState) {
+    match s.get("transfers") {
+      Nil => ret!((false, "no transfers"))
+      ts => {
+        match ts.get(transferId) {
+          Nil => ret!((false, "no transfer"))
+          t => ret!((true, t))
+        }
+      }
+    }
+  }
+} |
+
+contract book(@"nextId", ret) = {
+  for (@s <<- bookState) { ret!((true, s.get("nextId"))) }
+} |
+// ---- end transfer/TransferBook.inc ----
+            Components!("set", "transfer:NGN/KES", *book, *ack) |
+            for (@_ <- ack) {
+              Components!("lock", *lockAck) |
+              for (@_ <- lockAck) { deployId!("transfer-installed") }
+            }
+          }
+        }
+      }
+    }
+  }
+}

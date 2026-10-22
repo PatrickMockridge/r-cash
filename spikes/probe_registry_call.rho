@@ -1,0 +1,13 @@
+// Phase-0 gate: lookup an insertArbitrary value and call it. The lookup reply is the value alone.
+new
+  rl(`rho:registry:lookup`),
+  ch,
+  ret,
+  deployId(`rho:rchain:deployId`)
+in {
+  rl!(`__URI__`, *ch) |
+  for (echo <- ch) {
+    echo!("say", "looked-up", *ret) |
+    for (@m <- ret) { deployId!(m) }
+  }
+}

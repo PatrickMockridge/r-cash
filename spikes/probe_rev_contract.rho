@@ -1,0 +1,30 @@
+// Phase-0 gate: a contract that receives a caller's deployerId can spend that key's native REV
+// via revFund. This is the containment rationale for the Account-only authority model.
+new
+  rl(`rho:registry:lookup`),
+  ertpCh,
+  issuerCh,
+  purseCh,
+  custody,
+  uri,
+  rs(`rho:registry:insertArbitrary`),
+  deployId(`rho:rchain:deployId`)
+in {
+  rl!(`rho:rchain:ertp`, *ertpCh) |
+  for (@(_, ERTP) <- ertpCh) {
+    @ERTP!("getRevIssuer", *issuerCh) |
+    for (@(revBrand, issuer) <- issuerCh) {
+      @issuer!("makeEmptyPurse", *purseCh) |
+      for (@(true, purse) <- purseCh) {
+        contract custody(@"fundFor", deployerId, @amount, ret) = {
+          @purse!("revFund", *deployerId, amount, *ret)
+        } |
+        contract custody(@"balance", ret) = {
+          @purse!("getCurrentAmount", *ret)
+        } |
+        rs!(bundle+{*custody}, *uri) |
+        for (@u <- uri) { deployId!(u) }
+      }
+    }
+  }
+}

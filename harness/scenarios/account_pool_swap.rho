@@ -1,0 +1,43 @@
+// Swap in the NGN/KES pool. Placeholders: __DIRECTORY_URI__, __FACTORY_URI__, __IN__,
+// __OUT__, __AMOUNT__, __MIN_OUT__
+new
+  deployerId(`rho:rchain:deployerId`),
+  deployerIdOps(`rho:rchain:deployerId:ops`),
+  rl(`rho:registry:lookup`),
+  dirCh, compsUriCh, compCh, poolCh, factoryCh, accountCh, pkCh,
+  wdCh, swapCh, depCh,
+  deployId(`rho:rchain:deployId`)
+in {
+  rl!(`__DIRECTORY_URI__`, *dirCh) |
+  for (Directory <- dirCh) {
+    Directory!("get", "component:pools", *compsUriCh) |
+    for (@(true, compsUri) <- compsUriCh) {
+      rl!(compsUri, *compCh) |
+      for (comps <- compCh) {
+        comps!("get", "pool:NGN/KES:fpmm", *poolCh) |
+        for (@(true, pool) <- poolCh) {
+          rl!(`__FACTORY_URI__`, *factoryCh) |
+          deployerIdOps!("pubKeyBytes", *deployerId, *pkCh) |
+          for (factory <- factoryCh; @pk <- pkCh) {
+            factory!("getOrCreate", pk, *accountCh) |
+            for (@(true, account, ownerId) <- accountCh) {
+              @account!("withdraw", *deployerId, "__IN__", __AMOUNT__, *wdCh) |
+              for (@(true, payment) <- wdCh) {
+                @pool!("swap", "__IN__", payment, __MIN_OUT__, *swapCh) |
+                for (@r <- swapCh) {
+                  match r {
+                    (true, out, payOut, fee) => {
+                      @account!("deposit", "__OUT__", payOut, *depCh) |
+                      for (@d <- depCh) { deployId!((ownerId, out, fee, d)) }
+                    }
+                    _ => deployId!(r)
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,13 @@
+// Read a cross rate. Placeholders: __ORACLE_URI__, __BASE__, __QUOTE__.
+new
+  rl(`rho:registry:lookup`),
+  ch,
+  ret,
+  deployId(`rho:rchain:deployId`)
+in {
+  rl!(`__ORACLE_URI__`, *ch) |
+  for (oracle <- ch) {
+    oracle!("getPair", "__BASE__", "__QUOTE__", *ret) |
+    for (@r <- ret) { deployId!(r) }
+  }
+}

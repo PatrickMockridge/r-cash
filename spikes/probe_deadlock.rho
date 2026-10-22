@@ -1,0 +1,26 @@
+// Phase-0 gate: consuming a state cell and awaiting a name that never fires. This is the silent
+// partial-commit hazard; the probe documents whether the cell is permanently bricked.
+new
+  c,
+  state,
+  uri,
+  rs(`rho:registry:insertArbitrary`),
+  deployId(`rho:rchain:deployId`)
+in {
+  state!(0) |
+  contract c(@"dead", ret) = {
+    for (@n <- state) {
+      new never in {
+        for (x <- never) { ret!(n) }
+      }
+    }
+  } |
+  contract c(@"inc", ret) = {
+    for (@n <- state) {
+      state!(n + 1) |
+      ret!(n + 1)
+    }
+  } |
+  rs!(bundle+{*c}, *uri) |
+  for (@u <- uri) { deployId!(u) }
+}

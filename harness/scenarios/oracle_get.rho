@@ -1,0 +1,13 @@
+// Read a price. Placeholders: __ORACLE_URI__, __CURRENCY__.
+new
+  rl(`rho:registry:lookup`),
+  ch,
+  ret,
+  deployId(`rho:rchain:deployId`)
+in {
+  rl!(`__ORACLE_URI__`, *ch) |
+  for (oracle <- ch) {
+    oracle!("get", "__CURRENCY__", *ret) |
+    for (@r <- ret) { deployId!(r) }
+  }
+}

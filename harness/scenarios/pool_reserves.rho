@@ -1,0 +1,21 @@
+// Read the NGN/KES pool reserves. Placeholder: __DIRECTORY_URI__
+new
+  rl(`rho:registry:lookup`),
+  dirCh, compsUriCh, compCh, poolCh, resCh,
+  deployId(`rho:rchain:deployId`)
+in {
+  rl!(`__DIRECTORY_URI__`, *dirCh) |
+  for (Directory <- dirCh) {
+    Directory!("get", "component:pools", *compsUriCh) |
+    for (@(true, compsUri) <- compsUriCh) {
+      rl!(compsUri, *compCh) |
+      for (comps <- compCh) {
+        comps!("get", "pool:NGN/KES:fpmm", *poolCh) |
+        for (@(true, pool) <- poolCh) {
+          @pool!("reserves", *resCh) |
+          for (@r <- resCh) { deployId!(r) }
+        }
+      }
+    }
+  }
+}

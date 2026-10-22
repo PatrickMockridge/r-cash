@@ -1,0 +1,2389 @@
+// Phase-3 bootstrap: Directory + AccountFactory + OracleHub + rNGN/rKES CurrencyZones.
+// Seeds the REV/NGN/KES assets and the component names, locks the Directory, publishes its URI,
+// and returns (directory, accounts, oracle, zoneNGN, zoneKES) URIs on deployId.
+//
+// Placeholders substituted by harness/bootstrap.py:
+//   __REPORTER_KEYS__  -> [ "hex".hexToBytes(), ... ] (three reporter public keys)
+//   __ADMIN_KEYS__     -> [ "hex".hexToBytes(), ... ] (three admin public keys)
+//   __ZONE_PARAMS__    -> [mcrBps, bonusBps, closeFactorBps, ratePerBlock, ceiling, minDebt, maxDebt]
+//
+// This is one atomic deploy. Directory registration is only open while `locked` is false, and
+// the lock happens in the same term.
+new
+  Directory,
+  AccountFactory,
+  OracleHub,
+  Components,
+  state,
+  componentsState,
+  factoryState,
+  oracleState,
+  uriDirCh,
+  uriFactoryCh,
+  uriOracleCh,
+  uriComponentsCh,
+  zNgnCh,
+  zKesCh,
+  seedCh,
+  rs(`rho:registry:insertArbitrary`),
+  revAddress(`rho:rev:address`),
+  deployerIdOps(`rho:rchain:deployerId:ops`),
+  bd(`rho:block:data`),
+  hash(`rho:crypto:blake2b256Hash`),
+  verify(`rho:crypto:secp256k1Verify`),
+  guardArgsToString,
+  guardArgsAppend,
+  guardAnySig,
+  guardCount,
+  verifyAdmin,
+  oracleNow,
+  oracleEntry,
+  oracleValue,
+  oracleMedian3,
+  oracleMax3,
+  oracleMin3,
+  oracleIsFresh,
+  oracleB2I,
+  oracleDecide,
+  oracleStore,
+  oracleAdminApply,
+  oraclePairReply,
+  createCurrencyZone,
+  directorySeed,
+  deployId(`rho:rchain:deployId`)
+in {
+  state!({
+    "names": {},
+    "assets": {},
+    "locked": false,
+    "admins": [],
+    "threshold": 2,
+    "govNonce": 0
+  }) |
+// ---- begin core/Directory.inc ----
+// Directory: names -> component URIs, assetId -> {kind, controllerKey, decimals}.
+// State is seeded by the bootstrap term (which holds the private `state` channel):
+//   {names: Map, assets: Map, locked: Bool, admins: List, threshold: Int, govNonce: Int}
+// Bootstrap registration is only possible while locked == false; the bootstrap deploy registers
+// and locks in one atomic term. Admin-signed registration after the lock is phase 2.
+// Rholang note: method calls are not chained here; each `.get`/`.set` is a single call bound by
+// a match, which the parser accepts unambiguously.
+
+contract Directory(@"get", @name, ret) = {
+  for (@s <<- state) {
+    match s.get("names") {
+      Nil => ret!((false, "unknown"))
+      names => {
+        match names.get(name) {
+          Nil => ret!((false, "unknown"))
+          uri => ret!((true, uri))
+        }
+      }
+    }
+  }
+} |
+
+contract Directory(@"asset", @assetId, ret) = {
+  for (@s <<- state) {
+    match s.get("assets") {
+      Nil => ret!((false, "unknown asset"))
+      assets => {
+        match assets.get(assetId) {
+          Nil => ret!((false, "unknown asset"))
+          meta => ret!((true, meta))
+        }
+      }
+    }
+  }
+} |
+
+contract Directory(@"register", @name, @uri, ret) = {
+  for (@s <- state) {
+    if (s.get("locked")) {
+      state!(s) |
+      ret!((false, "locked"))
+    } else {
+      match s.get("names") {
+        Nil => { state!(s) | ret!((false, "no names map")) }
+        names => {
+          state!(s.set("names", names.set(name, uri))) |
+          ret!((true, Nil))
+        }
+      }
+    }
+  }
+} |
+
+contract Directory(@"registerAsset", @assetId, @kind, @controller, @decimals, ret) = {
+  for (@s <- state) {
+    if (s.get("locked")) {
+      state!(s) |
+      ret!((false, "locked"))
+    } else {
+      match s.get("assets") {
+        Nil => { state!(s) | ret!((false, "no assets map")) }
+        assets => {
+          state!(s.set("assets", assets.set(
+            assetId,
+            {"kind": kind, "controllerKey": controller, "decimals": decimals}
+          ))) |
+          ret!((true, Nil))
+        }
+      }
+    }
+  }
+} |
+
+contract Directory(@"lock", ret) = {
+  for (@s <- state) {
+    state!(s.set("locked", true)) |
+    ret!((true, Nil))
+  }
+} |
+
+contract Directory(@"names", ret) = {
+  for (@s <<- state) {
+    match s.get("names") {
+      Nil => ret!((true, {}))
+      names => ret!((true, names))
+    }
+  }
+} |
+
+contract Directory(@"admin", @nonce, @action, @args, @sigs, ret) = {
+  ret!((false, "admin actions are phase 2"))
+} |
+// ---- end core/Directory.inc ----
+  componentsState!({"locked": false}) |
+// ---- begin core/ComponentRegistry.inc ----
+// ComponentRegistry: name -> live contract channel. A large contract cannot always be wrapped in
+// a bundle on this node (the bundle free-variable check rejects some nested captures), so the
+// bootstrap holds the live name here instead of installing a bundle. The registry is a simple
+// contract and bundles cleanly.
+//
+// State is seeded by the bootstrap: componentsState!({}).
+
+contract Components(@"set", @key, cap, ret) = {
+  for (@s <- componentsState) {
+    if (s.get("locked")) {
+      componentsState!(s) |
+      ret!((false, "locked"))
+    } else {
+      componentsState!(s.set(key, *cap)) |
+      ret!((true, Nil))
+    }
+  }
+} |
+
+
+contract Components(@"setValue", @key, @value, ret) = {
+  for (@s <- componentsState) {
+    if (s.get("locked")) {
+      componentsState!(s) |
+      ret!((false, "locked"))
+    } else {
+      componentsState!(s.set(key, value)) |
+      ret!((true, Nil))
+    }
+  }
+} |
+
+contract Components(@"lock", ret) = {
+  for (@s <- componentsState) {
+    componentsState!(s.set("locked", true)) |
+    ret!((true, Nil))
+  }
+} |
+
+contract Components(@"get", @key, ret) = {
+  for (@s <<- componentsState) {
+    match s.get(key) {
+      Nil => ret!((false, "unknown component"))
+      cap => ret!((true, cap))
+    }
+  }
+} |
+
+contract Components(@"has", @key, ret) = {
+  for (@s <<- componentsState) {
+    match s.get(key) {
+      Nil => ret!((true, false))
+      cap => ret!((true, true))
+    }
+  }
+} |
+// ---- end core/ComponentRegistry.inc ----
+  factoryState!({}) |
+// ---- begin core/AccountFactory.inc ----
+// AccountFactory: ownerId -> {account: bundle, proof: unforgeable}.
+// Captured: factoryState, revAddress, Directory, deployerIdOps.
+// The proof is passed only into the Account at creation and is never returned by getOrCreate.
+
+contract AccountFactory(@"getOrCreate", @pubKeyBytes, ret) = {
+  new addrCh in {
+    revAddress!("fromPublicKey", pubKeyBytes, *addrCh) |
+    for (@ownerId <- addrCh) {
+      for (@accounts <- factoryState) {
+        match accounts.get(ownerId) {
+          Nil => {
+            new account, accountInternalPurse, accountLookupPurse, accountZone, accountVaultAuth, accountEnsurePurse, accountTransferBook, proof, purseState, vaultState in {
+              purseState!({}) |
+              vaultState!({}) |
+// ---- begin core/AccountBody.inc ----
+// AccountBody: the per-key non-custodial Account. Inlined inside AccountFactory's
+// `new account, accountInternalPurse, accountLookupPurse, proof, purseState, vaultState in { ... }`.
+//
+// Captured names: pubKeyBytes, ownerId, proof, purseState, vaultState, Directory, deployerIdOps.
+// Authority: every owner op presents the deploy's own *deployerId; this body makes one read-only
+// `pubKeyBytes` call and compares it with the owner key. It never stores, emits or spends with it.
+//
+// Concurrency rule: never hold a consumed state cell across an external await. Reads use `<<-`
+// peeks; the only state mutations happen after the purse/zone call has returned.
+
+// Lazily create a purse for an asset and return it on ret. Does not touch state.
+// Phase 1 implements the REV kind; stable/LP controllers arrive with their contracts.
+contract accountInternalPurse(@assetId, @meta, ret) = {
+  if (meta.get("kind") == "rev") {
+    new rl(`rho:registry:lookup`), ertpCh, issuerCh, purseCh in {
+      rl!(`rho:rchain:ertp`, *ertpCh) |
+      for (@(_, ERTP) <- ertpCh) {
+        @ERTP!("getRevIssuer", *issuerCh) |
+        for (@(revBrand, issuer) <- issuerCh) {
+          @issuer!("makeEmptyPurse", *purseCh) |
+          for (@(true, purse) <- purseCh) {
+            ret!((true, purse, revBrand))
+          }
+        }
+      }
+    }
+  } else {
+    if (meta.get("kind") == "stable") {
+      new uriCh, rl(`rho:registry:lookup`), capCh, issuerCh, brandCh, purseCh in {
+        Directory!("get", meta.get("controllerKey"), *uriCh) |
+        for (@u <- uriCh) {
+          match u {
+            (true, uri) => {
+              rl!(uri, *capCh) |
+              for (zone <- capCh) {
+                zone!("issuer", *issuerCh) |
+                zone!("brand", *brandCh) |
+                for (@(true, issuer) <- issuerCh; @(true, brand) <- brandCh) {
+                  @issuer!("makeEmptyPurse", *purseCh) |
+                  for (@(true, purse) <- purseCh) { ret!((true, purse, brand)) }
+                }
+              }
+            }
+            _ => ret!((false, "no controller"))
+          }
+        }
+      }
+    } else {
+      if (meta.get("kind") == "lp") {
+        new uriCh, rl(`rho:registry:lookup`), capCh, assetCh, poolCh, purseCh in {
+          Directory!("get", "component:pools", *uriCh) |
+          for (@u <- uriCh) {
+            match u {
+              (true, uri) => {
+                rl!(uri, *capCh) |
+                for (components <- capCh) {
+                  components!("get", meta.get("controllerKey"), *poolCh) |
+                  for (@(true, pool) <- poolCh) {
+                    @pool!("lpAsset", *assetCh) |
+                    for (@(true, lpBrand, lpIssuer) <- assetCh) {
+                      @lpIssuer!("makeEmptyPurse", *purseCh) |
+                      for (@(true, purse) <- purseCh) { ret!((true, purse, lpBrand)) }
+                    }
+                  }
+                }
+              }
+              _ => ret!((false, "no controller"))
+            }
+          }
+        }
+      } else {
+        ret!((false, "unsupported asset kind"))
+      }
+    }
+  }
+} |
+
+// Return the stored purse for an asset, or Nil. Peek only.
+contract accountLookupPurse(@assetId, ret) = {
+  for (@purses <<- purseState) {
+    match purses.get(assetId) {
+      Nil => ret!(Nil)
+      entry => {
+        match entry.get("purse") {
+          p => {
+            match entry.get("brand") {
+              brand => ret!((p, brand))
+            }
+          }
+        }
+      }
+    }
+  }
+} |
+
+contract accountZone(@currency, ret) = {
+  new uriCh in {
+    Directory!("get", "component:zone:" ++ currency, *uriCh) |
+    for (@r <- uriCh) {
+      match r {
+        (true, uri) => {
+          new rl(`rho:registry:lookup`), capCh in {
+            rl!(uri, *capCh) |
+            for (zone <- capCh) { ret!((true, *zone)) }
+          }
+        }
+        _ => ret!((false, "no zone"))
+      }
+    }
+  }
+} |
+
+contract accountVaultAuth(@currency, ret) = {
+  for (@vs <<- vaultState) {
+    match vs.get(currency) {
+      Nil => ret!(Nil)
+      auth => ret!(auth)
+    }
+  }
+} |
+
+// Ensure this Account has a purse for an asset, creating it if absent. The state mutation
+// happens only after the purse exists.
+contract accountEnsurePurse(@assetId, ret) = {
+  new lookupCh, infoCh in {
+    accountLookupPurse!(assetId, *lookupCh) |
+    Directory!("asset", assetId, *infoCh) |
+    for (@found <- lookupCh; @info <- infoCh) {
+      match found {
+        Nil => {
+          match info {
+            (true, meta) => {
+              new createdCh in {
+                accountInternalPurse!(assetId, meta, *createdCh) |
+                for (@created <- createdCh) {
+                  match created {
+                    (true, purse, brand) => {
+                      for (@ps <- purseState) {
+                        match ps.get(assetId) {
+                          Nil => {
+                            purseState!(ps.set(assetId, {"purse": purse, "brand": brand})) |
+                            ret!((true, purse, brand))
+                          }
+                          entry => {
+                            purseState!(ps) |
+                            match entry.get("purse") {
+                              p => {
+                                match entry.get("brand") {
+                                  b => ret!((true, p, b))
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                    _ => ret!(created)
+                  }
+                }
+              }
+            }
+            _ => ret!((false, "unknown asset"))
+          }
+        }
+        (p, brand) => ret!((true, p, brand))
+      }
+    }
+  }
+} |
+
+contract account(@"deposit", @assetId, payment, ret) = {
+  new infoCh, lookupCh in {
+    Directory!("asset", assetId, *infoCh) |
+    accountLookupPurse!(assetId, *lookupCh) |
+    for (@info <- infoCh; @found <- lookupCh) {
+      match info {
+        (true, meta) => {
+          match found {
+            Nil => {
+              new newPurseCh in {
+                accountInternalPurse!(assetId, meta, *newPurseCh) |
+                for (@created <- newPurseCh) {
+                  match created {
+                    (true, purse, brand) => {
+                      for (@purses <- purseState) {
+                        match purses.get(assetId) {
+                          Nil => {
+                            purseState!(purses.set(assetId, {"purse": purse, "brand": brand})) |
+                            @purse!("deposit", *payment, *ret)
+                          }
+                          entry => {
+                            purseState!(purses) |
+                            match entry.get("purse") {
+                              p => @p!("deposit", *payment, *ret)
+                            }
+                          }
+                        }
+                      }
+                    }
+                    _ => ret!(created)
+                  }
+                }
+              }
+            }
+            (p, brand) => {
+              @p!("deposit", *payment, *ret)
+            }
+          }
+        }
+        _ => ret!((false, "unknown asset"))
+      }
+    }
+  }
+} |
+
+contract account(@"withdraw", deployerId, @assetId, @amount, ret) = {
+  new pkCh in {
+    deployerIdOps!("pubKeyBytes", *deployerId, *pkCh) |
+    for (@pk <- pkCh) {
+      if (pk == pubKeyBytes) {
+        new lookupCh in {
+          accountLookupPurse!(assetId, *lookupCh) |
+          for (@found <- lookupCh) {
+            match found {
+              Nil => ret!((false, "no purse"))
+              (p, brand) => @p!("withdraw", (brand, amount), *ret)
+            }
+          }
+        }
+      } else {
+        ret!((false, "not owner"))
+      }
+    }
+  }
+} |
+
+contract account(@"balance", deployerId, @assetId, ret) = {
+  new pkCh in {
+    deployerIdOps!("pubKeyBytes", *deployerId, *pkCh) |
+    for (@pk <- pkCh) {
+      if (pk == pubKeyBytes) {
+        new lookupCh in {
+          accountLookupPurse!(assetId, *lookupCh) |
+          for (@found <- lookupCh) {
+            match found {
+              Nil => ret!((false, "no purse"))
+              (p, brand) => @p!("getCurrentAmount", *ret)
+            }
+          }
+        }
+      } else {
+        ret!((false, "not owner"))
+      }
+    }
+  }
+} |
+
+contract account(@"depositFacet", @assetId, ret) = {
+  new infoCh, lookupCh in {
+    Directory!("asset", assetId, *infoCh) |
+    accountLookupPurse!(assetId, *lookupCh) |
+    for (@info <- infoCh; @found <- lookupCh) {
+      match info {
+        (true, meta) => {
+          match found {
+            Nil => {
+              new newPurseCh in {
+                accountInternalPurse!(assetId, meta, *newPurseCh) |
+                for (@created <- newPurseCh) {
+                  match created {
+                    (true, purse, brand) => {
+                      for (@purses <- purseState) {
+                        match purses.get(assetId) {
+                          Nil => {
+                            purseState!(purses.set(assetId, {"purse": purse, "brand": brand})) |
+                            @purse!("getDepositFacet", *ret)
+                          }
+                          entry => {
+                            purseState!(purses) |
+                            match entry.get("purse") {
+                              p => @p!("getDepositFacet", *ret)
+                            }
+                          }
+                        }
+                      }
+                    }
+                    _ => ret!(created)
+                  }
+                }
+              }
+            }
+            (p, brand) => @p!("getDepositFacet", *ret)
+          }
+        }
+        _ => ret!((false, "unknown asset"))
+      }
+    }
+  }
+} |
+
+
+// ---- Transfer product ops ----------------------------------------------------------------
+contract accountTransferBook(ret) = {
+  new uriCh, rl(`rho:registry:lookup`), capCh, bookCh in {
+    Directory!("get", "component:pools", *uriCh) |
+    for (@u <- uriCh) {
+      match u {
+        (true, uri) => {
+          rl!(uri, *capCh) |
+          for (components <- capCh) {
+            components!("get", "transfer:NGN/KES", *bookCh) |
+            for (@(true, book) <- bookCh) { ret!((true, book)) }
+          }
+        }
+        _ => ret!((false, "no book"))
+      }
+    }
+  }
+} |
+
+contract account(@"sendTransfer", deployerId, @sourceAsset, @destAsset, @sourceAmount,
+                @minDest, @claimHash, @expiry, ret) = {
+  new pkCh in {
+    deployerIdOps!("pubKeyBytes", *deployerId, *pkCh) |
+    for (@pk <- pkCh) {
+      if (pk == pubKeyBytes) {
+        new purseCh in {
+          accountEnsurePurse!(sourceAsset, *purseCh) |
+          for (@pc <- purseCh) {
+            match pc {
+              (true, purse, brand) => {
+                new wdCh in {
+                  @purse!("withdraw", (brand, sourceAmount), *wdCh) |
+                  for (@wp <- wdCh) {
+                    match wp {
+                      (true, payment) => {
+                        new bookCh in {
+                          accountTransferBook!(*bookCh) |
+                          for (@b <- bookCh) {
+                            match b {
+                              (true, book) => {
+                                @book!("send", sourceAsset, destAsset, payment, minDest,
+                                       claimHash, expiry, ownerId, *proof, *ret)
+                              }
+                              _ => ret!((false, "no book"))
+                            }
+                          }
+                        }
+                      }
+                      _ => ret!(wp)
+                    }
+                  }
+                }
+              }
+              _ => ret!(pc)
+            }
+          }
+        }
+      } else { ret!((false, "not owner")) }
+    }
+  }
+} |
+
+contract account(@"claimTransfer", @transferId, @destAsset, @secret, ret) = {
+  new purseCh in {
+    accountEnsurePurse!(destAsset, *purseCh) |
+    for (@pc <- purseCh) {
+      match pc {
+        (true, purse, brand) => {
+          new bookCh in {
+            accountTransferBook!(*bookCh) |
+            for (@b <- bookCh) {
+              match b {
+                (true, book) => {
+                  new cCh in {
+                    @book!("claim", transferId, secret, *cCh) |
+                    for (@c <- cCh) {
+                      match c {
+                        (true, amount, payment) => {
+                          new claimDepCh in {
+                            @purse!("deposit", payment, *claimDepCh) |
+                            for (@d <- claimDepCh) { ret!((true, amount)) }
+                          }
+                        }
+                        _ => ret!(c)
+                      }
+                    }
+                  }
+                }
+                _ => ret!((false, "no book"))
+              }
+            }
+          }
+        }
+        _ => ret!(pc)
+      }
+    }
+  }
+} |
+
+contract account(@"refundTransfer", deployerId, @transferId, @destAsset, ret) = {
+  new pkCh in {
+    deployerIdOps!("pubKeyBytes", *deployerId, *pkCh) |
+    for (@pk <- pkCh) {
+      if (pk == pubKeyBytes) {
+        new purseCh in {
+          accountEnsurePurse!(destAsset, *purseCh) |
+          for (@pc <- purseCh) {
+            match pc {
+              (true, purse, brand) => {
+                new bookCh in {
+                  accountTransferBook!(*bookCh) |
+                  for (@b <- bookCh) {
+                    match b {
+                      (true, book) => {
+                        new cCh in {
+                          @book!("refund", transferId, ownerId, *proof, *cCh) |
+                          for (@c <- cCh) {
+                            match c {
+                              (true, amount, payment) => {
+                                new refundDepCh in {
+                                  @purse!("deposit", payment, *refundDepCh) |
+                                  for (@d <- refundDepCh) { ret!((true, amount)) }
+                                }
+                              }
+                              _ => ret!(c)
+                            }
+                          }
+                        }
+                      }
+                      _ => ret!((false, "no book"))
+                    }
+                  }
+                }
+              }
+              _ => ret!(pc)
+            }
+          }
+        }
+      } else { ret!((false, "not owner")) }
+    }
+  }
+} |
+
+// ---- Vault operations (phase 3) ---------------------------------------------------------
+// Every owner op authenticates the deploy's own *deployerId against pubKeyBytes, then uses the
+// vaultAuth stored by openVault. The zone never sees the deployerId.
+
+contract account(@"openVault", deployerId, @currency, ret) = {
+  new pkCh in {
+    deployerIdOps!("pubKeyBytes", *deployerId, *pkCh) |
+    for (@pk <- pkCh) {
+      if (pk == pubKeyBytes) {
+        new zoneCh in {
+          accountZone!(currency, *zoneCh) |
+          for (@z <- zoneCh) {
+            match z {
+              (true, zone) => {
+                new vCh in {
+                  @zone!("open", ownerId, *proof, *vCh) |
+                  for (@r <- vCh) {
+                    match r {
+                      (true, auth) => {
+                        for (@vs <- vaultState) {
+                          vaultState!(vs.set(currency, auth)) |
+                          ret!((true, ownerId))
+                        }
+                      }
+                      _ => ret!(r)
+                    }
+                  }
+                }
+              }
+              _ => ret!((false, "no zone"))
+            }
+          }
+        }
+      } else { ret!((false, "not owner")) }
+    }
+  }
+} |
+
+contract account(@"depositCollateral", deployerId, @currency, @amount, ret) = {
+  new pkCh in {
+    deployerIdOps!("pubKeyBytes", *deployerId, *pkCh) |
+    for (@pk <- pkCh) {
+      if (pk == pubKeyBytes) {
+        new authCh in {
+          accountVaultAuth!(currency, *authCh) |
+          for (@a <- authCh) {
+            match a {
+              Nil => ret!((false, "open a vault first"))
+              auth => {
+                new purseCh in {
+                  accountEnsurePurse!("REV", *purseCh) |
+                  for (@pc <- purseCh) {
+                    match pc {
+                      (true, purse, revBrand) => {
+                        new payCh in {
+                          @purse!("withdraw", (revBrand, amount), *payCh) |
+                          for (@wp <- payCh) {
+                            match wp {
+                              (true, payment) => {
+                                new zoneCh in {
+                                  accountZone!(currency, *zoneCh) |
+                                  for (@z <- zoneCh) {
+                                    match z {
+                                      (true, zone) => {
+                                        @zone!("depositCollateral", ownerId, auth, payment, *ret)
+                                      }
+                                      _ => ret!((false, "no zone"))
+                                    }
+                                  }
+                                }
+                              }
+                              _ => ret!(wp)
+                            }
+                          }
+                        }
+                      }
+                      _ => ret!(pc)
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      } else { ret!((false, "not owner")) }
+    }
+  }
+} |
+
+contract account(@"withdrawCollateral", deployerId, @currency, @amount, ret) = {
+  new pkCh in {
+    deployerIdOps!("pubKeyBytes", *deployerId, *pkCh) |
+    for (@pk <- pkCh) {
+      if (pk == pubKeyBytes) {
+        new authCh in {
+          accountVaultAuth!(currency, *authCh) |
+          for (@a <- authCh) {
+            match a {
+              Nil => ret!((false, "open a vault first"))
+              auth => {
+                new zoneCh in {
+                  accountZone!(currency, *zoneCh) |
+                  for (@z <- zoneCh) {
+                    match z {
+                      (true, zone) => {
+                        new payCh in {
+                          @zone!("withdrawCollateral", ownerId, auth, amount, *payCh) |
+                          for (@wp <- payCh) {
+                            match wp {
+                              (true, payment) => {
+                                new purseCh in {
+                                  accountEnsurePurse!("REV", *purseCh) |
+                                  for (@pc <- purseCh) {
+                                    match pc {
+                                      (true, purse, revBrand) => {
+                                        new depCh in {
+                                        @purse!("deposit", payment, *depCh) |
+                                        for (@d <- depCh) { ret!((true, amount)) }
+                                        }
+                                      }
+                                      _ => ret!(pc)
+                                    }
+                                  }
+                                }
+                              }
+                              _ => ret!(wp)
+                            }
+                          }
+                        }
+                      }
+                      _ => ret!((false, "no zone"))
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      } else { ret!((false, "not owner")) }
+    }
+  }
+} |
+
+contract account(@"borrow", deployerId, @currency, @amount, ret) = {
+  new pkCh in {
+    deployerIdOps!("pubKeyBytes", *deployerId, *pkCh) |
+    for (@pk <- pkCh) {
+      if (pk == pubKeyBytes) {
+        new authCh in {
+          accountVaultAuth!(currency, *authCh) |
+          for (@a <- authCh) {
+            match a {
+              Nil => ret!((false, "open a vault first"))
+              auth => {
+                new purseCh in {
+                  accountEnsurePurse!(currency, *purseCh) |
+                  for (@pc <- purseCh) {
+                    match pc {
+                      (true, purse, brand) => {
+                        new facetCh in {
+                          @purse!("getDepositFacet", *facetCh) |
+                          for (@f <- facetCh) {
+                            match f {
+                              (true, facet) => {
+                                new zoneCh in {
+                                  accountZone!(currency, *zoneCh) |
+                                  for (@z <- zoneCh) {
+                                    match z {
+                                      (true, zone) => {
+                                        @zone!("borrow", ownerId, auth, amount, facet, *ret)
+                                      }
+                                      _ => ret!((false, "no zone"))
+                                    }
+                                  }
+                                }
+                              }
+                              _ => ret!(f)
+                            }
+                          }
+                        }
+                      }
+                      _ => ret!(pc)
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      } else { ret!((false, "not owner")) }
+    }
+  }
+} |
+
+contract account(@"repay", deployerId, @currency, @amount, ret) = {
+  new pkCh in {
+    deployerIdOps!("pubKeyBytes", *deployerId, *pkCh) |
+    for (@pk <- pkCh) {
+      if (pk == pubKeyBytes) {
+        new authCh in {
+          accountVaultAuth!(currency, *authCh) |
+          for (@a <- authCh) {
+            match a {
+              Nil => ret!((false, "open a vault first"))
+              auth => {
+                new purseCh in {
+                  accountEnsurePurse!(currency, *purseCh) |
+                  for (@pc <- purseCh) {
+                    match pc {
+                      (true, purse, brand) => {
+                        new payCh in {
+                          @purse!("withdraw", (brand, amount), *payCh) |
+                          for (@wp <- payCh) {
+                            match wp {
+                              (true, payment) => {
+                                new zoneCh in {
+                                  accountZone!(currency, *zoneCh) |
+                                  for (@z <- zoneCh) {
+                                    match z {
+                                      (true, zone) => {
+                                        @zone!("repay", ownerId, auth, payment, *ret)
+                                      }
+                                      _ => ret!((false, "no zone"))
+                                    }
+                                  }
+                                }
+                              }
+                              _ => ret!(wp)
+                            }
+                          }
+                        }
+                      }
+                      _ => ret!(pc)
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      } else { ret!((false, "not owner")) }
+    }
+  }
+} |
+
+contract account(@"liquidate", deployerId, @currency, @victimOwnerId, @amount, ret) = {
+  new pkCh in {
+    deployerIdOps!("pubKeyBytes", *deployerId, *pkCh) |
+    for (@pk <- pkCh) {
+      if (pk == pubKeyBytes) {
+        new purseCh in {
+          accountEnsurePurse!(currency, *purseCh) |
+          for (@pc <- purseCh) {
+            match pc {
+              (true, purse, brand) => {
+                new payCh in {
+                  @purse!("withdraw", (brand, amount), *payCh) |
+                  for (@wp <- payCh) {
+                    match wp {
+                      (true, payment) => {
+                        new zoneCh in {
+                          accountZone!(currency, *zoneCh) |
+                          for (@z <- zoneCh) {
+                            match z {
+                              (true, zone) => {
+                                new lpCh in {
+                                  @zone!("liquidate", victimOwnerId, payment, *lpCh) |
+                                  for (@lp <- lpCh) {
+                                    match lp {
+                                      (true, revPayment) => {
+                                        new revPurseCh in {
+                                          accountEnsurePurse!("REV", *revPurseCh) |
+                                          for (@rpc <- revPurseCh) {
+                                            match rpc {
+                                              (true, revPurse, revBrand) => {
+                                                new depCh in {
+                                                  @revPurse!("deposit", revPayment, *depCh) |
+                                                  for (@d <- depCh) { ret!((true, amount)) }
+                                                }
+                                              }
+                                              _ => ret!(rpc)
+                                            }
+                                          }
+                                        }
+                                      }
+                                      _ => ret!(lp)
+                                    }
+                                  }
+                                }
+                              }
+                              _ => ret!((false, "no zone"))
+                            }
+                          }
+                        }
+                      }
+                      _ => ret!(wp)
+                    }
+                  }
+                }
+              }
+              _ => ret!(pc)
+            }
+          }
+        }
+      } else { ret!((false, "not owner")) }
+    }
+  }
+} |
+
+contract account(@"vaultInfo", deployerId, @currency, ret) = {
+  new pkCh in {
+    deployerIdOps!("pubKeyBytes", *deployerId, *pkCh) |
+    for (@pk <- pkCh) {
+      if (pk == pubKeyBytes) {
+        new authCh in {
+          accountVaultAuth!(currency, *authCh) |
+          for (@a <- authCh) {
+            match a {
+              Nil => ret!((false, "open a vault first"))
+              auth => {
+                new zoneCh in {
+                  accountZone!(currency, *zoneCh) |
+                  for (@z <- zoneCh) {
+                    match z {
+                      (true, zone) => { @zone!("vault", ownerId, *ret) }
+                      _ => ret!((false, "no zone"))
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      } else { ret!((false, "not owner")) }
+    }
+  }
+} |
+// ---- end core/AccountBody.inc ----
+              factoryState!(accounts.set(ownerId, {
+                "account": bundle+{*account},
+                "proof": *proof
+              })) |
+              ret!((true, bundle+{*account}, ownerId))
+            }
+          }
+          entry => {
+            factoryState!(accounts) |
+            ret!((true, entry.get("account"), ownerId))
+          }
+        }
+      }
+    }
+  }
+} |
+
+contract AccountFactory(@"verify", @ownerId, proof, ret) = {
+  for (@accounts <<- factoryState) {
+    match accounts.get(ownerId) {
+      Nil => ret!((true, false))
+      entry => ret!((true, entry.get("proof") == *proof))
+    }
+  }
+} |
+
+contract AccountFactory(@"accountOf", @ownerId, ret) = {
+  for (@accounts <<- factoryState) {
+    match accounts.get(ownerId) {
+      Nil => ret!((false, "no account"))
+      entry => ret!((true, entry.get("account")))
+    }
+  }
+} |
+// ---- end core/AccountFactory.inc ----
+  oracleState!({
+    "reporters": __REPORTER_KEYS__,
+    "prices": {},
+    "params": {
+      "quorum": 2,
+      "maxAgeBlocks": 50,
+      "maxSpreadBps": 200,
+      "minPrice": 1,
+      "maxPrice": 1000000000000
+    },
+    "admins": __ADMIN_KEYS__,
+    "threshold": 2,
+    "govNonce": 0
+  }) |
+// ---- begin lib/Guard.inc ----
+// Guard: M-of-N admin signature verification over a canonical payload.
+//
+// Off-chain canonical string (tools/sign_payload.py):
+//   "rcash:admin:v1|<component>|<nonce>|<action>|<arg0>,<arg1>,..."
+// The contract hashes the UTF-8 bytes with blake2b256 and verifies DER secp256k1 signatures
+// with `secp256k1Verify(hash, sig, pubkey)`.
+//
+// Captured system channels: hash (`rho:crypto:blake2b256Hash`), verify
+// (`rho:crypto:secp256k1Verify`). Helper names are declared by the including component.
+
+contract guardArgsToString(@args, ret) = {
+  if (args.length() == 0) {
+    ret!("")
+  } else {
+    match args.nth(0) {
+      a => {
+        new restCh in {
+          guardArgsAppend!(args, 1, a.toString(), *restCh) |
+          for (@s <- restCh) { ret!(s) }
+        }
+      }
+    }
+  }
+} |
+
+contract guardArgsAppend(@args, @i, @acc, ret) = {
+  if (i >= args.length()) {
+    ret!(acc)
+  } else {
+    match args.nth(i) {
+      a => {
+        guardArgsAppend!(args, i + 1, acc ++ "," ++ a.toString(), *ret)
+      }
+    }
+  }
+} |
+
+contract guardAnySig(@digest, @sigs, @j, @key, ret) = {
+  if (j >= sigs.length()) {
+    ret!(false)
+  } else {
+    match sigs.nth(j) {
+      sig => {
+        new vCh in {
+          verify!(digest, sig, key, *vCh) |
+          for (@ok <- vCh) {
+            if (ok) { ret!(true) } else { guardAnySig!(digest, sigs, j + 1, key, *ret) }
+          }
+        }
+      }
+    }
+  }
+} |
+
+contract guardCount(@digest, @sigs, @i, @count, @keys, @threshold, ret) = {
+  if (i >= keys.length()) {
+    ret!(count >= threshold)
+  } else {
+    match keys.nth(i) {
+      key => {
+        new anyCh in {
+          guardAnySig!(digest, sigs, 0, key, *anyCh) |
+          for (@any <- anyCh) {
+            if (any) { guardCount!(digest, sigs, i + 1, count + 1, keys, threshold, *ret) }
+            else { guardCount!(digest, sigs, i + 1, count, keys, threshold, *ret) }
+          }
+        }
+      }
+    }
+  }
+} |
+
+contract verifyAdmin(@component, @nonce, @action, @args, @sigs, @keys, @threshold, ret) = {
+  new strCh, hashCh, okCh in {
+    guardArgsToString!(args, *strCh) |
+    for (@argStr <- strCh) {
+      match "rcash:admin:v1|" ++ component ++ "|" ++ nonce.toString() ++ "|" ++ action ++ "|" ++ argStr {
+        payload => {
+          hash!(payload.toUtf8Bytes(), *hashCh) |
+          for (@digest <- hashCh) {
+            guardCount!(digest, sigs, 0, 0, keys, threshold, *okCh) |
+            for (@ok <- okCh) { ret!(ok) }
+          }
+        }
+      }
+    }
+  }
+} |
+// ---- end lib/Guard.inc ----// ---- begin oracle/OracleHub.inc ----
+// OracleHub: signed reporter prices, median/freshness/spread decisions, M-of-N admin.
+//
+// State (seeded by the bootstrap):
+//   {reporters: [pubKeyBytes x3], prices: Map(currency -> Map(index -> {price,height})),
+//    params: {quorum, maxAgeBlocks, maxSpreadBps, minPrice, maxPrice},
+//    admins: [pubKeyBytes], threshold: Int, govNonce: Int}
+//
+// Captured: oracleState, bd (`rho:block:data`), hash, verify, Guard helpers.
+
+contract oracleNow(ret) = {
+  new ch in {
+    bd!(*ch) |
+    for (@h, @sender, @ts <- ch) { ret!(h) }
+  }
+} |
+
+contract oracleEntry(@currency, @index, ret) = {
+  for (@s <<- oracleState) {
+    match s.get("prices") {
+      Nil => ret!(Nil)
+      prices => {
+        match prices.get(currency) {
+          Nil => ret!(Nil)
+          byIndex => {
+            match byIndex.get(index) {
+              Nil => ret!(Nil)
+              entry => ret!(entry)
+            }
+          }
+        }
+      }
+    }
+  }
+} |
+
+contract oracleValue(@entry, ret) = {
+  match entry {
+    Nil => ret!((0, 0))
+    e => {
+      match e.get("price") {
+        p => {
+          match e.get("height") { h => ret!((p, h)) }
+        }
+      }
+    }
+  }
+} |
+
+contract oracleMedian3(@a, @b, @c, ret) = {
+  if (a < b) {
+    if (b < c) { ret!(b) }
+    else { if (a < c) { ret!(c) } else { ret!(a) } }
+  } else {
+    if (a < c) { ret!(a) }
+    else { if (b < c) { ret!(c) } else { ret!(b) } }
+  }
+} |
+
+contract oracleMax3(@a, @b, @c, ret) = {
+  if (a >= b) {
+    if (a >= c) { ret!(a) } else { ret!(c) }
+  } else {
+    if (b >= c) { ret!(b) } else { ret!(c) }
+  }
+} |
+
+contract oracleMin3(@a, @b, @c, ret) = {
+  if (a <= b) {
+    if (a <= c) { ret!(a) } else { ret!(c) }
+  } else {
+    if (b <= c) { ret!(b) } else { ret!(c) }
+  }
+} |
+
+contract oracleIsFresh(@price, @height, @now, @maxAge, @minP, @maxP, ret) = {
+  if (height <= 0) { ret!(false) }
+  else {
+    if (height > now) { ret!(false) }
+    else {
+      if ((now - height) > maxAge) { ret!(false) }
+      else {
+        if (price < minP) { ret!(false) }
+        else { if (price > maxP) { ret!(false) } else { ret!(true) } }
+      }
+    }
+  }
+} |
+
+contract oracleB2I(@b, ret) = {
+  if (b) { ret!(1) } else { ret!(0) }
+} |
+
+contract oracleDecide(@count, @quorum, @spread, @median, @spreadBps, @minP, @maxP, ret) = {
+  if (count < quorum) { ret!(false) }
+  else {
+    if (median <= 0) { ret!(false) }
+    else {
+      if (median < minP) { ret!(false) }
+      else {
+        if (median > maxP) { ret!(false) }
+        else {
+          if ((spread * 10000) > (median * spreadBps)) { ret!(false) } else { ret!(true) }
+        }
+      }
+    }
+  }
+} |
+
+contract oracleStore(@currency, @index, @price, @height, ret) = {
+  for (@s <- oracleState) {
+    match s.get("prices") {
+      Nil => { oracleState!(s) | ret!((false, "no prices map")) }
+      prices => {
+        match prices.get(currency) {
+          Nil => {
+            oracleState!(s.set("prices", prices.set(currency, {index: {"price": price, "height": height}}))) |
+            ret!((true, Nil))
+          }
+          byIndex => {
+            match byIndex.get(index) {
+              Nil => {
+                oracleState!(s.set("prices", prices.set(currency, byIndex.set(index, {"price": price, "height": height})))) |
+                ret!((true, Nil))
+              }
+              old => {
+                match old.get("height") {
+                  oldH => {
+                    if (height > oldH) {
+                      oracleState!(s.set("prices", prices.set(currency, byIndex.set(index, {"price": price, "height": height})))) |
+                      ret!((true, Nil))
+                    } else {
+                      oracleState!(s) | ret!((false, "height not monotonic"))
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+} |
+
+contract oracleAdminApply(@action, @args, @nonce, ret) = {
+  for (@s <- oracleState) {
+    if (nonce <= s.get("govNonce")) {
+      // Re-check under the consumed state so two concurrent actions cannot reuse a nonce.
+      oracleState!(s) | ret!((false, "replay"))
+    } else {
+    if (action == "setParams") {
+      match args.nth(0) {
+        q => {
+          match args.nth(1) {
+            age => {
+              match args.nth(2) {
+                spread => {
+                  match args.nth(3) {
+                    minP => {
+                      match args.nth(4) {
+                        maxP => {
+                          match s.set("params", {
+                            "quorum": q, "maxAgeBlocks": age, "maxSpreadBps": spread,
+                            "minPrice": minP, "maxPrice": maxP
+                          }) {
+                            s1 => {
+                              match s1.set("govNonce", nonce) {
+                                s2 => { oracleState!(s2) | ret!((true, Nil)) }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    } else {
+      if (action == "setReporters") {
+        match args.nth(0) {
+          a0 => {
+            match args.nth(1) {
+              a1 => {
+                match args.nth(2) {
+                  a2 => {
+                    match s.set("reporters", [a0.hexToBytes(), a1.hexToBytes(), a2.hexToBytes()]) {
+                      s1 => {
+                        match s1.set("govNonce", nonce) {
+                          s2 => { oracleState!(s2) | ret!((true, Nil)) }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      } else {
+        oracleState!(s) | ret!((false, "unknown action"))
+      }
+    }
+    }
+  }
+} |
+
+contract OracleHub(@"get", @currency, ret) = {
+  new nowCh, e0Ch, e1Ch, e2Ch, v0Ch, v1Ch, v2Ch in {
+    oracleNow!(*nowCh) |
+    oracleEntry!(currency, 0, *e0Ch) |
+    oracleEntry!(currency, 1, *e1Ch) |
+    oracleEntry!(currency, 2, *e2Ch) |
+    for (@now <- nowCh; @e0 <- e0Ch; @e1 <- e1Ch; @e2 <- e2Ch) {
+      oracleValue!(e0, *v0Ch) |
+      oracleValue!(e1, *v1Ch) |
+      oracleValue!(e2, *v2Ch) |
+      for (@(p0, h0) <- v0Ch; @(p1, h1) <- v1Ch; @(p2, h2) <- v2Ch) {
+        for (@s <<- oracleState) {
+          match s.get("params") {
+            Nil => ret!((false, "no params"))
+            params => {
+              match params.get("quorum") {
+                quorum => {
+                  match params.get("maxAgeBlocks") {
+                    maxAge => {
+                      match params.get("maxSpreadBps") {
+                        spreadBps => {
+                          match params.get("minPrice") {
+                            minP => {
+                              match params.get("maxPrice") {
+                                maxP => {
+                                  new f0Ch, f1Ch, f2Ch in {
+                                    oracleIsFresh!(p0, h0, now, maxAge, minP, maxP, *f0Ch) |
+                                    oracleIsFresh!(p1, h1, now, maxAge, minP, maxP, *f1Ch) |
+                                    oracleIsFresh!(p2, h2, now, maxAge, minP, maxP, *f2Ch) |
+                                    for (@f0 <- f0Ch; @f1 <- f1Ch; @f2 <- f2Ch) {
+                                      new i0Ch, i1Ch, i2Ch in {
+                                        oracleB2I!(f0, *i0Ch) |
+                                        oracleB2I!(f1, *i1Ch) |
+                                        oracleB2I!(f2, *i2Ch) |
+                                        for (@i0 <- i0Ch; @i1 <- i1Ch; @i2 <- i2Ch) {
+                                          new medianCh, maxHCh, maxPCh, minPCh in {
+                                            oracleMedian3!(p0, p1, p2, *medianCh) |
+                                            oracleMax3!(h0, h1, h2, *maxHCh) |
+                                            oracleMax3!(p0, p1, p2, *maxPCh) |
+                                            oracleMin3!(p0, p1, p2, *minPCh) |
+                                            for (@median <- medianCh; @maxH <- maxHCh;
+                                                 @pMax <- maxPCh; @pMin <- minPCh) {
+                                              new okCh in {
+                                                oracleDecide!(i0 + i1 + i2, quorum, pMax - pMin,
+                                                              median, spreadBps, minP, maxP, *okCh) |
+                                                for (@ok <- okCh) {
+                                                  if (ok) {
+                                                    ret!((true, {"price": median, "height": maxH,
+                                                                 "fresh": true, "reason": "ok"}))
+                                                  } else {
+                                                    ret!((true, {"price": median, "height": maxH,
+                                                                 "fresh": false, "reason": "quorum/spread/band"}))
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+} |
+
+contract oraclePairReply(@fb, @fq, @pbase, @pquote, ret) = {
+  if (fb) {
+    if (fq) {
+      if (pquote > 0) {
+        match (pbase * 100000000) / pquote {
+          Int => ret!((true, {"rate": (pbase * 100000000) / pquote, "fresh": true, "reason": "ok"}))
+          _ => ret!((false, "rate overflow"))
+        }
+      } else { ret!((true, {"rate": 0, "fresh": false, "reason": "zero quote"})) }
+    } else { ret!((true, {"rate": 0, "fresh": false, "reason": "stale quote"})) }
+  } else { ret!((true, {"rate": 0, "fresh": false, "reason": "stale base"})) }
+} |
+
+contract OracleHub(@"getPair", @base, @quote, ret) = {
+  new bCh, qCh in {
+    OracleHub!("get", base, *bCh) |
+    OracleHub!("get", quote, *qCh) |
+    for (@rb <- bCh; @rq <- qCh) {
+      match rb {
+        (true, pb) => {
+          match rq {
+            (true, pq) => {
+              match pb.get("fresh") {
+                fb => {
+                  match pq.get("fresh") {
+                    fq => {
+                      match pb.get("price") {
+                        pbase => {
+                          match pq.get("price") {
+                            pquote => oraclePairReply!(fb, fq, pbase, pquote, *ret)
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            _ => ret!((false, "quote feed error"))
+          }
+        }
+        _ => ret!((false, "base feed error"))
+      }
+    }
+  }
+} |
+
+contract OracleHub(@"submit", @currency, @price, @height, @index, @pubKey, @sig, ret) = {
+  new nowCh in {
+    oracleNow!(*nowCh) |
+    for (@now <- nowCh) {
+      for (@s <<- oracleState) {
+        match s.get("reporters") {
+          Nil => ret!((false, "no reporters"))
+          reporters => {
+            if (index < 0) { ret!((false, "bad index")) }
+            else {
+              if (index >= reporters.length()) { ret!((false, "bad index")) }
+              else {
+                match reporters.nth(index) {
+                  allowed => {
+                    if (allowed == pubKey) {
+                      if (height > now) { ret!((false, "future height")) }
+                      else {
+                        if ((now - height) > 1000) { ret!((false, "stale height")) }
+                        else {
+                          new hashCh, vCh in {
+                            match "rcash:oracle:v1|/root|" ++ currency ++ "|" ++ price.toString() ++ "|" ++ height.toString() {
+                              payload => {
+                                hash!(payload.toUtf8Bytes(), *hashCh) |
+                                for (@digest <- hashCh) {
+                                  verify!(digest, sig, pubKey, *vCh) |
+                                  for (@ok <- vCh) {
+                                    if (ok) { oracleStore!(currency, index, price, height, *ret) }
+                                    else { ret!((false, "bad signature")) }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    } else { ret!((false, "not the reporter at that index")) }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+} |
+
+contract OracleHub(@"reporters", ret) = {
+  for (@s <<- oracleState) {
+    match s.get("reporters") {
+      Nil => ret!((false, "no reporters"))
+      reporters => ret!((true, reporters))
+    }
+  }
+} |
+
+contract OracleHub(@"admin", @nonce, @action, @args, @sigs, ret) = {
+  for (@s <<- oracleState) {
+    match s.get("admins") {
+      Nil => ret!((false, "no admins"))
+      admins => {
+        match s.get("threshold") {
+          threshold => {
+            match s.get("govNonce") {
+              lastNonce => {
+                if (nonce <= lastNonce) { ret!((false, "replay")) }
+                else {
+                  new okCh in {
+                    verifyAdmin!("oracle", nonce, action, args, sigs, admins, threshold, *okCh) |
+                    for (@ok <- okCh) {
+                      if (ok) { oracleAdminApply!(action, args, nonce, *ret) }
+                      else { ret!((false, "signatures")) }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+} |
+// ---- end oracle/OracleHub.inc ----
+  // A trusted bootstrap helper: create a CurrencyZone, install it, return (uri, zone, brand, issuer).
+  contract createCurrencyZone(@currency, @params, @admins, @threshold, ret) = {
+    new
+      rl(`rho:registry:lookup`),
+      ertpCh,
+      kitCh,
+      revIssuerCh,
+      burnPurseCh,
+      revPurseCh,
+      burnFacetCh,
+      zone,
+      zoneState,
+      uriCh,
+      zoneNow,
+      zoneAccrue,
+      zoneRate,
+      zoneHealth,
+      zoneBadInc,
+      zoneUpdate,
+      zoneAdminApply,
+      zonePayout
+    in {
+      rl!(`rho:rchain:ertp`, *ertpCh) |
+      for (@(_, ERTP) <- ertpCh) {
+        @ERTP!("makeIssuerKit", *kitCh) |
+        @ERTP!("getRevIssuer", *revIssuerCh) |
+        for (@(brand, mint, issuer) <- kitCh; @(revBrand, revIssuer) <- revIssuerCh) {
+          @issuer!("makeEmptyPurse", *burnPurseCh) |
+          @revIssuer!("makeEmptyPurse", *revPurseCh) |
+          for (@(true, burnPurse) <- burnPurseCh; @(true, revPurse) <- revPurseCh) {
+            @burnPurse!("getDepositFacet", *burnFacetCh) |
+            for (@(true, burnFacet) <- burnFacetCh) {
+              zoneState!({
+                "currency": currency,
+                "vaults": {},
+                "totalDebt": 0,
+                "totalCollateral": 0,
+                "badDebt": 0,
+                "params": {
+                  "mcrBps": params.nth(0),
+                  "bonusBps": params.nth(1),
+                  "closeFactorBps": params.nth(2),
+                  "ratePerBlock": params.nth(3),
+                  "debtCeiling": params.nth(4),
+                  "minDebt": params.nth(5),
+                  "maxDebt": params.nth(6)
+                },
+                "paused": false,
+                "admins": admins,
+                "threshold": threshold,
+                "govNonce": 0
+              }) |
+// ---- begin stable/CurrencyZone.inc ----
+// CurrencyZone: one local stablecoin + its REV-collateralised CDP.
+//
+// Captured by the factory:
+//   zoneState, currency, brand, mint, issuer, revBrand, revPurse, burnFacet,
+//   oracle, accounts (AccountFactory), Directory, bd, hash, verify, Guard helpers, admins, threshold.
+//
+// State:
+//   {currency, vaults: Map(ownerId -> {auth, collateral, debt, lastHeight}),
+//    totalDebt, totalCollateral, badDebt, params, paused, admins, threshold, govNonce}
+//
+// Units: collateral in REV drops (1e8/REV); debt and local values in local base units (1e8/unit);
+// oracle rate = local base units per REV drop x 1e8.
+
+contract zoneNow(ret) = {
+  new ch in {
+    bd!(*ch) |
+    for (@h, @sender, @ts <- ch) { ret!(h) }
+  }
+} |
+
+// Simple per-block interest, rounded up. Time is block height; timestamp is not a safe input.
+contract zoneAccrue(@debt, @last, @now, @rate, ret) = {
+  if (debt <= 0) { ret!(0) }
+  else {
+    if (now <= last) { ret!(debt) }
+    else {
+      if (rate <= 0) { ret!(debt) }
+      else {
+        match ((debt * rate * (now - last) + 999999999999) / 1000000000000).toInt() {
+          interest => ret!(debt + interest)
+        }
+      }
+    }
+  }
+} |
+
+// (rate, fresh) for REV -> currency.
+contract zoneRate(ret) = {
+  new ch in {
+    OracleHub!("getPair", "REV", currency, *ch) |
+    for (@r <- ch) {
+      match r {
+        (true, m) => {
+          match m.get("rate") {
+            rate => {
+              match m.get("fresh") { fresh => ret!((rate, fresh)) }
+            }
+          }
+        }
+        _ => ret!((0, false))
+      }
+    }
+  }
+} |
+
+// Collateral ratio test: collateralLocal * 10000 >= debt * mcrBps.
+contract zoneHealth(@collateral, @debt, @rate, @mcrBps, ret) = {
+  if (debt <= 0) { ret!(true) }
+  else {
+    if (rate <= 0) { ret!(false) }
+    else {
+      match ((collateral * rate) / 100000000).toInt() {
+        local => {
+          if (local * 10000 >= debt * mcrBps) { ret!(true) }
+          else { ret!(false) }
+        }
+      }
+    }
+  }
+} |
+
+contract zoneBadInc(@collateral, @debt, ret) = {
+  if (collateral <= 0) { ret!(debt) } else { ret!(0) }
+} |
+
+// Apply a vault/totals update to the consumed state map and return the new map.
+contract zoneUpdate(@s, @ownerId, @vault, @totalDebt, @totalCollateral, @badDebt, ret) = {
+  match s.get("vaults") {
+    Nil => ret!(s)
+    vaults => {
+      match s.set("vaults", vaults.set(ownerId, vault)) {
+        s1 => {
+          match s1.set("totalDebt", totalDebt) {
+            s2 => {
+              match s2.set("totalCollateral", totalCollateral) {
+                s3 => {
+                  match s3.set("badDebt", badDebt) {
+                    s4 => ret!(s4)
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+} |
+
+contract zoneAdminApply(@action, @args, @nonce, ret) = {
+  for (@s <- zoneState) {
+    if (nonce <= s.get("govNonce")) {
+      zoneState!(s) | ret!((false, "replay"))
+    } else {
+      if (action == "setParams") {
+        match args.nth(0) {
+          mcr => {
+            match args.nth(1) {
+              bonus => {
+                match args.nth(2) {
+                  close => {
+                    match args.nth(3) {
+                      rate => {
+                        match args.nth(4) {
+                          ceiling => {
+                            match args.nth(5) {
+                              minDebt => {
+                                match args.nth(6) {
+                                  maxDebt => {
+                                    match s.set("params", {
+                                      "mcrBps": mcr, "bonusBps": bonus, "closeFactorBps": close,
+                                      "ratePerBlock": rate, "debtCeiling": ceiling,
+                                      "minDebt": minDebt, "maxDebt": maxDebt
+                                    }) {
+                                      s1 => {
+                                        match s1.set("govNonce", nonce) {
+                                          s2 => { zoneState!(s2) | ret!((true, Nil)) }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      } else {
+        if (action == "setPaused") {
+          match args.nth(0) {
+            p => {
+              match s.set("paused", p == 1) {
+                s1 => {
+                  match s1.set("govNonce", nonce) {
+                    s2 => { zoneState!(s2) | ret!((true, Nil)) }
+                  }
+                }
+              }
+            }
+          }
+        } else {
+          zoneState!(s) | ret!((false, "unknown action"))
+        }
+      }
+    }
+  }
+} |
+
+contract zone(@"open", @ownerId, proof, ret) = {
+  new vCh in {
+    AccountFactory!("verify", ownerId, *proof, *vCh) |
+    for (@r <- vCh) {
+      match r {
+        (true, true) => {
+          for (@s <- zoneState) {
+            match s.get("vaults") {
+              Nil => { zoneState!(s) | ret!((false, "no vaults map")) }
+              vaults => {
+                match vaults.get(ownerId) {
+                  Nil => {
+                    new auth in {
+                      zoneState!(s.set("vaults", vaults.set(ownerId, {
+                        "auth": *auth, "collateral": 0, "debt": 0, "lastHeight": 0
+                      }))) |
+                      ret!((true, *auth))
+                    }
+                  }
+                  v => {
+                    zoneState!(s) |
+                    match v.get("auth") { a => ret!((true, a)) }
+                  }
+                }
+              }
+            }
+          }
+        }
+        _ => ret!((false, "not account"))
+      }
+    }
+  }
+} |
+
+contract zone(@"depositCollateral", @ownerId, @auth, payment, ret) = {
+  new amtCh, depCh in {
+    @revIssuer!("getAmountOf", *payment, *amtCh) |
+    for (@a <- amtCh) {
+      match a {
+        (true, amount) => {
+          new nowCh in {
+            zoneNow!(*nowCh) |
+            for (@now <- nowCh) {
+              for (@s <- zoneState) {
+                match s.get("vaults") {
+                  Nil => { zoneState!(s) | ret!((false, "no vaults")) }
+                  vaults => {
+                    match vaults.get(ownerId) {
+                      Nil => { zoneState!(s) | ret!((false, "no vault")) }
+                      v => {
+                        match v.get("auth") {
+                          storedAuth => {
+                            if (storedAuth == auth) {
+                              match s.get("params") {
+                                params => {
+                                  new accCh in {
+                                    zoneAccrue!(v.get("debt"), v.get("lastHeight"), now,
+                                                params.get("ratePerBlock"), *accCh) |
+                                    for (@newDebt <- accCh) {
+                                      new newStateCh in {
+                                        zoneUpdate!(s, ownerId, {
+                                          "auth": auth,
+                                          "collateral": v.get("collateral") + amount,
+                                          "debt": newDebt,
+                                          "lastHeight": now
+                                        }, s.get("totalDebt"),
+                                        s.get("totalCollateral") + amount, s.get("badDebt"),
+                                        *newStateCh) |
+                                        for (@ns <- newStateCh) {
+                                          zoneState!(ns) |
+                                          @revPurse!("deposit", *payment, *depCh) |
+                                          for (@d <- depCh) {
+                                            match d {
+                                              (true, bal) => ret!((true,
+                                                {"collateral": v.get("collateral") + amount,
+                                                 "debt": newDebt}))
+                                              _ => ret!((false, "rev deposit failed"))
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            } else { zoneState!(s) | ret!((false, "bad vault auth")) }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        _ => ret!((false, "not a REV payment"))
+      }
+    }
+  }
+} |
+
+contract zone(@"withdrawCollateral", @ownerId, @auth, @amount, ret) = {
+  if (amount <= 0) { ret!((false, "amount")) }
+  else {
+    new nowCh, rateCh, payCh in {
+      zoneNow!(*nowCh) |
+      zoneRate!(*rateCh) |
+      for (@now <- nowCh; @(rate, fresh) <- rateCh) {
+        if (rate <= 0) { ret!((false, "no rate")) }
+        else {
+          for (@s <- zoneState) {
+            match s.get("vaults") {
+              Nil => { zoneState!(s) | ret!((false, "no vaults")) }
+              vaults => {
+                match vaults.get(ownerId) {
+                  Nil => { zoneState!(s) | ret!((false, "no vault")) }
+                  v => {
+                    match v.get("auth") {
+                      storedAuth => {
+                        if (storedAuth == auth) {
+                          if (v.get("collateral") < amount) {
+                            zoneState!(s) | ret!((false, "insufficient collateral"))
+                          } else {
+                            match s.get("params") {
+                              params => {
+                                new accCh in {
+                                  zoneAccrue!(v.get("debt"), v.get("lastHeight"), now,
+                                              params.get("ratePerBlock"), *accCh) |
+                                  for (@newDebt <- accCh) {
+                                    new hCh in {
+                                      zoneHealth!(v.get("collateral") - amount, newDebt, rate,
+                                                  params.get("mcrBps"), *hCh) |
+                                      for (@healthy <- hCh) {
+                                        if (healthy) {
+                                          if (fresh) {
+                                            new newStateCh in {
+                                              zoneUpdate!(s, ownerId, {
+                                                "auth": auth,
+                                                "collateral": v.get("collateral") - amount,
+                                                "debt": newDebt,
+                                                "lastHeight": now
+                                              }, s.get("totalDebt"),
+                                              s.get("totalCollateral") - amount, s.get("badDebt"),
+                                              *newStateCh) |
+                                              for (@ns <- newStateCh) {
+                                                zoneState!(ns) |
+                                                @revPurse!("withdraw", (revBrand, amount), *payCh) |
+                                                for (@p <- payCh) {
+                                                  match p {
+                                                    (true, payment) => ret!((true, payment))
+                                                    _ => ret!((false, "rev withdraw failed"))
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          } else { zoneState!(s) | ret!((false, "stale oracle")) }
+                                        } else { zoneState!(s) | ret!((false, "below MCR")) }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        } else { zoneState!(s) | ret!((false, "bad vault auth")) }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+} |
+
+contract zone(@"borrow", @ownerId, @auth, @amount, depositFacet, ret) = {
+  if (amount <= 0) { ret!((false, "amount")) }
+  else {
+    new nowCh, rateCh, payCh, depCh in {
+      zoneNow!(*nowCh) |
+      zoneRate!(*rateCh) |
+      for (@now <- nowCh; @(rate, fresh) <- rateCh) {
+        if (fresh == false) { ret!((false, "stale oracle")) }
+        else {
+          if (rate <= 0) { ret!((false, "no rate")) }
+          else {
+            for (@s <- zoneState) {
+              if (s.get("paused")) { zoneState!(s) | ret!((false, "paused")) }
+              else {
+                match s.get("vaults") {
+                  Nil => { zoneState!(s) | ret!((false, "no vaults")) }
+                  vaults => {
+                    match vaults.get(ownerId) {
+                      Nil => { zoneState!(s) | ret!((false, "no vault")) }
+                      v => {
+                        match v.get("auth") {
+                          storedAuth => {
+                            if (storedAuth == auth) {
+                              match s.get("params") {
+                                params => {
+                                  new accCh in {
+                                    zoneAccrue!(v.get("debt"), v.get("lastHeight"), now,
+                                                params.get("ratePerBlock"), *accCh) |
+                                    for (@accrued <- accCh) {
+                                      match (accrued + amount) {
+                                        Int => {
+                                          if (accrued + amount > params.get("maxDebt")) {
+                                            zoneState!(s) | ret!((false, "above max debt"))
+                                          } else {
+                                            if (s.get("totalDebt") + amount > params.get("debtCeiling")) {
+                                              zoneState!(s) | ret!((false, "debt ceiling"))
+                                            } else {
+                                              new hCh in {
+                                                zoneHealth!(v.get("collateral"), accrued + amount, rate,
+                                                            params.get("mcrBps"), *hCh) |
+                                                for (@healthy <- hCh) {
+                                                  if (healthy) {
+                                                    new newStateCh in {
+                                                      zoneUpdate!(s, ownerId, {
+                                                        "auth": auth,
+                                                        "collateral": v.get("collateral"),
+                                                        "debt": accrued + amount,
+                                                        "lastHeight": now
+                                                      }, s.get("totalDebt") + amount,
+                                                      s.get("totalCollateral"), s.get("badDebt"),
+                                                      *newStateCh) |
+                                                      for (@ns <- newStateCh) {
+                                                        zoneState!(ns) |
+                                                        @mint!("mintPayment", (brand, amount), *payCh) |
+                                                        for (@(true, payment) <- payCh) {
+                                                          depositFacet!("deposit", payment, *depCh) |
+                                                          for (@d <- depCh) {
+                                                            match d {
+                                                              (true, bal) => ret!((true,
+                                                                {"debt": accrued + amount, "health": true}))
+                                                              _ => ret!((false, "facet deposit failed"))
+                                                            }
+                                                          }
+                                                        }
+                                                      }
+                                                    }
+                                                  } else { zoneState!(s) | ret!((false, "below MCR")) }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                        _ => { zoneState!(s) | ret!((false, "debt overflow")) }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            } else { zoneState!(s) | ret!((false, "bad vault auth")) }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+} |
+
+contract zone(@"repay", @ownerId, @auth, payment, ret) = {
+  new amtCh, depCh in {
+    @issuer!("getAmountOf", *payment, *amtCh) |
+    for (@a <- amtCh) {
+      match a {
+        (true, amount) => {
+          if (amount <= 0) { ret!((false, "amount")) }
+          else {
+            new nowCh in {
+              zoneNow!(*nowCh) |
+              for (@now <- nowCh) {
+                for (@s <- zoneState) {
+                  match s.get("vaults") {
+                    Nil => { zoneState!(s) | ret!((false, "no vaults")) }
+                    vaults => {
+                      match vaults.get(ownerId) {
+                        Nil => { zoneState!(s) | ret!((false, "no vault")) }
+                        v => {
+                          match v.get("auth") {
+                            storedAuth => {
+                              if (storedAuth == auth) {
+                                match s.get("params") {
+                                  params => {
+                                    new accCh in {
+                                      zoneAccrue!(v.get("debt"), v.get("lastHeight"), now,
+                                                  params.get("ratePerBlock"), *accCh) |
+                                      for (@accrued <- accCh) {
+                                        if (amount > accrued) {
+                                          zoneState!(s) | ret!((false, "overpayment"))
+                                        } else {
+                                          new newStateCh in {
+                                            zoneUpdate!(s, ownerId, {
+                                              "auth": auth,
+                                              "collateral": v.get("collateral"),
+                                              "debt": accrued - amount,
+                                              "lastHeight": now
+                                            }, s.get("totalDebt") - amount,
+                                            s.get("totalCollateral"), s.get("badDebt"),
+                                            *newStateCh) |
+                                            for (@ns <- newStateCh) {
+                                              zoneState!(ns) |
+                                              @burnFacet!("deposit", *payment, *depCh) |
+                                              for (@d <- depCh) {
+                                                match d {
+                                                  (true, bal) => ret!((true,
+                                                    {"debt": accrued - amount, "repaid": amount}))
+                                                  _ => ret!((false, "burn failed"))
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              } else { zoneState!(s) | ret!((false, "bad vault auth")) }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        _ => ret!((false, "not a stablecoin payment"))
+      }
+    }
+  }
+} |
+
+contract zonePayout(@amount, @rate, @bonusBps, @collateral, ret) = {
+  if (amount <= 0) { ret!((false, "amount")) }
+  else {
+    if (rate <= 0) { ret!((false, "rate")) }
+      else {
+        match ((amount * (10000 + bonusBps) * 100000000) / (rate * 10000)).toInt() {
+          seized => {
+            if (seized > collateral) { ret!((true, collateral)) }
+            else { ret!((true, seized)) }
+          }
+        }
+    }
+  }
+} |
+
+contract zone(@"liquidate", @ownerId, payment, ret) = {
+  new amtCh, nowCh, rateCh, depCh, payCh in {
+    @issuer!("getAmountOf", *payment, *amtCh) |
+    zoneNow!(*nowCh) |
+    zoneRate!(*rateCh) |
+    for (@a <- amtCh; @now <- nowCh; @(rate, fresh) <- rateCh) {
+      match a {
+        (true, amount) => {
+          for (@s <- zoneState) {
+            match s.get("vaults") {
+              Nil => { zoneState!(s) | ret!((false, "no vaults")) }
+              vaults => {
+                match vaults.get(ownerId) {
+                  Nil => { zoneState!(s) | ret!((false, "no vault")) }
+                  v => {
+                    match s.get("params") {
+                      params => {
+                        new accCh in {
+                          zoneAccrue!(v.get("debt"), v.get("lastHeight"), now, params.get("ratePerBlock"), *accCh) |
+                          for (@accrued <- accCh) {
+                            new hCh in {
+                              zoneHealth!(v.get("collateral"), accrued, rate, params.get("mcrBps"), *hCh) |
+                              for (@healthy <- hCh) {
+                                if (healthy) { zoneState!(s) | ret!((false, "healthy")) }
+                                else {
+                                  if (amount * 10000 > accrued * params.get("closeFactorBps")) { zoneState!(s) | ret!((false, "close")) }
+                                  else {
+                                    new payoutCh in {
+                                      zonePayout!(amount, rate, params.get("bonusBps"), v.get("collateral"), *payoutCh) |
+                                      for (@pr <- payoutCh) {
+                                        match pr {
+                                          (true, seized) => {
+                                            @burnFacet!("deposit", *payment, *depCh) |
+                                            for (@depRes <- depCh) {
+                                              match depRes {
+                                                (true, bal) => {
+                                                  @revPurse!("withdraw", (revBrand, seized), *payCh) |
+                                                  for (@pp <- payCh) {
+                                                    match pp {
+                                                      (true, revPayment) => {
+                                                        new badCh in {
+                                                          zoneBadInc!(v.get("collateral") - seized, accrued - amount, *badCh) |
+                                                          for (@badInc <- badCh) {
+                                                            new newStateCh in {
+                                                              zoneUpdate!(s, ownerId, {
+                                                                "auth": v.get("auth"),
+                                                                "collateral": v.get("collateral") - seized,
+                                                                "debt": accrued - amount,
+                                                                "lastHeight": now
+                                                              }, s.get("totalDebt") - amount, s.get("totalCollateral") - seized,
+                                                              s.get("badDebt") + badInc, *newStateCh) |
+                                                              for (@ns <- newStateCh) { zoneState!(ns) | ret!((true, revPayment)) }
+                                                            }
+                                                          }
+                                                        }
+                                                      }
+                                                      _ => { zoneState!(s) | ret!((false, "rev")) }
+                                                    }
+                                                  }
+                                                }
+                                                _ => { zoneState!(s) | ret!((false, "burn")) }
+                                              }
+                                            }
+                                          }
+                                          _ => { zoneState!(s) | ret!((false, "payout")) }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        _ => ret!((false, "pay"))
+      }
+    }
+  }
+} |
+contract zone(@"vault", @ownerId, ret) = {
+  new nowCh, rateCh in {
+    zoneNow!(*nowCh) |
+    zoneRate!(*rateCh) |
+    for (@now <- nowCh; @(rate, fresh) <- rateCh) {
+      for (@s <<- zoneState) {
+        match s.get("vaults") {
+          Nil => ret!((false, "no vaults"))
+          vaults => {
+            match vaults.get(ownerId) {
+              Nil => ret!((false, "no vault"))
+              v => {
+                match s.get("params") {
+                  params => {
+                    new accCh, hCh in {
+                      zoneAccrue!(v.get("debt"), v.get("lastHeight"), now,
+                                  params.get("ratePerBlock"), *accCh) |
+                      for (@accrued <- accCh) {
+                        zoneHealth!(v.get("collateral"), accrued, rate, params.get("mcrBps"), *hCh) |
+                        for (@healthy <- hCh) {
+                          ret!((true, {
+                            "collateral": v.get("collateral"),
+                            "debt": accrued,
+                            "health": healthy,
+                            "liquidatable": healthy == false,
+                            "fresh": fresh,
+                            "rate": rate
+                          }))
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+} |
+
+contract zone(@"vaults", ret) = {
+  for (@s <<- zoneState) {
+    match s.get("vaults") {
+      Nil => ret!((true, {}))
+      vaults => ret!((true, vaults))
+    }
+  }
+} |
+
+contract zone(@"params", ret) = {
+  for (@s <<- zoneState) { ret!((true, s.get("params"))) }
+} |
+
+contract zone(@"supply", ret) = {
+  for (@s <<- zoneState) { ret!((true, s.get("totalDebt"))) }
+} |
+
+contract zone(@"brand", ret) = { ret!((true, brand)) } |
+
+contract zone(@"issuer", ret) = { ret!((true, issuer)) } |
+
+contract zone(@"currency", ret) = { ret!((true, currency)) } |
+
+contract zone(@"admin", @nonce, @action, @args, @sigs, ret) = {
+  for (@s <<- zoneState) {
+    match s.get("admins") {
+      Nil => ret!((false, "no admins"))
+      admins => {
+        match s.get("threshold") {
+          threshold => {
+            match s.get("govNonce") {
+              lastNonce => {
+                if (nonce <= lastNonce) { ret!((false, "replay")) }
+                else {
+                  new okCh in {
+                    verifyAdmin!("zone:" ++ currency, nonce, action, args, sigs, admins, threshold, *okCh) |
+                    for (@ok <- okCh) {
+                      if (ok) { zoneAdminApply!(action, args, nonce, *ret) }
+                      else { ret!((false, "signatures")) }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+} |
+// ---- end stable/CurrencyZone.inc ----
+              rs!(bundle+{*zone}, *uriCh) |
+              for (@uri <- uriCh) { ret!((uri, brand, issuer)) }
+            }
+          }
+        }
+      }
+    }
+  } |
+
+
+  // A trusted bootstrap helper: seed the Directory and lock it in one state transition.
+  contract directorySeed(@names, @assets, ret) = {
+    for (@s <- state) {
+      match s.set("names", names) {
+        s1 => {
+          match s1.set("assets", assets) {
+            s2 => {
+              match s2.set("locked", true) {
+                s3 => { state!(s3) | ret!((true, Nil)) }
+              }
+            }
+          }
+        }
+      }
+    }
+  } |
+
+  rs!(bundle+{*Directory}, *uriDirCh) |
+  rs!(bundle+{*AccountFactory}, *uriFactoryCh) |
+  rs!(bundle+{*OracleHub}, *uriOracleCh) |
+  rs!(bundle+{*Components}, *uriComponentsCh) |
+
+  for (@uriDir <- uriDirCh; @uriFactory <- uriFactoryCh; @uriOracle <- uriOracleCh;
+       @uriComponents <- uriComponentsCh) {
+    createCurrencyZone!("NGN", __ZONE_PARAMS__, __ADMIN_KEYS__, 2, *zNgnCh) |
+    createCurrencyZone!("KES", __ZONE_PARAMS__, __ADMIN_KEYS__, 2, *zKesCh) |
+    for (@(uriNgn, _, _) <- zNgnCh; @(uriKes, _, _) <- zKesCh) {
+      directorySeed!({
+        "component:accounts": uriFactory,
+        "component:oracle": uriOracle,
+        "component:zone:NGN": uriNgn,
+        "component:zone:KES": uriKes,
+        "component:pools": uriComponents
+      }, {
+        "REV": {"kind": "rev", "controllerKey": "system:ertp", "decimals": 8},
+        "NGN": {"kind": "stable", "controllerKey": "component:zone:NGN", "decimals": 8},
+        "KES": {"kind": "stable", "controllerKey": "component:zone:KES", "decimals": 8},
+        "LP:NGN/KES:fpmm": {"kind": "lp", "controllerKey": "pool:NGN/KES:fpmm", "decimals": 8}
+      }, *seedCh) |
+      for (@_ <- seedCh) {
+        @"rcash:directory"!(uriDir) |
+        deployId!((uriDir, uriFactory, uriOracle, uriNgn, uriKes, uriComponents))
+      }
+    }
+  }
+}

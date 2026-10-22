@@ -1,0 +1,15 @@
+// Submit a signed reporter price. Placeholders: __ORACLE_URI__, __CURRENCY__, __PRICE__,
+// __HEIGHT__, __INDEX__, __PUB__, __SIG__.
+new
+  rl(`rho:registry:lookup`),
+  ch,
+  ret,
+  deployId(`rho:rchain:deployId`)
+in {
+  rl!(`__ORACLE_URI__`, *ch) |
+  for (oracle <- ch) {
+    oracle!("submit", "__CURRENCY__", __PRICE__, __HEIGHT__, __INDEX__,
+            "__PUB__".hexToBytes(), "__SIG__".hexToBytes(), *ret) |
+    for (@r <- ret) { deployId!(r) }
+  }
+}
