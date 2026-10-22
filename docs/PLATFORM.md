@@ -61,3 +61,30 @@ actuals; the block's `deploys[].cost` is the authority. Record actuals when the 
 
 DAG finality via `GET /api/is-finalized/{hash}`; every state claim in the harness waits for it.
 Deploy status alone is not finality.
+
+## Client integration findings (R0-R3)
+
+These were found while building the Rust/WASM client and are enforced in code or documented
+for anyone building another client.
+
+1. **Shard id is `/root`.** A deploy with `shardId: "root"` is refused:
+   `Deploy shardId 'root' is not a member of this node's shards: [/root]`.
+2. **`validAfterBlockNumber` anchors a 50-block lifespan, not just a validity floor.** A
+   deploy anchored at `0` is accepted into the pool and never proposed because it is
+   already expired. The client reads `latestBlockNumber` from `/api/v1/status` and anchors
+   every deploy at the tip.
+3. **`explore-deploy` has no block context.** `rho:block:data` reports height `0` inside it.
+   Oracle freshness checks therefore fail there: `OracleHub.get` says `fresh:false`,
+   `getPair` returns `rate:0`, `pool.quote`/`quoteAdd` refuse, `zone.vault` computes health
+   with rate 0, and `book.quote` fails. Freshness-gated reads must be signed deploys.
+4. **`i64` crosses wasm-bindgen as `BigInt`.** Methods taking a block height or transfer id
+   take `bigint` on the JS side; the web app converts explicitly. Amounts stay decimal
+   strings and are parsed exactly in Rust.
+5. **`std::time::{Instant, SystemTime}` panic on wasm32-unknown-unknown.** The client uses
+   `web-time` for `Instant`/`SystemTime` and `gloo-timers` for sleeps.
+6. **The node crate wasm requirements** hold: `getrandom_backend="wasm_js"` in
+   `.cargo/config.toml`, and `rchain-shared` is linked with `default-features = false`.
+7. **HTTP surface used by the client:** `POST /api/v1/deploy`, `GET /api/v1/deploy-status/{sig}`,
+   `GET /api/is-finalized/{hash}`, `POST /api/v1/explore-deploy` (bare JSON string body),
+   `POST /api/v1/faucet`, `GET /api/v1/status`, `GET /api/v1/block/{hash}`. The public
+   listener has permissive CORS; the admin listener does not. There is no gRPC-Web.

@@ -55,8 +55,8 @@ See [`docs/CLIENT.md`](docs/CLIENT.md) and [`docs/FRONTEND.md`](docs/FRONTEND.md
 `rcash devnet demo` is the end-to-end client journey (oracle, vaults, liquidity, convert,
 send/claim/refund) against the running devnet.
 
-The Python harness below remains the legacy devnet scenarios until the CLI's `devnet demo`
-replaces it in R2.
+The Python harness below is legacy: `make demo` now runs the Rust client journey, and
+`make legacy-demo` still runs the Python scenarios for one release.
 
 ## Quickstart (legacy harness)
 
@@ -71,13 +71,14 @@ make probes               # phase-0 capability gates
 make bootstrap            # Directory, Accounts, Oracle, rNGN/rKES zones, Components
 make pool                 # pool setup + FxPool deploy
 make book                 # TransferBook deploy
-make demo                 # pool + transfer scenarios (seeds the CDP and liquidity)
+make legacy-demo          # the original Python pool + transfer scenarios
 make down                 # stop and drop the devnet
 ```
 
-`make demo` is the end-to-end story: fund an Account, open NGN/KES vaults, borrow local
-stablecoins, add liquidity, swap, remove liquidity, send a claimable transfer, claim it, and refund
-an expired one. It prints PASS/FAIL per assertion.
+`make demo` is the end-to-end Rust client story: refresh the oracle, fund an Account, open
+NGN/KES vaults, borrow local stablecoins, add and remove liquidity, convert, send a
+claimable transfer, claim it, refund an expired one, and read the balances back. It prints
+PASS/FAIL per step and exits non-zero on the first failure.
 
 ## Architecture
 

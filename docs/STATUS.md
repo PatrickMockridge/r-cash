@@ -78,7 +78,12 @@ borrow NGN and convert NGN→KES, all through the UI and the wasm module.
 Secrets never reach the DOM: the key stays in wasm, the keystore is encrypted into
 IndexedDB, and a claim secret lives only in the URL fragment.
 
-Next: R4 CI, remaining docs and legacy-harness retirement.
+**R4 (CI and docs) is in place.** GitHub Actions runs the Rust format/clippy/tests, wasm
+build and tests, the web typecheck/unit/build, and a contracts-drift check without Docker.
+The browser journey is a manual workflow because it needs a running devnet.
+
+Next: retire the Python harness, public testnet and an external audit before any real
+funds.
 
 ## Specification
 

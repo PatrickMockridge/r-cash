@@ -10,9 +10,17 @@ Read in this order:
 3. [`NETWORK.md`](NETWORK.md) — currencies, corridors and how a corridor is added.
 4. [`PLATFORM.md`](PLATFORM.md) — the pinned rchain-rust node, hard platform limits, measured costs,
    finality and the build constraints the contracts are shaped by.
-5. [`THREAT_MODEL.md`](THREAT_MODEL.md) — assets, adversaries, mitigations and residual risks.
-6. [`STATUS.md`](STATUS.md) — what is implemented, measured, and deferred.
-7. [`LEGAL.md`](LEGAL.md) — regulatory and compliance boundaries (not legal advice).
+5. [`CLIENT.md`](CLIENT.md) — the Rust SDK and CLI: signing, term encoding, node API, reads vs
+   writes, failure taxonomy and the parity gates.
+6. [`FRONTEND.md`](FRONTEND.md) — the React app, wallet and keystore, claim links, and why
+   freshness-gated reads are signed.
+7. [`THREAT_MODEL.md`](THREAT_MODEL.md) — assets, adversaries, mitigations and residual risks.
+8. [`STATUS.md`](STATUS.md) — what is implemented, measured, and deferred.
+9. [`LEGAL.md`](LEGAL.md) — regulatory and compliance boundaries (not legal advice).
+10. [`SPIKE-METAMASK.md`](SPIKE-METAMASK.md) — the MetaMask signing experiment: method and
+    go/no-go criteria; not run.
 
-The reference implementation is `contracts/src/` (Rholang), `contracts/deploy/` (install terms),
-`harness/` (devnet client and scenarios) and `spikes/` (phase-0 capability evidence).
+The protocol reference implementation is `contracts/src/` (Rholang) and `contracts/deploy/`
+(install terms). The client reference is `crates/` (Rust) and `web/` (React + WASM).
+`harness/` and `tools/` remain as the legacy Python devnet harness and build tooling;
+`spikes/` holds the phase-0 capability evidence.

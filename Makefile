@@ -3,7 +3,7 @@ PY := $(VENV)/bin/python
 RCHAIN_RUST_DIR ?= ../RNodeRust
 export RCHAIN_RUST_DIR
 
-.PHONY: venv image devnet down status keys build probes deploy logs clean bootstrap pool book demo
+.PHONY: venv image devnet down status keys build probes deploy logs clean bootstrap pool book demo legacy-demo client-test web-build
 
 venv:
 	python3 -m venv $(VENV)
@@ -49,6 +49,18 @@ pool: bootstrap
 book: pool
 	$(PY) harness/transfer_bootstrap.py
 
-demo: book
+# The acceptance journey is the Rust client against the installed components.
+# It assumes a running devnet with the components installed (`make install`).
+demo:
+	cargo run -p rcash-cli -- devnet demo
+
+# The Python scenarios remain as the legacy harness for one release.
+legacy-demo: book
 	$(PY) harness/scenarios/pool.py
 	$(PY) harness/scenarios/transfer.py
+
+client-test:
+	cargo test --workspace --exclude rcash-wasm
+
+web-build:
+	cd web && npm ci && npm run wasm:build && npm run typecheck && npm test && npm run build
