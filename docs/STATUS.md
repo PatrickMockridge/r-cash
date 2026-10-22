@@ -57,8 +57,18 @@ currency), transfer records (`info`, `nextId`, `quote`), native REV balances, an
 account's balances in one signed deploy. The fixed-point math module mirrors the SPEC
 formulas with the seeded-vault vectors pinned as tests.
 
-Next: R2 protocol writes and `rcash devnet demo`, R3 wasm wallet and the React UI, R4
-docs/CI and legacy-harness retirement.
+**R2 (protocol writes) is complete.** The CLI can fund an Account, open/operate NGN and
+KES vaults, add/remove liquidity, swap/convert, send/claim/refund transfers, and submit
+signed reporter prices. `rcash devnet demo` runs the acceptance journey and exits 0:
+oracle refresh, funding, both vaults, borrow, liquidity add/remove, convert, send+claim,
+send+refund, and balance readback (10 steps).
+
+A platform finding changed the read design: `explore-deploy` runs with no block context
+(`rho:block:data` returns height 0), so every freshness-gated read must be a signed deploy.
+The CLI does that; the SDK keeps public variants only for values that do not depend on
+freshness. Documented in `CLIENT.md`.
+
+Next: R3 wasm wallet and the React UI, R4 docs/CI and legacy-harness retirement.
 
 ## Specification
 

@@ -1,8 +1,8 @@
 //! `rcash` — the R-Cash command-line client.
 //!
-//! R1 surface: keys, node status, deploy/explore, status polling, the faucet, and typed
-//! reads for accounts, the FX pool, the oracle, currency zones and transfers. The write
-//! operations arrive in R2.
+//! R2 surface: keys, node status, deploy/explore, typed reads and writes for accounts,
+//! vaults, the FX pool, the oracle, currency zones and transfers, plus the acceptance
+//! journey (`devnet demo`).
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -11,6 +11,8 @@ use clap::{Parser, Subcommand};
 use rcash_chain::keystore::DevnetKeys;
 use rcash_chain::ChainError;
 use rcash_sdk::Client;
+
+mod demo;
 
 #[derive(Parser, Debug)]
 #[command(name = "rcash", version, about = "R-Cash devnet client", long_about = None)]
@@ -119,6 +121,28 @@ enum Command {
         #[arg(long)]
         address: String,
     },
+    /// Convert one local currency to another in one atomic deploy.
+    Convert {
+        #[arg(long)]
+        from: String,
+        #[arg(long)]
+        to: String,
+        #[arg(long)]
+        amount: String,
+        #[arg(long, default_value = "0")]
+        min_out: String,
+    },
+    /// Devnet journeys.
+    Devnet {
+        #[command(subcommand)]
+        cmd: DevnetCmd,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum DevnetCmd {
+    /// Run the R2 acceptance journey against the configured devnet.
+    Demo,
 }
 
 #[derive(Subcommand, Debug)]
@@ -128,6 +152,74 @@ enum AccountCmd {
         /// Comma-separated asset ids.
         #[arg(long, value_delimiter = ',')]
         assets: Vec<String>,
+    },
+    /// Fund the Account with REV from the native vault.
+    Deposit {
+        #[arg(long)]
+        amount: String,
+    },
+    /// Withdraw REV to a native REV address.
+    WithdrawRev {
+        #[arg(long)]
+        amount: String,
+        #[arg(long)]
+        to: String,
+    },
+    /// Vault operations.
+    Vault {
+        #[command(subcommand)]
+        cmd: VaultCmd,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum VaultCmd {
+    /// Open (or recover) a vault.
+    Open {
+        #[arg(long)]
+        currency: String,
+    },
+    /// Deposit REV collateral.
+    Deposit {
+        #[arg(long)]
+        currency: String,
+        #[arg(long)]
+        amount: String,
+    },
+    /// Withdraw REV collateral into the Account.
+    Withdraw {
+        #[arg(long)]
+        currency: String,
+        #[arg(long)]
+        amount: String,
+    },
+    /// Borrow local currency.
+    Borrow {
+        #[arg(long)]
+        currency: String,
+        #[arg(long)]
+        amount: String,
+    },
+    /// Repay local currency.
+    Repay {
+        #[arg(long)]
+        currency: String,
+        #[arg(long)]
+        amount: String,
+    },
+    /// The caller's vault state.
+    Info {
+        #[arg(long)]
+        currency: String,
+    },
+    /// Liquidate an unhealthy vault.
+    Liquidate {
+        #[arg(long)]
+        currency: String,
+        #[arg(long)]
+        victim: String,
+        #[arg(long)]
+        amount: String,
     },
 }
 
@@ -153,6 +245,35 @@ enum PoolCmd {
     Pair,
     /// The LP token's brand and issuer.
     LpAsset,
+    /// Add liquidity from the Account.
+    Add {
+        #[arg(long)]
+        base: String,
+        #[arg(long)]
+        quote: String,
+        #[arg(long, default_value = "0")]
+        min_shares: String,
+    },
+    /// Remove liquidity into the Account.
+    Remove {
+        #[arg(long)]
+        shares: String,
+        #[arg(long, default_value = "0")]
+        min_base: String,
+        #[arg(long, default_value = "0")]
+        min_quote: String,
+    },
+    /// Swap from the Account.
+    Swap {
+        #[arg(long)]
+        asset_in: String,
+        #[arg(long)]
+        asset_out: String,
+        #[arg(long)]
+        amount: String,
+        #[arg(long, default_value = "0")]
+        min_out: String,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -171,6 +292,19 @@ enum OracleCmd {
     },
     /// The reporter public keys.
     Reporters,
+    /// Sign and submit a reporter price with the selected key.
+    Submit {
+        #[arg(long)]
+        currency: String,
+        #[arg(long)]
+        price: String,
+        /// Block height the price was observed at. Defaults to the tip.
+        #[arg(long)]
+        height: Option<i64>,
+        /// Reporter index in the allowlist.
+        #[arg(long, default_value = "0")]
+        index: i64,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -224,6 +358,39 @@ enum TransferCmd {
         #[arg(long)]
         amount: String,
     },
+    /// Send a claimable transfer.
+    Send {
+        #[arg(long)]
+        source: String,
+        #[arg(long)]
+        dest: String,
+        #[arg(long)]
+        amount: String,
+        #[arg(long, default_value = "0")]
+        min_dest: String,
+        /// Claim secret hex. Generated when omitted.
+        #[arg(long)]
+        secret: Option<String>,
+        /// Blocks from the tip until the sender may refund.
+        #[arg(long, default_value = "720")]
+        expiry_blocks: i64,
+    },
+    /// Claim a transfer with its secret.
+    Claim {
+        #[arg(long)]
+        id: i64,
+        #[arg(long)]
+        dest: String,
+        #[arg(long)]
+        secret: String,
+    },
+    /// Refund an expired transfer.
+    Refund {
+        #[arg(long)]
+        id: i64,
+        #[arg(long)]
+        dest: String,
+    },
 }
 
 fn main() -> ExitCode {
@@ -248,6 +415,10 @@ fn main() -> ExitCode {
             eprintln!("rcash: {e}");
             ExitCode::from(3)
         }
+        Err(CliError::Demo(message)) => {
+            eprintln!("demo failed: {message}");
+            ExitCode::from(1)
+        }
     }
 }
 
@@ -255,6 +426,8 @@ fn main() -> ExitCode {
 enum CliError {
     #[error("{0}")]
     Usage(String),
+    #[error("{0}")]
+    Demo(String),
     #[error(transparent)]
     Chain(#[from] ChainError),
 }
@@ -487,12 +660,127 @@ async fn run(cli: Cli) -> Result<ExitCode> {
                 );
                 Ok(ExitCode::SUCCESS)
             }
+            AccountCmd::Deposit { amount } => {
+                let client = signing_client(&cli)?;
+                let balance = client.deposit_rev(parse_amount(amount)?).await?;
+                print_json_or(
+                    &cli.json,
+                    &serde_json::json!({
+                        "balance": balance.to_decimal(),
+                        "baseUnits": balance.value(),
+                    }),
+                );
+                Ok(ExitCode::SUCCESS)
+            }
+            AccountCmd::WithdrawRev { amount, to } => {
+                let client = signing_client(&cli)?;
+                client
+                    .withdraw_rev_to(parse_amount(amount)?, to)
+                    .await?
+                    .into_result()?;
+                print_json_or(
+                    &cli.json,
+                    &serde_json::json!({ "withdrawn": amount, "to": to }),
+                );
+                Ok(ExitCode::SUCCESS)
+            }
+            AccountCmd::Vault { cmd } => {
+                let client = signing_client(&cli)?;
+                match cmd {
+                    VaultCmd::Open { currency } => {
+                        client.vault_open(currency).await?;
+                        print_json_or(
+                            &cli.json,
+                            &serde_json::json!({ "vault": currency, "status": "open" }),
+                        );
+                    }
+                    VaultCmd::Deposit { currency, amount } => {
+                        let vault = client
+                            .vault_deposit_collateral(currency, parse_amount(amount)?)
+                            .await?;
+                        print_json_or(
+                            &cli.json,
+                            &serde_json::json!({
+                                "collateral": vault.collateral,
+                                "debt": vault.debt,
+                            }),
+                        );
+                    }
+                    VaultCmd::Withdraw { currency, amount } => {
+                        let withdrawn = client
+                            .vault_withdraw_collateral(currency, parse_amount(amount)?)
+                            .await?;
+                        print_json_or(
+                            &cli.json,
+                            &serde_json::json!({
+                                "withdrawn": withdrawn.to_decimal(),
+                                "baseUnits": withdrawn.value(),
+                            }),
+                        );
+                    }
+                    VaultCmd::Borrow { currency, amount } => {
+                        let health = client.vault_borrow(currency, parse_amount(amount)?).await?;
+                        print_json_or(
+                            &cli.json,
+                            &serde_json::json!({
+                                "debt": health.debt,
+                                "health": health.healthy,
+                            }),
+                        );
+                    }
+                    VaultCmd::Repay { currency, amount } => {
+                        let result = client.vault_repay(currency, parse_amount(amount)?).await?;
+                        print_json_or(
+                            &cli.json,
+                            &serde_json::json!({
+                                "debt": result.debt,
+                                "repaid": result.repaid,
+                            }),
+                        );
+                    }
+                    VaultCmd::Info { currency } => {
+                        let vault = client.vault_info(currency).await?;
+                        print_json_or(
+                            &cli.json,
+                            &serde_json::json!({
+                                "collateral": vault.collateral,
+                                "debt": vault.debt,
+                                "health": vault.healthy,
+                                "liquidatable": vault.liquidatable,
+                                "fresh": vault.fresh,
+                                "rate": vault.rate,
+                            }),
+                        );
+                    }
+                    VaultCmd::Liquidate {
+                        currency,
+                        victim,
+                        amount,
+                    } => {
+                        let seized = client
+                            .vault_liquidate(currency, victim, parse_amount(amount)?)
+                            .await?;
+                        print_json_or(
+                            &cli.json,
+                            &serde_json::json!({
+                                "repaid": amount,
+                                "seizedBaseUnits": seized.value(),
+                                "seized": seized.to_decimal(),
+                            }),
+                        );
+                    }
+                }
+                Ok(ExitCode::SUCCESS)
+            }
         },
         Command::Pool { ref cmd } => {
             let client = reader_client(&cli)?;
             match cmd {
                 PoolCmd::Quote { asset_in, amount } => {
-                    let quote = client.pool_quote(asset_in, parse_amount(amount)?).await?;
+                    let client = signing_client(&cli)?;
+                    let quote = client
+                        .pool_quote_signed(asset_in, parse_amount(amount)?)
+                        .await?;
                     print_json_or(
                         &cli.json,
                         &serde_json::json!({
@@ -504,7 +792,10 @@ async fn run(cli: Cli) -> Result<ExitCode> {
                     );
                 }
                 PoolCmd::QuoteAdd { base_amount } => {
-                    let quote = client.pool_quote_add(parse_amount(base_amount)?).await?;
+                    let client = signing_client(&cli)?;
+                    let quote = client
+                        .pool_quote_add_signed(parse_amount(base_amount)?)
+                        .await?;
                     print_json_or(
                         &cli.json,
                         &serde_json::json!({
@@ -514,7 +805,8 @@ async fn run(cli: Cli) -> Result<ExitCode> {
                     );
                 }
                 PoolCmd::Reserves => {
-                    let reserves = client.pool_reserves().await?;
+                    let client = signing_client(&cli)?;
+                    let reserves = client.pool_reserves_signed().await?;
                     print_json_or(
                         &cli.json,
                         &serde_json::json!({
@@ -551,6 +843,59 @@ async fn run(cli: Cli) -> Result<ExitCode> {
                         &serde_json::Value::Array(values.iter().map(|v| v.to_json()).collect()),
                     );
                 }
+                PoolCmd::Add {
+                    base,
+                    quote,
+                    min_shares,
+                } => {
+                    let client = signing_client(&cli)?;
+                    let shares = client
+                        .add_liquidity(
+                            parse_amount(base)?,
+                            parse_amount(quote)?,
+                            parse_amount(min_shares)?,
+                        )
+                        .await?;
+                    print_json_or(&cli.json, &serde_json::json!({ "shares": shares }));
+                }
+                PoolCmd::Remove {
+                    shares,
+                    min_base,
+                    min_quote,
+                } => {
+                    let client = signing_client(&cli)?;
+                    let burned = client
+                        .remove_liquidity(
+                            parse_amount(shares)?,
+                            parse_amount(min_base)?,
+                            parse_amount(min_quote)?,
+                        )
+                        .await?;
+                    print_json_or(&cli.json, &serde_json::json!({ "shares": burned }));
+                }
+                PoolCmd::Swap {
+                    asset_in,
+                    asset_out,
+                    amount,
+                    min_out,
+                } => {
+                    let client = signing_client(&cli)?;
+                    let result = client
+                        .swap(
+                            asset_in,
+                            asset_out,
+                            parse_amount(amount)?,
+                            parse_amount(min_out)?,
+                        )
+                        .await?;
+                    print_json_or(
+                        &cli.json,
+                        &serde_json::json!({
+                            "amountOut": result.amount_out,
+                            "fee": result.fee,
+                        }),
+                    );
+                }
             }
             Ok(ExitCode::SUCCESS)
         }
@@ -558,7 +903,8 @@ async fn run(cli: Cli) -> Result<ExitCode> {
             let client = reader_client(&cli)?;
             match cmd {
                 OracleCmd::Get { currency } => {
-                    let feed = client.oracle_price(currency).await?;
+                    let client = signing_client(&cli)?;
+                    let feed = client.oracle_price_signed(currency).await?;
                     print_json_or(
                         &cli.json,
                         &serde_json::json!({
@@ -570,7 +916,8 @@ async fn run(cli: Cli) -> Result<ExitCode> {
                     );
                 }
                 OracleCmd::Pair { base, quote } => {
-                    let rate = client.oracle_pair(base, quote).await?;
+                    let client = signing_client(&cli)?;
+                    let rate = client.oracle_pair_signed(base, quote).await?;
                     print_json_or(
                         &cli.json,
                         &serde_json::json!({
@@ -584,6 +931,38 @@ async fn run(cli: Cli) -> Result<ExitCode> {
                     let reporters = client.oracle_reporters().await?;
                     print_json_or(&cli.json, &serde_json::json!(reporters));
                 }
+                OracleCmd::Submit {
+                    currency,
+                    price,
+                    height,
+                    index,
+                } => {
+                    let client = signing_client(&cli)?;
+                    let height = match *height {
+                        Some(height) => height,
+                        None => client.node().latest_block_number().await?,
+                    };
+                    let price = parse_amount(price)?;
+                    let (public, signature) = rcash_chain::claim::sign_oracle(
+                        client.key().expect("signing client"),
+                        currency,
+                        price,
+                        height,
+                    )?;
+                    client
+                        .oracle_submit(currency, price, height, *index, &public, &signature)
+                        .await?
+                        .into_result()?;
+                    print_json_or(
+                        &cli.json,
+                        &serde_json::json!({
+                            "currency": currency,
+                            "price": price,
+                            "height": height,
+                            "index": index,
+                        }),
+                    );
+                }
             }
             Ok(ExitCode::SUCCESS)
         }
@@ -591,7 +970,8 @@ async fn run(cli: Cli) -> Result<ExitCode> {
             let client = reader_client(&cli)?;
             match cmd {
                 ZoneCmd::Vault { currency, owner } => {
-                    let vault = client.zone_vault(currency, owner).await?;
+                    let client = signing_client(&cli)?;
+                    let vault = client.zone_vault_signed(currency, owner).await?;
                     print_json_or(
                         &cli.json,
                         &serde_json::json!({
@@ -662,8 +1042,9 @@ async fn run(cli: Cli) -> Result<ExitCode> {
                     dest,
                     amount,
                 } => {
+                    let client = signing_client(&cli)?;
                     let quote = client
-                        .transfer_quote(source, dest, parse_amount(amount)?)
+                        .transfer_quote_signed(source, dest, parse_amount(amount)?)
                         .await?;
                     print_json_or(
                         &cli.json,
@@ -675,7 +1056,89 @@ async fn run(cli: Cli) -> Result<ExitCode> {
                         }),
                     );
                 }
+                TransferCmd::Send {
+                    source,
+                    dest,
+                    amount,
+                    min_dest,
+                    secret,
+                    expiry_blocks,
+                } => {
+                    let client = signing_client(&cli)?;
+                    let secret_hex = match secret {
+                        Some(secret) => secret.clone(),
+                        None => rcash_chain::claim::generate_secret_hex()?,
+                    };
+                    let claim_hash = rcash_chain::claim::claim_hash(&secret_hex)?;
+                    let tip = client.node().latest_block_number().await?;
+                    let expiry = tip + expiry_blocks;
+                    let transfer_id = client
+                        .send_transfer(
+                            source,
+                            dest,
+                            parse_amount(amount)?,
+                            parse_amount(min_dest)?,
+                            &claim_hash,
+                            expiry,
+                        )
+                        .await?;
+                    print_json_or(
+                        &cli.json,
+                        &serde_json::json!({
+                            "transferId": transfer_id,
+                            "claimSecret": secret_hex,
+                            "claimHash": claim_hash,
+                            "expiryHeight": expiry,
+                            "claimFragment": format!("#/claim/{transfer_id}/{secret_hex}"),
+                        }),
+                    );
+                }
+                TransferCmd::Claim { id, dest, secret } => {
+                    let client = signing_client(&cli)?;
+                    let amount = client.claim_transfer(*id, dest, secret).await?;
+                    print_json_or(
+                        &cli.json,
+                        &serde_json::json!({
+                            "transferId": id,
+                            "claimed": amount.to_decimal(),
+                            "baseUnits": amount.value(),
+                        }),
+                    );
+                }
+                TransferCmd::Refund { id, dest } => {
+                    let client = signing_client(&cli)?;
+                    let amount = client.refund_transfer(*id, dest).await?;
+                    print_json_or(
+                        &cli.json,
+                        &serde_json::json!({
+                            "transferId": id,
+                            "refunded": amount.to_decimal(),
+                            "baseUnits": amount.value(),
+                        }),
+                    );
+                }
             }
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::Convert {
+            ref from,
+            ref to,
+            ref amount,
+            ref min_out,
+        } => {
+            let client = signing_client(&cli)?;
+            let result = client
+                .convert(from, to, parse_amount(amount)?, parse_amount(min_out)?)
+                .await?;
+            print_json_or(
+                &cli.json,
+                &serde_json::json!({
+                    "from": from,
+                    "to": to,
+                    "amountOut": result.amount_out,
+                    "fee": result.fee,
+                }),
+            );
             Ok(ExitCode::SUCCESS)
         }
         Command::Balance { ref address } => {
@@ -690,6 +1153,14 @@ async fn run(cli: Cli) -> Result<ExitCode> {
             );
             Ok(ExitCode::SUCCESS)
         }
+        Command::Devnet { ref cmd } => match cmd {
+            DevnetCmd::Demo => {
+                demo::run(&cli.node, &cli.keys, &cli.manifest, cli.json)
+                    .await
+                    .map_err(CliError::Demo)?;
+                Ok(ExitCode::SUCCESS)
+            }
+        },
         Command::Doctor { manifest } => {
             let node = rcash_chain::node::NodeClient::new(cli.node.clone())?;
             let status = node.status().await?;

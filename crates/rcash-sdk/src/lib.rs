@@ -13,9 +13,11 @@ use rcash_core::CoreError;
 
 mod reads;
 mod terms;
+mod writes;
 
 pub use rcash_chain::rho_expr::{Reply as ProtocolReply, RhoValue as ProtocolValue};
 pub use reads::{Balances, FxRate, PriceFeed, Quote, QuoteAdd, Reserves, TransferInfo, VaultView};
+pub use writes::{RepayResult, SwapResult, TxResult, VaultAmounts, VaultHealth};
 
 pub use rcash_chain;
 

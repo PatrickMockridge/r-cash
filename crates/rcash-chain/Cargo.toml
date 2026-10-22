@@ -21,6 +21,7 @@ serde_json.workspace = true
 thiserror.workspace = true
 bs58.workspace = true
 zeroize.workspace = true
+getrandom.workspace = true
 rchain-crypto.workspace = true
 rchain-models.workspace = true
 rchain-shared.workspace = true

@@ -6,6 +6,7 @@
 //! hash. R0a's parity tests pin the result.
 
 pub mod address;
+pub mod claim;
 pub mod deploy;
 pub mod error;
 pub mod keystore;

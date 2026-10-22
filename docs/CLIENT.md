@@ -42,13 +42,19 @@ The SDK calls the node's own code rather than reimplementing it:
 - `rchain_crypto` also exposes `secp256k1:eth` (raw 64-byte `R||S` over an EIP-191
   keccak hash). That is the only plausible MetaMask route; see `SPIKE-METAMASK.md`.
 
-### Two operational facts that bite
+### Three operational facts that bite
 
 - **Shard id is `/root`** on the devnet. `root` is rejected with
   `Deploy shardId 'root' is not a member of this node's shards: [/root]`.
 - **`validAfterBlockNumber` anchors the 50-block lifespan.** A deploy anchored at `0` is
   pooled and never proposed because it is already expired. The CLI reads
   `latestBlockNumber` from `/api/v1/status` and anchors the deploy at the tip.
+- **`explore-deploy` has no block context.** Inside it, `rho:block:data` reports height
+  `0`. Every arm that checks oracle freshness therefore answers "stale" — `OracleHub.get`
+  returns `fresh:false`, `getPair` returns `rate:0`, `pool.quote` refuses, `zone.vault`
+  computes health with rate 0, and `book.quote` fails. Those reads **must run as signed
+  deploys**. The CLI does this; the SDK keeps a public variant only for values that do not
+  depend on freshness (price, height, reserves, transfer records, params, reporters).
 
 ## Rholang term encoding
 
@@ -111,6 +117,34 @@ cargo run -p rcash-cli -- account balances --assets REV,NGN,KES --key deployer
 Public reads call `explore-deploy` and are free. `account balances` needs `deployerId`,
 so it is one signed deploy that joins every requested `balance` call; the CLI reports
 both the exact decimal and the base-unit count.
+
+### Writes (R2)
+
+All writes are one signed deploy that waits for processing and finality.
+
+```sh
+cargo run -p rcash-cli -- account deposit --amount 2 --key deployer
+cargo run -p rcash-cli -- account vault open --currency NGN --key deployer
+cargo run -p rcash-cli -- account vault deposit --currency NGN --amount 1 --key deployer
+cargo run -p rcash-cli -- account vault borrow --currency NGN --amount 1 --key deployer
+cargo run -p rcash-cli -- account vault repay --currency NGN --amount 1 --key deployer
+cargo run -p rcash-cli -- convert --from NGN --to KES --amount 1 --key deployer
+cargo run -p rcash-cli -- pool add --base 1 --quote 0.09 --key deployer
+cargo run -p rcash-cli -- pool swap --asset-in KES --asset-out NGN --amount 1 --key deployer
+cargo run -p rcash-cli -- transfer send --source NGN --dest KES --amount 1 --expiry-blocks 60 --key deployer
+cargo run -p rcash-cli -- transfer claim --id 4 --dest KES --secret <hex> --key recipient
+cargo run -p rcash-cli -- transfer refund --id 5 --dest KES --key deployer
+cargo run -p rcash-cli -- oracle submit --currency NGN --price 0.00066666 --index 0 --key reporter1
+cargo run -p rcash-cli -- devnet demo
+```
+
+`transfer send` prints the claim secret and a `#/claim/<id>/<secret>` fragment. That
+secret is bearer authority; it is printed once and never persisted.
+
+`devnet demo` is the R2 acceptance journey: refresh the oracle, fund an Account, open and
+collateralise NGN and KES vaults, borrow, add and remove liquidity, convert, send and claim
+a transfer, refund an expired one, and read the balances back. It exits non-zero on the
+first failed step.
 
 `keygen` writes the plaintext devnet key format the harness already uses. It is local
 tooling only; the browser wallet uses the encrypted keystore added in R3a.
