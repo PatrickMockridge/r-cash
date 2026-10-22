@@ -10,6 +10,7 @@ pub mod deploy;
 pub mod error;
 pub mod keystore;
 pub mod poll;
+pub mod rho_expr;
 pub mod sign;
 
 #[cfg(feature = "native")]

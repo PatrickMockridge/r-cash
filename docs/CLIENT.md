@@ -96,7 +96,21 @@ cargo run -p rcash-cli -- deploy --term 'Nil' --key deployer
 cargo run -p rcash-cli -- explore --term '...'
 cargo run -p rcash-cli -- deploy-status <id>
 cargo run -p rcash-cli -- parity-fixture /tmp/rcash-parity.json
+
+# Typed reads (R1). Public reads need no key; balances are one signed deploy.
+cargo run -p rcash-cli -- oracle get --currency NGN
+cargo run -p rcash-cli -- oracle pair --base NGN --quote KES
+cargo run -p rcash-cli -- pool reserves
+cargo run -p rcash-cli -- pool quote --asset-in NGN --amount 1
+cargo run -p rcash-cli -- zone vault --currency NGN --owner <rev-address>
+cargo run -p rcash-cli -- transfer info --id 0
+cargo run -p rcash-cli -- balance --address <rev-address>
+cargo run -p rcash-cli -- account balances --assets REV,NGN,KES --key deployer
 ```
+
+Public reads call `explore-deploy` and are free. `account balances` needs `deployerId`,
+so it is one signed deploy that joins every requested `balance` call; the CLI reports
+both the exact decimal and the base-unit count.
 
 `keygen` writes the plaintext devnet key format the harness already uses. It is local
 tooling only; the browser wallet uses the encrypted keystore added in R3a.

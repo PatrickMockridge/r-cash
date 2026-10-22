@@ -1,8 +1,8 @@
 //! `rcash` — the R-Cash command-line client.
 //!
-//! R0a surface: keys, node status, deploy, explore, status polling and the faucet. The
-//! protocol operation groups (account, vault, pool, transfer, oracle, admin) are added in
-//! R1/R2.
+//! R1 surface: keys, node status, deploy/explore, status polling, the faucet, and typed
+//! reads for accounts, the FX pool, the oracle, currency zones and transfers. The write
+//! operations arrive in R2.
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -29,6 +29,9 @@ struct Cli {
     /// Named key to sign with. Defaults to the first key in the file.
     #[arg(long, global = true)]
     key: Option<String>,
+    /// Deployment manifest (public component URIs; no keys).
+    #[arg(long, global = true, default_value = "deployments/devnet.json")]
+    manifest: PathBuf,
     /// Machine-readable output.
     #[arg(long, global = true)]
     json: bool,
@@ -86,6 +89,141 @@ enum Command {
     },
     /// Write a deterministic signing fixture for the TypeScript parity test.
     ParityFixture { out: PathBuf },
+    /// Account reads.
+    Account {
+        #[command(subcommand)]
+        cmd: AccountCmd,
+    },
+    /// FX pool reads.
+    Pool {
+        #[command(subcommand)]
+        cmd: PoolCmd,
+    },
+    /// Oracle reads.
+    Oracle {
+        #[command(subcommand)]
+        cmd: OracleCmd,
+    },
+    /// Currency-zone reads.
+    Zone {
+        #[command(subcommand)]
+        cmd: ZoneCmd,
+    },
+    /// Transfer-book reads.
+    Transfer {
+        #[command(subcommand)]
+        cmd: TransferCmd,
+    },
+    /// Native REV balance of an address.
+    Balance {
+        #[arg(long)]
+        address: String,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum AccountCmd {
+    /// Read several balances in one signed deploy.
+    Balances {
+        /// Comma-separated asset ids.
+        #[arg(long, value_delimiter = ',')]
+        assets: Vec<String>,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum PoolCmd {
+    /// Quote a swap.
+    Quote {
+        #[arg(long)]
+        asset_in: String,
+        #[arg(long)]
+        amount: String,
+    },
+    /// Quote the quote-side amount matching a base deposit.
+    QuoteAdd {
+        #[arg(long)]
+        base_amount: String,
+    },
+    /// Reserves, total shares, rate and freshness.
+    Reserves,
+    /// Pool parameters.
+    Params,
+    /// The pool's pair.
+    Pair,
+    /// The LP token's brand and issuer.
+    LpAsset,
+}
+
+#[derive(Subcommand, Debug)]
+enum OracleCmd {
+    /// One currency's feed.
+    Get {
+        #[arg(long)]
+        currency: String,
+    },
+    /// A cross rate from two feeds.
+    Pair {
+        #[arg(long)]
+        base: String,
+        #[arg(long)]
+        quote: String,
+    },
+    /// The reporter public keys.
+    Reporters,
+}
+
+#[derive(Subcommand, Debug)]
+enum ZoneCmd {
+    /// One owner's vault.
+    Vault {
+        #[arg(long)]
+        currency: String,
+        #[arg(long)]
+        owner: String,
+    },
+    /// All vaults in a currency zone.
+    Vaults {
+        #[arg(long)]
+        currency: String,
+    },
+    /// Zone parameters.
+    Params {
+        #[arg(long)]
+        currency: String,
+    },
+    /// Outstanding debt.
+    Supply {
+        #[arg(long)]
+        currency: String,
+    },
+    /// `brand`, `issuer` or `currency`.
+    Field {
+        #[arg(long)]
+        currency: String,
+        #[arg(long)]
+        field: String,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum TransferCmd {
+    /// A transfer's public record.
+    Info {
+        #[arg(long)]
+        id: i64,
+    },
+    /// The next transfer id.
+    NextId,
+    /// Quote a transfer.
+    Quote {
+        #[arg(long)]
+        source: String,
+        #[arg(long)]
+        dest: String,
+        #[arg(long)]
+        amount: String,
+    },
 }
 
 fn main() -> ExitCode {
@@ -319,6 +457,239 @@ async fn run(cli: Cli) -> Result<ExitCode> {
             println!("{}", out.display());
             Ok(ExitCode::SUCCESS)
         }
+        Command::Account { ref cmd } => match cmd {
+            AccountCmd::Balances { assets } => {
+                if assets.is_empty() {
+                    return Err(CliError::Usage("--assets is required".into()));
+                }
+                let refs: Vec<&str> = assets.iter().map(String::as_str).collect();
+                let client = signing_client(&cli)?;
+                let balances = client.balances(&refs).await?;
+                let amounts: serde_json::Map<String, serde_json::Value> = balances
+                    .amounts
+                    .iter()
+                    .map(|(asset, amount)| {
+                        (
+                            asset.clone(),
+                            serde_json::json!({
+                                "decimal": amount.to_decimal(),
+                                "baseUnits": amount.value(),
+                            }),
+                        )
+                    })
+                    .collect();
+                print_json_or(
+                    &cli.json,
+                    &serde_json::json!({
+                        "ownerId": balances.owner_id,
+                        "amounts": amounts,
+                    }),
+                );
+                Ok(ExitCode::SUCCESS)
+            }
+        },
+        Command::Pool { ref cmd } => {
+            let client = reader_client(&cli)?;
+            match cmd {
+                PoolCmd::Quote { asset_in, amount } => {
+                    let quote = client.pool_quote(asset_in, parse_amount(amount)?).await?;
+                    print_json_or(
+                        &cli.json,
+                        &serde_json::json!({
+                            "amountOut": quote.amount_out,
+                            "fee": quote.fee,
+                            "rate": quote.rate,
+                            "maxIn": quote.max_in,
+                        }),
+                    );
+                }
+                PoolCmd::QuoteAdd { base_amount } => {
+                    let quote = client.pool_quote_add(parse_amount(base_amount)?).await?;
+                    print_json_or(
+                        &cli.json,
+                        &serde_json::json!({
+                            "base": quote.base,
+                            "quote": quote.quote,
+                        }),
+                    );
+                }
+                PoolCmd::Reserves => {
+                    let reserves = client.pool_reserves().await?;
+                    print_json_or(
+                        &cli.json,
+                        &serde_json::json!({
+                            "reserveBase": reserves.base,
+                            "reserveQuote": reserves.quote,
+                            "totalShares": reserves.total_shares,
+                            "rate": reserves.rate,
+                            "fresh": reserves.fresh,
+                            "paused": reserves.paused,
+                        }),
+                    );
+                }
+                PoolCmd::Params => {
+                    let params = client.pool_params().await?;
+                    let value = serde_json::Value::Object(
+                        params
+                            .iter()
+                            .map(|(key, value)| (key.clone(), value.to_json()))
+                            .collect(),
+                    );
+                    print_json_or(&cli.json, &value);
+                }
+                PoolCmd::Pair => {
+                    let (base, quote) = client.pool_pair().await?;
+                    print_json_or(
+                        &cli.json,
+                        &serde_json::json!({ "base": base, "quote": quote }),
+                    );
+                }
+                PoolCmd::LpAsset => {
+                    let values = client.pool_lp_asset().await?;
+                    print_json_or(
+                        &cli.json,
+                        &serde_json::Value::Array(values.iter().map(|v| v.to_json()).collect()),
+                    );
+                }
+            }
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::Oracle { ref cmd } => {
+            let client = reader_client(&cli)?;
+            match cmd {
+                OracleCmd::Get { currency } => {
+                    let feed = client.oracle_price(currency).await?;
+                    print_json_or(
+                        &cli.json,
+                        &serde_json::json!({
+                            "price": feed.price,
+                            "height": feed.height,
+                            "fresh": feed.fresh,
+                            "reason": feed.reason,
+                        }),
+                    );
+                }
+                OracleCmd::Pair { base, quote } => {
+                    let rate = client.oracle_pair(base, quote).await?;
+                    print_json_or(
+                        &cli.json,
+                        &serde_json::json!({
+                            "rate": rate.rate,
+                            "fresh": rate.fresh,
+                            "reason": rate.reason,
+                        }),
+                    );
+                }
+                OracleCmd::Reporters => {
+                    let reporters = client.oracle_reporters().await?;
+                    print_json_or(&cli.json, &serde_json::json!(reporters));
+                }
+            }
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::Zone { ref cmd } => {
+            let client = reader_client(&cli)?;
+            match cmd {
+                ZoneCmd::Vault { currency, owner } => {
+                    let vault = client.zone_vault(currency, owner).await?;
+                    print_json_or(
+                        &cli.json,
+                        &serde_json::json!({
+                            "collateral": vault.collateral,
+                            "debt": vault.debt,
+                            "health": vault.healthy,
+                            "liquidatable": vault.liquidatable,
+                            "fresh": vault.fresh,
+                            "rate": vault.rate,
+                        }),
+                    );
+                }
+                ZoneCmd::Vaults { currency } => {
+                    let vaults = client.zone_vaults(currency).await?;
+                    let value = serde_json::Value::Object(
+                        vaults
+                            .iter()
+                            .map(|(owner, vault)| (owner.clone(), vault.to_json()))
+                            .collect(),
+                    );
+                    print_json_or(&cli.json, &value);
+                }
+                ZoneCmd::Params { currency } => {
+                    let params = client.zone_params(currency).await?;
+                    let value = serde_json::Value::Object(
+                        params
+                            .iter()
+                            .map(|(key, value)| (key.clone(), value.to_json()))
+                            .collect(),
+                    );
+                    print_json_or(&cli.json, &value);
+                }
+                ZoneCmd::Supply { currency } => {
+                    let supply = client.zone_supply(currency).await?;
+                    print_json_or(&cli.json, &serde_json::json!({ "totalDebt": supply }));
+                }
+                ZoneCmd::Field { currency, field } => {
+                    let value = client.zone_field(currency, field).await?;
+                    print_json_or(&cli.json, &value.to_json());
+                }
+            }
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::Transfer { ref cmd } => {
+            let client = reader_client(&cli)?;
+            match cmd {
+                TransferCmd::Info { id } => {
+                    let info = client.transfer_info(*id).await?;
+                    print_json_or(
+                        &cli.json,
+                        &serde_json::json!({
+                            "sender": info.sender,
+                            "source": info.source,
+                            "dest": info.dest,
+                            "amount": info.amount,
+                            "claimHash": info.claim_hash_hex,
+                            "expiry": info.expiry,
+                            "status": info.status,
+                        }),
+                    );
+                }
+                TransferCmd::NextId => {
+                    let next = client.transfer_next_id().await?;
+                    print_json_or(&cli.json, &serde_json::json!({ "nextId": next }));
+                }
+                TransferCmd::Quote {
+                    source,
+                    dest,
+                    amount,
+                } => {
+                    let quote = client
+                        .transfer_quote(source, dest, parse_amount(amount)?)
+                        .await?;
+                    print_json_or(
+                        &cli.json,
+                        &serde_json::json!({
+                            "amountOut": quote.amount_out,
+                            "fee": quote.fee,
+                            "rate": quote.rate,
+                            "maxIn": quote.max_in,
+                        }),
+                    );
+                }
+            }
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::Balance { ref address } => {
+            let client = reader_client(&cli)?;
+            let balance = client.native_rev_balance(address).await?;
+            print_json_or(
+                &cli.json,
+                &serde_json::json!({
+                    "baseUnits": balance,
+                    "rev": rcash_core::Amount::raw(balance).to_decimal(),
+                }),
+            );
+            Ok(ExitCode::SUCCESS)
+        }
         Command::Doctor { manifest } => {
             let node = rcash_chain::node::NodeClient::new(cli.node.clone())?;
             let status = node.status().await?;
@@ -349,6 +720,27 @@ fn load_key_from(path: &std::path::Path, name: Option<&str>) -> Result<rcash_cha
         Some(name) => Ok(keys.key(name)?),
         None => Ok(keys.first_key()?),
     }
+}
+
+fn parse_amount(value: &str) -> Result<i64> {
+    Ok(rcash_core::Amount::parse(value)
+        .map_err(|e| CliError::Usage(e.to_string()))?
+        .value())
+}
+
+fn load_manifest(path: &std::path::Path) -> Result<rcash_core::manifest::Manifest> {
+    let text = std::fs::read_to_string(path)
+        .map_err(|e| CliError::Usage(format!("{}: {e}", path.display())))?;
+    rcash_core::manifest::Manifest::from_json(&text).map_err(|e| CliError::Usage(e.to_string()))
+}
+
+fn reader_client(cli: &Cli) -> Result<Client> {
+    Ok(Client::reader(cli.node.clone())?.with_manifest(load_manifest(&cli.manifest)?))
+}
+
+fn signing_client(cli: &Cli) -> Result<Client> {
+    let key = load_key_from(&cli.keys, cli.key.as_deref())?;
+    Ok(Client::new(cli.node.clone(), key)?.with_manifest(load_manifest(&cli.manifest)?))
 }
 
 fn read_term(file: Option<PathBuf>, term: Option<String>) -> Result<String> {

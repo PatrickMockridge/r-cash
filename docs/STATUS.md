@@ -50,8 +50,15 @@ license.
 - MetaMask is **read-only** in the supported path; the `secp256k1:eth` signing spike is
   specified but not run (`SPIKE-METAMASK.md`).
 
-Next: R1 typed reads, R2 protocol writes and `rcash devnet demo`, R3 wasm wallet and the
-React UI, R4 docs/CI and legacy-harness retirement.
+**R1 (typed reads) is complete.** `rcash` reads live devnet state for the oracle
+(`get`, `getPair`, reporters), the FX pool (`quote`, `quoteAdd`, `reserves`, `params`,
+`pair`, LP asset), currency zones (`vault`, `vaults`, `params`, `supply`, brand/issuer/
+currency), transfer records (`info`, `nextId`, `quote`), native REV balances, and an
+account's balances in one signed deploy. The fixed-point math module mirrors the SPEC
+formulas with the seeded-vault vectors pinned as tests.
+
+Next: R2 protocol writes and `rcash devnet demo`, R3 wasm wallet and the React UI, R4
+docs/CI and legacy-harness retirement.
 
 ## Specification
 

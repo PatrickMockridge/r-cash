@@ -26,6 +26,8 @@ pub enum ChainError {
     Decode(String),
     #[error("the node rejected the deploy: {0}")]
     DeployRejected(String),
+    #[error("the protocol refused the request: {0}")]
+    Refused(String),
     #[error("the deploy executed and failed: {error}")]
     DeployFailed {
         error: String,
