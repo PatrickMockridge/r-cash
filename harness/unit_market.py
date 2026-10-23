@@ -1,0 +1,224 @@
+#!/usr/bin/env python3
+"""Exercise the v0.4 direct market: create, seed, activate, swap.
+
+Creates the REV/V4T market from sponsor-signed terms, seeds it from the
+provider's account (REV plus V4T minted against a vault), activates it, and
+swaps REV for V4T through the pool.
+
+Run after `make unit-stablecoin`: the market needs a listed V4T system and
+fresh REV/V4T feeds.
+
+Usage:
+    python3 harness/unit_market.py
+"""
+
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "tools"))
+sys.path.insert(0, str(ROOT / "harness"))
+
+import sign_payload  # noqa: E402
+from feed_refresh import feed_uri, set_price  # noqa: E402
+from minify_rho import minify  # noqa: E402
+from unit_feed import canonical  # noqa: E402
+from unit_v3 import call, check, one  # noqa: E402
+
+KEYS = ROOT / ".devnet" / "keys.json"
+STATE = ROOT / ".devnet" / "v3-install.json"
+SCENARIOS = ROOT / "harness" / "scenarios"
+MARKET_ID = "REV/V4T:v1"
+BASE = "REV"
+QUOTE = "V4T"
+SPREAD = 30
+SKEW = 10
+FUND_REV = 800_000_000
+COLLATERAL = 500_000_000
+MINT = 15_000_000_000
+BASE_AMT = 200_000_000
+QUOTE_AMT = 15_000_000_000
+FUND_SWAP = 20_000_000
+SWAP_AMT = 10_000_000
+
+
+def render_scenario(name: str, values: dict) -> str:
+    text = (SCENARIOS / name).read_text()
+    for key, value in values.items():
+        text = text.replace(key, value)
+    return minify(text)
+
+
+def rholang_value(value) -> str:
+    if isinstance(value, int):
+        return str(value)
+    return f'"{value}"'
+
+
+def main() -> int:
+    keys = json.loads(KEYS.read_text())
+    state = json.loads(STATE.read_text())
+    root = state["root_uri"]
+    registry = state["oracle_registry_uri"]
+    currency_registry = state["currency_registry_uri"]
+    factory = state["market_factory_uri"]
+    index = state["market_index_uri"]
+    sponsor = keys["sponsor"]
+
+    listed = one(call(currency_registry, "CurrencyRegistry",
+                      'CurrencyRegistry!("currency", "V4T", *r) | '
+                      "for (@x <- r) { deployId!(x) }"), keys["deployer"]["secret"])
+    if not listed[0]:
+        raise AssertionError("V4T is not listed; run make unit-stablecoin first")
+
+    rev_feed = feed_uri(keys, root, registry, "REV", [5_000_000] * 3)
+    v4t_feed = feed_uri(keys, root, registry, "V4T", [66_666] * 3)
+    set_price(keys, v4t_feed, "V4T", 66_666)
+    set_price(keys, rev_feed, "REV", 5_000_000)
+
+    def entry(feed: str, code: str) -> dict:
+        return one(call(registry, "OracleRegistry",
+                        f'OracleRegistry!("feedEntry", "{code}", *r) | '
+                        "for (@x <- r) { deployId!(x) }"),
+                   keys["deployer"]["secret"])[1]
+
+    rev_entry = entry(rev_feed, "REV")
+    v4t_entry = entry(v4t_feed, "V4T")
+
+    fields = [
+        ("marketId", MARKET_ID), ("slug", "rev-v4t"), ("base", BASE), ("quote", QUOTE),
+        ("version", "1"), ("sponsorPubKey", sponsor["public"]),
+        ("sponsorOwnerId", sponsor["address"]),
+        ("baseFeedPolicyHash", rev_entry.get("policyHash")),
+        ("quoteFeedPolicyHash", v4t_entry.get("policyHash")),
+        ("baseSpreadBps", SPREAD), ("skewSpreadBps", SKEW), ("maxTradeBps", 2000),
+        ("minLiquidity", 1_000_000), ("firstDepositToleranceBps", 1000),
+        ("depthFloorQuote", 100_000_000), ("minTicketQuote", 1_000_000),
+        ("seedBase", BASE_AMT), ("seedQuote", QUOTE_AMT),
+        ("seedInitialShares", 1_000_000_000),
+        ("lockBeneficiaryPubKey", sponsor["public"]),
+        ("lockMinBlocks", 10), ("lockUntilHeight", 0),
+        ("bookDefaultExpiryBlocks", 100), ("bookMaxExpiryBlocks", 1000),
+        ("maxPairAgeBlocks", 50),
+    ]
+    values = [str(v) for _, v in fields]
+    terms_hash = canonical("rcash:market-terms:v4", values)
+    terms_literal = "{" + ", ".join(
+        f'"{key}": {rholang_value(value)}' for key, value in fields) + "}"
+    values_literal = "[" + ", ".join(f'"{v}"' for v in values) + "]"
+    payload = f"rcash:market-create:v1|{MARKET_ID}|{terms_hash}|{sponsor['public']}"
+    sig = sign_payload.sign_payload(sponsor["secret"], payload.encode())["signature"]
+
+    create_term = (
+        "new rl(`rho:registry:lookup`), ch, r, deployId(`rho:rchain:deployId`) in {\n"
+        f"  rl!(`{factory}`, *ch) |\n"
+        "  for (MarketFactory <- ch) {\n"
+        f'    MarketFactory!("createMarket", {terms_literal}, {values_literal}, '
+        f'"{sponsor["public"]}", "{sig}".hexToBytes(), *r) |\n'
+        "    for (@x <- r) {\n"
+        "      match x {\n"
+        '        (true, mid, poolUri, hash) => deployId!([mid, poolUri, hash])\n'
+        "        _ => deployId!(x)\n"
+        "      }\n"
+        "    }\n"
+        "  }\n"
+        "}"
+    )
+    created = one(create_term, keys["deployer"]["secret"])
+    if created[0] is True:
+        check("market created", created[0], MARKET_ID)
+        pool_uri = created[1]
+        check("market terms hash", created[2], terms_hash)
+    else:
+        # A previous run on this chain already created and sealed the market.
+        directory = state["market_directory_uri"]
+        slot = one(call(directory, "MarketDirectory",
+                        f'MarketDirectory!("byId", "{MARKET_ID}", *r) | '
+                        "for (@x <- r) { deployId!(x) }"),
+                   keys["deployer"]["secret"])
+        if not slot[0]:
+            raise AssertionError(f"market create refused: {created}")
+        pool_uri = slot[1].get("poolUri")
+        print("market already created; reusing the sealed slot")
+    print(f"pool: {pool_uri}")
+
+    set_price(keys, v4t_feed, "V4T", 66_666)
+    set_price(keys, rev_feed, "REV", 5_000_000)
+
+    def reserves() -> dict:
+        return one(call(pool_uri, "FxPool",
+                        'FxPool!("reserves", *r) | for (@x <- r) { deployId!(x) }'),
+                   keys["deployer"]["secret"])[1]
+
+    rate = 5_000_000 * 100_000_000 // 66_666
+    before = reserves()
+    if before.get("seeded"):
+        print("pool already seeded; skipping the seed")
+        shares = None
+    else:
+        seed_term = render_scenario("market_seed.rho", {
+        "__ROOT_URI__": root,
+        "__REGISTRY_URI__": currency_registry,
+        "__POOL_URI__": pool_uri,
+        "__PUBKEY__": keys["deployer"]["public"],
+        "__FUND_REV__": str(FUND_REV),
+        "__COLLATERAL__": str(COLLATERAL),
+        "__MINT__": str(MINT),
+        "__BASE_AMT__": str(BASE_AMT),
+        "__QUOTE_AMT__": str(QUOTE_AMT),
+    })
+        seeded = one(seed_term, keys["deployer"]["secret"])
+        shares, seeded_reserves = seeded[1], seeded[2][1]
+        deposit_value = (BASE_AMT * rate) // 100_000_000 + QUOTE_AMT
+        check("initial shares", shares, deposit_value - 100_000_000)
+        check("base reserve", seeded_reserves.get("base"), BASE_AMT)
+        check("quote reserve", seeded_reserves.get("quote"), QUOTE_AMT)
+
+    activation = one(call(index, "MarketIndex",
+                          f'MarketIndex!("activate", "{MARKET_ID}", *r) | '
+                          "for (@x <- r) { deployId!(x) }"), keys["deployer"]["secret"])
+    if activation != (True, "active"):
+        check("market already active", activation, (False, "not draft"))
+    record = one(call(index, "MarketIndex",
+                      f'MarketIndex!("marketFor", "{BASE}", "{QUOTE}", *r) | '
+                      "for (@x <- r) { deployId!(x) }"), keys["deployer"]["secret"])[1]
+    check("marketFor status", record.get("status"), "active")
+    check("marketFor pool", record.get("termsHash"), terms_hash)
+
+    set_price(keys, v4t_feed, "V4T", 66_666)
+    set_price(keys, rev_feed, "REV", 5_000_000)
+    swap_term = render_scenario("market_swap.rho", {
+        "__ROOT_URI__": root,
+        "__POOL_URI__": pool_uri,
+        "__PUBKEY__": keys["key17"]["public"],
+        "__FUND__": str(FUND_SWAP),
+        "__AMOUNT__": str(SWAP_AMT),
+    })
+    pre = reserves()
+    base_value = (pre["base"] * rate) // 100_000_000
+    pool_value = base_value + pre["quote"]
+    weight = (base_value * 10000) // pool_value if pool_value > 0 else 5000
+    fee = SPREAD + (abs(weight - 5000) * SKEW) // 5000
+    gross = (SWAP_AMT * rate) // 100_000_000
+    expected_out = (gross * (10000 - fee)) // 10000
+
+    out, balance = one(swap_term, keys["key17"]["secret"])
+    check("swap output", out, expected_out)
+    check("swap credited", balance, (True, expected_out))
+
+    after = reserves()
+    check("base reserve after swap", after.get("base"), pre["base"] + SWAP_AMT)
+    check("quote reserve after swap", after.get("quote"), pre["quote"] - expected_out)
+
+    print(json.dumps({"market": MARKET_ID, "pool": pool_uri,
+                      "termsHash": terms_hash, "shares": shares,
+                      "swapOut": out, "reserves": after}, indent=2))
+    print("unit_market: all checks passed")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

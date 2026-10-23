@@ -1,0 +1,26 @@
+// Refund an expired transfer through the sender's account and read the balance.
+// Placeholders: __ROOT_URI__, __SENDER_PUB__, __TRANSFER_URI__.
+new
+  rl(`rho:registry:lookup`),
+  rootCh, afCh, ac, oCh, rCh, bCh,
+  deployId(`rho:rchain:deployId`),
+  deployerId(`rho:rchain:deployerId`)
+in {
+  rl!(`__ROOT_URI__`, *rootCh) |
+  for (Root <- rootCh) {
+    Root!("resolve", "component:account-factory", 1, *afCh) |
+    for (@(true, afUri, _) <- afCh) {
+      rl!(afUri, *ac) |
+      for (AccountFactory <- ac) {
+        AccountFactory!("getOrCreate", "__SENDER_PUB__".hexToBytes(), *oCh) |
+        for (@(true, account, ownerId) <- oCh) {
+          @account!("refundTransfer", *deployerId, `__TRANSFER_URI__`, *rCh) |
+          for (@r <- rCh) {
+            @account!("balance", *deployerId, "REV", *bCh) |
+            for (@b <- bCh) { deployId!([r, b]) }
+          }
+        }
+      }
+    }
+  }
+}

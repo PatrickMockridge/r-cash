@@ -1,0 +1,440 @@
+// v0.4 pool assembly: one oracle-anchored FxPool per direct market.
+// PoolTemplate resolves the assets and creates the purses; assemblePool holds
+// the pool arms. The factory calls the template and binds the returned URI.
+// Placeholders: __ROOT_URI__, __ASSET_RESOLVER_URI__.
+new
+  PoolTemplate, assemblePool, poolAmmMath, poolRate,
+  rl(`rho:registry:lookup`),
+  rs(`rho:registry:insertArbitrary`),
+  deployerId(`rho:rchain:deployerId`),
+  deployId(`rho:rchain:deployId`),
+  rootCh, Root, uTemplate, ack
+in {
+
+  contract poolRate(@base, @quote, @maxAge, ret) = {
+    new rCh, xCh in {
+      rl!(`__ROOT_URI__`, *rCh) |
+      for (Root <- rCh) {
+        Root!("resolve", "component:oracle-hub", 1, *xCh) |
+        for (@(true, hubUri, _) <- xCh) {
+          new hc, rrCh in {
+            rl!(hubUri, *hc) |
+            for (OracleHub <- hc) {
+              OracleHub!("getPair", base, quote, maxAge, *rrCh) |
+              for (@rr <- rrCh) {
+                match rr {
+                  (true, m) => { ret!((m.get("rate"), m.get("fresh"))) }
+                  _ => { ret!((0, false)) }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  } |
+
+  contract poolAmmMath(ret) = {
+    new rCh, mCh in {
+      rl!(`__ROOT_URI__`, *rCh) |
+      for (Root <- rCh) {
+        Root!("resolve", "component:amm-math", 1, *mCh) |
+        for (@(true, mathUri, _) <- mCh) {
+          new mc in {
+            rl!(mathUri, *mc) |
+            for (AmmMath <- mc) { ret!(*AmmMath) }
+          }
+        }
+      }
+    }
+  } |
+
+  contract assemblePool(@terms, @termsHash, @baseBrand, @baseIssuer, @basePurse,
+                       @quoteBrand, @quoteIssuer, @quotePurse,
+                       @lpBrand, @lpMint, @lpIssuer, @lpBurnFacet, ret) = {
+    new uPool in {
+  new FxPool, commitLiquidity, poolState in {
+    contract commitLiquidity(@s, basePayment, quotePayment,
+                               @baseAmt, @quoteAmt, @rate,
+                               @minShares, ret2) = {
+        new mCh in { poolAmmMath!(*mCh) | for (AmmMath <- mCh) { new valCh, oldValCh, sharesCh in {
+          AmmMath!("value", s.get("rb") + baseAmt,
+                   s.get("rq") + quoteAmt, rate, *valCh) |
+          AmmMath!("value", s.get("rb"), s.get("rq"), rate, *oldValCh) |
+          for (@depositValue <- valCh; @poolValue <- oldValCh) {
+            match (s.get("seeded")) {
+              true => {
+                AmmMath!("shares", depositValue - poolValue,
+                         s.get("totalShares"), poolValue, false,
+                         *sharesCh)
+              }
+              _ => {
+                new okCh in {
+                  match ((baseAmt * rate) / 100000000).toInt() {
+                    baseValue => {
+                      if (baseValue >= quoteAmt) {
+                        if ((baseValue - quoteAmt) * 10000
+                            > terms.get("firstDepositToleranceBps")
+                              * (baseValue + quoteAmt)) { okCh!(false) }
+                        else { okCh!(true) }
+                      } else {
+                        if ((quoteAmt - baseValue) * 10000
+                            > terms.get("firstDepositToleranceBps")
+                              * (baseValue + quoteAmt)) { okCh!(false) }
+                        else { okCh!(true) }
+                      }
+                    }
+                  } |
+                  for (@ok2 <- okCh) {
+                    if (ok2 == false) {
+                      poolState!(s) | ret2!((false, "first deposit balance"))
+                    } else {
+                      AmmMath!("shares", depositValue, 0, 0, true, *sharesCh)
+                    }
+                  }
+                }
+              }
+            } |
+            for (@sharesOut <- sharesCh) {
+              if (sharesOut <= 0 || sharesOut < minShares) {
+                poolState!(s) | ret2!((false, "shares"))
+              } else {
+                new bdCh, qdCh, lpCh in {
+                  @basePurse!("deposit", *basePayment, *bdCh) |
+                  @quotePurse!("deposit", *quotePayment, *qdCh) |
+                  for (@bd <- bdCh; @qd <- qdCh) {
+                    match bd {
+                      (true, _) => {
+                        match qd {
+                          (true, _) => {
+                            @lpMint!("mintPayment", (lpBrand, sharesOut), *lpCh) |
+                            for (@lp <- lpCh) {
+                              match lp {
+                                (true, lpPayment) => {
+                                  poolState!(s.set("rb", s.get("rb") + baseAmt)
+                                               .set("rq", s.get("rq") + quoteAmt)
+                                               .set("totalShares", s.get("totalShares") + sharesOut)
+                                               .set("seeded", true)) |
+                                  ret2!((true, lpPayment, sharesOut))
+                                }
+                                _ => { ret2!(1 / 0) }
+                              }
+                            }
+                          }
+                          _ => { ret2!(1 / 0) }
+                        }
+                      }
+                      _ => { ret2!(1 / 0) }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        } } }
+      } |
+  
+  contract FxPool(@"pair", ret2) = {
+      ret2!((true, terms.get("base"), terms.get("quote")))
+    } |
+    contract FxPool(@"reserves", ret2) = {
+      for (@s <<- poolState) {
+        ret2!((true, {"base": s.get("rb"), "quote": s.get("rq"),
+                      "totalShares": s.get("totalShares"),
+                      "seeded": s.get("seeded")}))
+      }
+    } |
+    contract FxPool(@"attest", ret2) = {
+      for (@s <<- poolState) {
+        ret2!((true, {
+          "marketId": terms.get("marketId"),
+          "termsHash": termsHash,
+          "base": terms.get("base"),
+          "quote": terms.get("quote"),
+          "rb": s.get("rb"),
+          "rq": s.get("rq"),
+          "totalShares": s.get("totalShares"),
+          "seeded": s.get("seeded"),
+          "paused": s.get("paused")
+        }))
+      }
+    } |
+    contract FxPool(@"quote", @dir, @dx, ret2) = {
+      new rateCh in {
+        poolRate!(terms.get("base"), terms.get("quote"),
+                 terms.get("maxPairAgeBlocks"), *rateCh) |
+        for (@rr <- rateCh) {
+          match rr {
+            (rate, fresh) => {
+              if (fresh == false || rate <= 0) { ret2!((false, "stale feed")) }
+              else {
+                for (@s <<- poolState) {
+                  new mCh in { poolAmmMath!(*mCh) | for (AmmMath <- mCh) { new wCh, fCh in {
+                    AmmMath!("weight", s.get("rb"), s.get("rq"), rate, *wCh) |
+                    for (@w <- wCh) {
+                      AmmMath!("fee", w, terms.get("baseSpreadBps"),
+                               terms.get("skewSpreadBps"), *fCh) |
+                      for (@fee <- fCh) {
+                        new o2Ch in {
+                          AmmMath!("out", dir, dx, rate, fee, *o2Ch) |
+                          for (@out <- o2Ch) {
+                            ret2!((true, out, fee, rate))
+                          }
+                        }
+                      }
+                    }
+                  } } }
+                }
+              }
+            }
+          }
+        }
+      }
+    } |
+    contract FxPool(@"swap", @dir, inputPayment, @minOut, ret2) = {
+      for (@s <- poolState) {
+        new rateCh in {
+          poolRate!(terms.get("base"), terms.get("quote"),
+                   terms.get("maxPairAgeBlocks"), *rateCh) |
+          for (@rr <- rateCh) {
+            match rr {
+              (rate, fresh) => {
+                if (s.get("paused")) { poolState!(s) | ret2!((false, "paused")) }
+                else {
+                  if (fresh == false || rate <= 0) {
+                    poolState!(s) | ret2!((false, "stale feed"))
+                  } else {
+                    new mCh in { poolAmmMath!(*mCh) | for (AmmMath <- mCh) { new amtCh, wCh, fCh, o2Ch, poolValCh in {
+                      if (dir == "b2q") {
+                        @baseIssuer!("getAmountOf", *inputPayment, *amtCh)
+                      } else {
+                        @quoteIssuer!("getAmountOf", *inputPayment, *amtCh)
+                      } |
+                      for (@am <- amtCh) {
+                        match am {
+                          (true, amount) => {
+                            AmmMath!("value", s.get("rb"), s.get("rq"), rate, *poolValCh) |
+                            for (@poolValue <- poolValCh) {
+                              AmmMath!("weight", s.get("rb"), s.get("rq"), rate, *wCh) |
+                              for (@w <- wCh) {
+                                AmmMath!("fee", w, terms.get("baseSpreadBps"),
+                                         terms.get("skewSpreadBps"), *fCh) |
+                                for (@fee <- fCh) {
+                                  AmmMath!("out", dir, amount, rate, fee, *o2Ch) |
+                                  for (@out <- o2Ch) {
+                                    new inValueCh in {
+                                      if (dir == "b2q") {
+                                        match ((amount * rate) / 100000000).toInt() { v => inValueCh!(v) }
+                                      } else { inValueCh!(amount) } |
+                                      for (@inValue <- inValueCh) {
+                                        if (out <= 0 || out < minOut) {
+                                          poolState!(s) | ret2!((false, "output"))
+                                        } else {
+                                          if (inValue < terms.get("minTicketQuote")) {
+                                            poolState!(s) | ret2!((false, "min ticket"))
+                                          } else {
+                                            if (inValue * 10000 > poolValue * terms.get("maxTradeBps")) {
+                                              poolState!(s) | ret2!((false, "max trade"))
+                                            } else {
+                                              new depCh, wdCh in {
+                                                if (dir == "b2q") {
+                                                  @basePurse!("deposit", *inputPayment, *depCh) |
+                                                  @quotePurse!("withdraw", (quoteBrand, out), *wdCh)
+                                                } else {
+                                                  @quotePurse!("deposit", *inputPayment, *depCh) |
+                                                  @basePurse!("withdraw", (baseBrand, out), *wdCh)
+                                                } |
+                                                for (@d <- depCh; @w2 <- wdCh) {
+                                                  match d {
+                                                    (true, _) => {
+                                                      match w2 {
+                                                        (true, outPayment) => {
+                                                          if (dir == "b2q") {
+                                                            poolState!(s.set("rb", s.get("rb") + amount)
+                                                                         .set("rq", s.get("rq") - out))
+                                                          } else {
+                                                            poolState!(s.set("rb", s.get("rb") - out)
+                                                                         .set("rq", s.get("rq") + amount))
+                                                          } |
+                                                          ret2!((true, outPayment, out))
+                                                        }
+                                                        _ => { ret2!(1 / 0) }
+                                                      }
+                                                    }
+                                                    _ => { ret2!(1 / 0) }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                          _ => { poolState!(s) | ret2!((false, "not this asset")) }
+                        }
+                      }
+                    } } }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    } |
+    contract FxPool(@"addLiquidity", basePayment, quotePayment, @minShares, ret2) = {
+      for (@s <- poolState) {
+        new rateCh in {
+          poolRate!(terms.get("base"), terms.get("quote"),
+                   terms.get("maxPairAgeBlocks"), *rateCh) |
+          for (@rr <- rateCh) {
+            match rr {
+              (rate, fresh) => {
+                if (s.get("paused")) { poolState!(s) | ret2!((false, "paused")) }
+                else {
+                  if (fresh == false || rate <= 0) {
+                    poolState!(s) | ret2!((false, "stale feed"))
+                  } else {
+                    new bAmtCh, qAmtCh in {
+                      @baseIssuer!("getAmountOf", *basePayment, *bAmtCh) |
+                      @quoteIssuer!("getAmountOf", *quotePayment, *qAmtCh) |
+                      for (@ba <- bAmtCh; @qa <- qAmtCh) {
+                        match ba {
+                          (true, baseAmt) => {
+                            match qa {
+                              (true, quoteAmt) => {
+                                commitLiquidity!(s, *basePayment, *quotePayment,
+                                                baseAmt, quoteAmt, rate,
+                                                minShares, *ret2)
+                              }
+                              _ => { poolState!(s) | ret2!((false, "not quote")) }
+                            }
+                          }
+                          _ => { poolState!(s) | ret2!((false, "not base")) }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    } |
+  
+    contract FxPool(@"removeLiquidity", lpPayment, @minBase, @minQuote, ret2) = {
+      for (@s <- poolState) {
+        new lpCh in {
+          @lpIssuer!("getAmountOf", *lpPayment, *lpCh) |
+          for (@lpAmt <- lpCh) {
+            match lpAmt {
+              (true, shares) => {
+                if (shares <= 0 || s.get("totalShares") <= 0) {
+                  poolState!(s) | ret2!((false, "shares"))
+                } else {
+                  new bOut, qOut in {
+                    bOut!((s.get("rb") * shares) / s.get("totalShares")) |
+                    qOut!((s.get("rq") * shares) / s.get("totalShares")) |
+                    for (@baseOut <- bOut; @quoteOut <- qOut) {
+                      if (baseOut < minBase || quoteOut < minQuote) {
+                        poolState!(s) | ret2!((false, "minimum"))
+                      } else {
+                        new burnCh, bwCh, qwCh in {
+                          @lpBurnFacet!("deposit", *lpPayment, *burnCh) |
+                          @basePurse!("withdraw", (baseBrand, baseOut), *bwCh) |
+                          @quotePurse!("withdraw", (quoteBrand, quoteOut), *qwCh) |
+                          for (@bn <- burnCh; @bp <- bwCh; @qp <- qwCh) {
+                            match bp {
+                              (true, basePayment) => {
+                                match qp {
+                                  (true, quotePayment) => {
+                                    poolState!(s.set("rb", s.get("rb") - baseOut)
+                                                 .set("rq", s.get("rq") - quoteOut)
+                                                 .set("totalShares", s.get("totalShares") - shares)) |
+                                    ret2!((true, basePayment, quotePayment))
+                                  }
+                                  _ => { ret2!(1 / 0) }
+                                }
+                              }
+                              _ => { ret2!(1 / 0) }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+              _ => { poolState!(s) | ret2!((false, "not an LP payment")) }
+            }
+          }
+        }
+      }
+    } |
+    poolState!({"rb": 0, "rq": 0, "totalShares": 0,
+                "seeded": false, "paused": false, "rev": 0}) |
+    rs!(bundle+{*FxPool}, *uPool) |
+    for (@poolUri <- uPool) { ret!((true, poolUri)) }
+  }
+    }
+  } |
+
+  contract PoolTemplate(@"create", @terms, @termsHash, ret) = {
+    new ec, rCh, aCh, a2Ch, bpCh, qpCh, lpCh, burnPurseCh, burnFacetCh in {
+      rl!(`rho:rchain:ertp`, *ec) |
+      for (@(_, ERTP) <- ec) {
+        rl!(`__ASSET_RESOLVER_URI__`, *rCh) |
+        for (AssetResolver <- rCh) {
+          AssetResolver!("issuer", terms.get("base"), *aCh) |
+          for (@bi <- aCh) {
+            match bi {
+              (true, baseBrand, baseIssuer) => {
+                AssetResolver!("issuer", terms.get("quote"), *a2Ch) |
+                for (@qi <- a2Ch) {
+                  match qi {
+                    (true, quoteBrand, quoteIssuer) => {
+                      @baseIssuer!("makeEmptyPurse", *bpCh) |
+                      @quoteIssuer!("makeEmptyPurse", *qpCh) |
+                      @ERTP!("makeIssuerKit", *lpCh) |
+                      for (@(true, basePurse) <- bpCh; @(true, quotePurse) <- qpCh;
+                           @(lpBrand, lpMint, lpIssuer) <- lpCh) {
+                        @lpIssuer!("makeEmptyPurse", *burnPurseCh) |
+                        for (@(true, lpBurnPurse) <- burnPurseCh) {
+                          @lpBurnPurse!("getDepositFacet", *burnFacetCh) |
+                          for (@(true, lpBurnFacet) <- burnFacetCh) {
+                            assemblePool!(terms, termsHash, baseBrand, baseIssuer,
+                                          basePurse, quoteBrand, quoteIssuer,
+                                          quotePurse, lpBrand, lpMint, lpIssuer,
+                                          lpBurnFacet, *ret)
+                          }
+                        }
+                      }
+                    }
+                    _ => { ret!(qi) }
+                  }
+                }
+              }
+              _ => { ret!(bi) }
+            }
+          }
+        }
+      }
+    }
+  } |
+
+
+  rl!(`__ROOT_URI__`, *rootCh) |
+  for (Root <- rootCh) {
+    rs!(bundle+{*PoolTemplate}, *uTemplate) |
+    for (@uri <- uTemplate) {
+      Root!("register", "component:pool-template", uri, 1, "factory", *deployerId, *ack) |
+      for (@r <- ack) { deployId!([uri]) }
+    }
+  }
+}

@@ -18,12 +18,27 @@
       "contracts/build/deploy/v3/09_identity.rho": {
         "bytes": 16384,
         "depth": 96,
-        "contracts": 16
+        "contracts": 18
       },
       "contracts/build/deploy/v3/14_asset_resolver.rho": {
         "bytes": 8192,
         "depth": 48,
         "contracts": 2
+      },
+      "contracts/build/deploy/v3/40_transfer.rho": {
+        "bytes": 8192,
+        "depth": 48,
+        "contracts": 6
+      },
+      "contracts/build/deploy/v3/50_market.rho": {
+        "bytes": 24576,
+        "depth": 96,
+        "contracts": 18
+      },
+      "contracts/build/deploy/v3/51_pool.rho": {
+        "bytes": 16384,
+        "depth": 96,
+        "contracts": 14
       }
     }
   },
@@ -411,19 +426,18 @@
       "state_cell": "termsState",
       "arms": [
         "put",
-        "get",
-        "boundsOk"
+        "get"
       ],
       "dependencies": [
         "Root",
-        "Codec",
-        "Bounds"
+        "Bounds",
+        "Codec"
       ],
       "creates": [],
       "system": [],
-      "deploy": "contracts/src/deploy/v3/14_market_factory.rho",
+      "deploy": "contracts/src/deploy/v3/50_market.rho",
       "instance_key": null,
-      "status": "planned",
+      "status": "implemented",
       "budget": {
         "bytes": 8192,
         "depth": 32,
@@ -438,23 +452,17 @@
       "arms": [
         "bind",
         "seal",
-        "unseal",
         "byId",
         "slot"
       ],
-      "dependencies": [
-        "Root",
-        "Verifier",
-        "Codec",
-        "Bounds"
-      ],
+      "dependencies": [],
       "creates": [],
       "system": [
         "rho:crypto:secp256k1Verify"
       ],
-      "deploy": "contracts/src/deploy/v3/14_market_factory.rho",
+      "deploy": "contracts/src/deploy/v3/50_market.rho",
       "instance_key": null,
-      "status": "planned",
+      "status": "implemented",
       "budget": {
         "bytes": 8192,
         "depth": 32,
@@ -471,27 +479,24 @@
       ],
       "dependencies": [
         "Root",
-        "MarketTerms",
-        "MarketIndex",
-        "MarketDirectory",
-        "CurrencyRegistry",
-        "OracleRegistry",
-        "Bounds",
-        "Codec",
         "Verifier",
-        "Clock"
+        "MarketTerms",
+        "MarketDirectory",
+        "MarketIndex",
+        "OracleRegistry",
+        "AssetResolver",
+        "PoolTemplate"
       ],
       "creates": [
-        "FxPool",
-        "LiquidityLock",
-        "TransferBook"
+        "FxPool"
       ],
       "system": [
-        "rho:block:data"
+        "rho:rchain:ertp",
+        "rho:registry:insertArbitrary"
       ],
-      "deploy": "contracts/src/deploy/v3/14_market_factory.rho",
+      "deploy": "contracts/src/deploy/v3/50_market.rho",
       "instance_key": null,
-      "status": "planned",
+      "status": "implemented",
       "budget": {
         "bytes": 24576,
         "depth": 48,
@@ -502,34 +507,26 @@
       "name": "MarketIndex",
       "kind": "registry",
       "stateful": true,
-      "state_cell": "marketState",
+      "state_cell": "indexState",
       "arms": [
         "stage",
         "activate",
-        "pause",
-        "delist",
-        "cancel",
         "market",
         "marketFor",
-        "status",
-        "isActive",
-        "admin"
+        "setStatus"
       ],
       "dependencies": [
         "Root",
-        "CurrencyRegistry",
-        "MarketTerms",
-        "MarketDirectory",
-        "OracleHub",
         "Governor",
-        "Verifier",
-        "Clock"
+        "MarketDirectory",
+        "MarketTerms",
+        "FxPool"
       ],
       "creates": [],
       "system": [],
-      "deploy": "contracts/src/deploy/v3/15_market_index.rho",
+      "deploy": "contracts/src/deploy/v3/50_market.rho",
       "instance_key": null,
-      "status": "planned",
+      "status": "implemented",
       "budget": {
         "bytes": 24576,
         "depth": 48,
@@ -603,36 +600,27 @@
       "stateful": true,
       "state_cell": "poolState",
       "arms": [
+        "pair",
+        "reserves",
+        "attest",
         "quote",
         "swap",
-        "quoteAdd",
         "addLiquidity",
-        "removeLiquidity",
-        "reserves",
-        "params",
-        "pair",
-        "terms",
-        "lpAsset",
-        "sealSeed",
-        "attest",
-        "admin"
+        "removeLiquidity"
       ],
       "dependencies": [
         "Root",
-        "MarketIndex",
         "OracleHub",
         "AmmMath",
-        "TradabilityGate",
-        "Verifier",
-        "Clock"
+        "AssetResolver"
       ],
       "creates": [],
       "system": [
         "rho:rchain:ertp"
       ],
-      "deploy": "contracts/src/deploy/v3/40_pool.rho",
+      "deploy": "contracts/src/deploy/v3/51_pool.rho",
       "instance_key": "market",
-      "status": "planned",
+      "status": "implemented",
       "budget": {
         "bytes": 24576,
         "depth": 48,
@@ -677,36 +665,26 @@
       "stateful": true,
       "state_cell": "bookState",
       "arms": [
-        "send",
-        "nextId",
-        "terms",
-        "escrows",
-        "attest",
-        "admin"
+        "send"
       ],
       "dependencies": [
         "Root",
-        "MarketIndex",
-        "AccountFactory",
-        "AssetResolver",
-        "FxPool",
-        "Verifier",
         "Clock"
       ],
       "creates": [
         "TransferContract"
       ],
       "system": [
-        "rho:rchain:ertp",
-        "rho:block:data"
+        "rho:registry:lookup",
+        "rho:registry:insertArbitrary"
       ],
-      "deploy": "contracts/src/deploy/v3/42_book.rho",
-      "instance_key": "market",
-      "status": "planned",
+      "deploy": "contracts/src/deploy/v3/40_transfer.rho",
+      "instance_key": null,
+      "status": "implemented",
       "budget": {
-        "bytes": 24576,
+        "bytes": 8192,
         "depth": 48,
-        "contracts": 1
+        "contracts": 6
       }
     },
     {
@@ -721,23 +699,22 @@
       ],
       "dependencies": [
         "Root",
-        "Clock",
-        "Verifier",
         "ClaimCode",
-        "AccountFactory"
+        "Clock"
       ],
       "creates": [],
       "system": [
-        "rho:rchain:ertp",
-        "rho:block:data"
+        "rho:registry:lookup",
+        "rho:rev:address",
+        "rho:rchain:deployerId:ops"
       ],
-      "deploy": "contracts/src/deploy/v3/42_book.rho",
+      "deploy": "contracts/src/deploy/v3/40_transfer.rho",
       "instance_key": "transfer",
-      "status": "planned",
+      "status": "implemented",
       "budget": {
-        "bytes": 12288,
+        "bytes": 8192,
         "depth": 48,
-        "contracts": 1
+        "contracts": 6
       }
     },
     {
@@ -792,7 +769,7 @@
       "budget": {
         "bytes": 16384,
         "depth": 96,
-        "contracts": 16
+        "contracts": 18
       }
     },
     {
@@ -918,12 +895,18 @@
         "deposit",
         "withdraw",
         "balance",
-        "depositFacet"
+        "depositFacet",
+        "sendTransfer",
+        "claimTransfer",
+        "refundTransfer"
       ],
       "dependencies": [
         "AccountGate",
         "PurseStore",
-        "VaultBook"
+        "VaultBook",
+        "TransferBook",
+        "TransferContract",
+        "ClaimCode"
       ],
       "creates": [],
       "system": [],
@@ -1235,6 +1218,34 @@
         "bytes": 16384,
         "depth": 96,
         "contracts": 12
+      }
+    },
+    {
+      "name": "PoolTemplate",
+      "kind": "factory",
+      "stateful": false,
+      "state_cell": null,
+      "arms": [
+        "create"
+      ],
+      "dependencies": [
+        "Root",
+        "AssetResolver"
+      ],
+      "creates": [
+        "FxPool"
+      ],
+      "system": [
+        "rho:rchain:ertp",
+        "rho:registry:insertArbitrary"
+      ],
+      "deploy": "contracts/src/deploy/v3/51_pool.rho",
+      "instance_key": null,
+      "status": "implemented",
+      "budget": {
+        "bytes": 16384,
+        "depth": 96,
+        "contracts": 14
       }
     }
   ]

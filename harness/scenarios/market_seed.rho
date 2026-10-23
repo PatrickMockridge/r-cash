@@ -1,0 +1,132 @@
+// Seed a REV/V4T pool from the provider's account: fund REV, mint V4T against
+// a vault, deposit both assets, then add liquidity. Returns
+// [ownerId, shares, reserves].
+// Placeholders: __ROOT_URI__, __REGISTRY_URI__, __POOL_URI__, __PUBKEY__,
+//               __FUND_REV__, __COLLATERAL__, __MINT__, __BASE_AMT__, __QUOTE_AMT__.
+new
+  rl(`rho:registry:lookup`),
+  rootCh, poolCh, regCh, afCh, ac, oCh, fRevCh,
+  ertpCh, revIssuerCh, revPurseCh, fundCh, wdCh, depCh,
+  eCh, zCh, wColCh, vcCh, depVCh, mintCh, dStableCh,
+  wBaseCh, wQuoteCh, lpCh, resCh,
+  deployId(`rho:rchain:deployId`),
+  deployerId(`rho:rchain:deployerId`)
+in {
+  rl!(`__ROOT_URI__`, *rootCh) |
+  rl!(`__REGISTRY_URI__`, *regCh) |
+  rl!(`__POOL_URI__`, *poolCh) |
+  rl!(`rho:rchain:ertp`, *ertpCh) |
+  for (Root <- rootCh; CurrencyRegistry <- regCh; FxPool <- poolCh;
+       @(_, ERTP) <- ertpCh) {
+    Root!("resolve", "component:account-factory", 1, *afCh) |
+    for (@(true, afUri, _) <- afCh) {
+      rl!(afUri, *ac) |
+      for (AccountFactory <- ac) {
+        AccountFactory!("getOrCreate", "__PUBKEY__".hexToBytes(), *oCh) |
+        for (@(true, account, ownerId) <- oCh) {
+          @account!("depositFacet", "REV", *fRevCh) |
+          for (@fr <- fRevCh) {
+            match fr {
+              (true, revFacet) => {
+                @ERTP!("getRevIssuer", *revIssuerCh) |
+                for (@(revBrand, revIssuer) <- revIssuerCh) {
+                  @revIssuer!("makeEmptyPurse", *revPurseCh) |
+                  for (@(true, revPurse) <- revPurseCh) {
+                    @revPurse!("revFund", *deployerId, __FUND_REV__, *fundCh) |
+                    for (@_ <- fundCh) {
+                      @revPurse!("withdraw", (revBrand, __FUND_REV__), *wdCh) |
+                      for (@(true, revPayment) <- wdCh) {
+                        @revFacet!("deposit", revPayment, *depCh) |
+                        for (@dp <- depCh) {
+                          match dp {
+                            (true, _) => {
+                              CurrencyRegistry!("currency", "V4T", *eCh) |
+                              for (@e <- eCh) {
+                                match e {
+                                  (true, entry) => {
+                                    match entry.get("vaultUri") { vaultUri => {
+                                      @account!("vaultOpen", *deployerId, vaultUri, *zCh) |
+                                      for (@z <- zCh) {
+                                        match z {
+                                          (true, auth) => {
+                                            @account!("withdraw", *deployerId, "REV",
+                                                      __COLLATERAL__, *wColCh) |
+                                            for (@(true, colPayment) <- wColCh) {
+                                              rl!(vaultUri, *vcCh) |
+                                              for (VaultBook <- vcCh) {
+                                                VaultBook!("deposit", ownerId, auth,
+                                                           colPayment, *depVCh) |
+                                                for (@dv <- depVCh) {
+                                                  match dv {
+                                                    (true, _) => {
+                                                      VaultBook!("mint", ownerId, auth,
+                                                                 __MINT__, *mintCh) |
+                                                      for (@m <- mintCh) {
+                                                        match m {
+                                                          (true, stablePayment, debt) => {
+                                                            @account!("deposit", *deployerId,
+                                                                      "V4T", stablePayment, *dStableCh) |
+                                                            for (@ds <- dStableCh) {
+                                                              match ds {
+                                                                (true, _) => {
+                                                                  @account!("withdraw", *deployerId,
+                                                                            "REV", __BASE_AMT__, *wBaseCh) |
+                                                                  for (@(true, basePay) <- wBaseCh) {
+                                                                    @account!("withdraw", *deployerId,
+                                                                              "V4T", __QUOTE_AMT__, *wQuoteCh) |
+                                                                    for (@(true, quotePay) <- wQuoteCh) {
+                                                                      FxPool!("addLiquidity",
+                                                                               basePay, quotePay, 0, *lpCh) |
+                                                                      for (@lp <- lpCh) {
+                                                                        match lp {
+                                                                          (true, lpPayment, shares) => {
+                                                                            FxPool!("reserves", *resCh) |
+                                                                            for (@res <- resCh) {
+                                                                              deployId!([ownerId, shares, res])
+                                                                            }
+                                                                          }
+                                                                          _ => { deployId!(lp) }
+                                                                        }
+                                                                      }
+                                                                    }
+                                                                  }
+                                                                }
+                                                                _ => { deployId!(ds) }
+                                                              }
+                                                            }
+                                                          }
+                                                          _ => { deployId!(m) }
+                                                        }
+                                                      }
+                                                    }
+                                                    _ => { deployId!(dv) }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                          _ => { deployId!(z) }
+                                        }
+                                      }
+                                    } }
+                                  }
+                                  _ => { deployId!(e) }
+                                }
+                              }
+                            }
+                            _ => { deployId!(dp) }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+              _ => { deployId!(fr) }
+            }
+          }
+        }
+      }
+    }
+  }
+}

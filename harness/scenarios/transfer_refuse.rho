@@ -1,0 +1,28 @@
+// A foreign account: a wrong-secret claim is refused, then a refund by a
+// deployer that is not the sender is refused. Both leave the transfer open.
+// Placeholders: __ROOT_URI__, __OWN_PUB__, __TRANSFER_URI__, __WRONG_SECRET__.
+new
+  rl(`rho:registry:lookup`),
+  rootCh, afCh, ac, oCh, cCh, rCh,
+  deployId(`rho:rchain:deployId`),
+  deployerId(`rho:rchain:deployerId`)
+in {
+  rl!(`__ROOT_URI__`, *rootCh) |
+  for (Root <- rootCh) {
+    Root!("resolve", "component:account-factory", 1, *afCh) |
+    for (@(true, afUri, _) <- afCh) {
+      rl!(afUri, *ac) |
+      for (AccountFactory <- ac) {
+        AccountFactory!("getOrCreate", "__OWN_PUB__".hexToBytes(), *oCh) |
+        for (@(true, account, ownerId) <- oCh) {
+          @account!("claimTransfer", *deployerId, `__TRANSFER_URI__`,
+                    "__WRONG_SECRET__".hexToBytes(), *cCh) |
+          for (@c <- cCh) {
+            @account!("refundTransfer", *deployerId, `__TRANSFER_URI__`, *rCh) |
+            for (@r <- rCh) { deployId!([c, r]) }
+          }
+        }
+      }
+    }
+  }
+}

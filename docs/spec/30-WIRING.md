@@ -78,6 +78,9 @@ by a block boundary before the next.
 | 08 | `OracleHub` | `component:oracle-hub` |
 | 09 | `CurrencyRegistry` + `StablecoinDirectory` | `component:currency-registry`, `component:stablecoin-directory` |
 | 10 | `AssetResolver` | `component:asset-resolver` |
+| 10b | `TransferBook` | `component:transfer-book` |
+| 10c | `PoolTemplate` | `component:pool-template` |
+| 10d | `MarketTerms`, `MarketIndex`, `MarketDirectory`, `MarketFactory` | `component:market-*` |
 | 11 | `AccountFactory` (creates `Account`, `PurseStore`, `AccountGate` per owner) | `component:account-factory` |
 | 12 | per currency: deploy `31_stablecoin` with signed params, then `CurrencyRegistry.register` with the sponsor signature | `currency:<CODE>` |
 | 12 | per currency: `OracleFeed`, then `OracleRegistry.registerFeed` | `feed:<CODE>` |
@@ -115,6 +118,24 @@ Liquidation is permissionless but capability-bound:
 4. The burn and custody withdrawal happen before the single vault/totals commit. Any refusal
    aborts the deploy, so a half-settled liquidation cannot persist. Refusals before the
    consume return the payment to the caller.
+
+## 3c. Send, claim and refund
+
+1. The sender's account obtains the recipient's deposit facet. `Account.depositFacet` is
+   public on purpose: a facet can only deposit, so sharing it is safe and lets any sender
+   address a recipient's purse.
+2. `sendTransfer` authenticates the owner, withdraws the amount from the sender's purse,
+   resolves `component:transfer-book` through Root and calls `TransferBook.send`. The book
+   allocates an id and creates a registered `TransferContract` that closes over the payment,
+   the recipient facet, the sender's refund facet, the claim hash and the expiry.
+3. The recipient claims by revealing the secret preimage. `TransferContract.claim` checks
+   `ClaimCode.hash(secret) == secretHash`, deposits the payment into the recipient facet and
+   re-posts a terminal `claimed` status.
+4. After expiry, only the sender's `deployerId` can `refund`; the payment returns to the
+   sender's facet and the terminal status is `refunded`.
+5. A wrong secret or a foreign refund leaves the cell `open`. A terminal transfer consumes
+   the cell and re-posts the terminal status, so a later call replies `closed` instead of
+   stalling. Claim and refund race on the same cell; exactly one wins.
 
 ## 4. Market activation
 

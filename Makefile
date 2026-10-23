@@ -3,7 +3,7 @@ PY := $(VENV)/bin/python
 RCHAIN_RUST_DIR ?= ../RNodeRust
 export RCHAIN_RUST_DIR
 
-.PHONY: venv image devnet down status keys build probes deploy logs clean demo client-test web-build check-languages test-wasm measure measure-check check-arch check-captures spec-check tla-check install-v3 unit-v3 unit-feed unit-hub unit-stablecoin unit-liquidation unit-accounts unit-all
+.PHONY: venv image devnet down status keys build probes deploy logs clean demo client-test web-build check-languages test-wasm measure measure-check check-arch check-captures spec-check tla-check install-v3 unit-v3 unit-feed unit-hub unit-stablecoin unit-liquidation unit-accounts unit-transfer unit-market unit-all
 
 venv:
 	python3 -m venv $(VENV)
@@ -76,7 +76,13 @@ unit-liquidation:
 unit-accounts:
 	$(VENV)/bin/python harness/unit_accounts.py
 
-unit-all: unit-v3 unit-feed unit-hub unit-stablecoin unit-liquidation unit-accounts
+unit-transfer:
+	$(VENV)/bin/python harness/unit_transfer.py
+
+unit-market:
+	$(VENV)/bin/python harness/unit_market.py
+
+unit-all: unit-v3 unit-feed unit-hub unit-stablecoin unit-liquidation unit-accounts unit-transfer unit-market
 
 probes: build
 	$(PY) harness/rcash.py probes

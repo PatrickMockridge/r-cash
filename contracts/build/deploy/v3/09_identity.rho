@@ -247,13 +247,92 @@ in {
                         }
                       } |
 
-                      contract account(@"depositFacet", dId, @assetId, ret2) = {
+                      // Deposit-only and deliberately public: a sender needs the
+                      // recipient's receive capability, and a facet cannot withdraw.
+                      contract account(@"depositFacet", @assetId, ret2) = {
+                        PurseStore!("facet", assetId, *ret2)
+                      } |
+
+                      contract account(@"sendTransfer", dId, @assetId, recipientFacet,
+                                       @amount, @secretHash, @expiry, ret2) = {
                         new vCh in {
                           AccountGate!("verify", *dId, *vCh) |
                           for (@v <- vCh) {
                             match v {
                               (true, Nil) => {
-                                PurseStore!("facet", assetId, *ret2)
+                                new fCh, wCh in {
+                                  PurseStore!("facet", assetId, *fCh) |
+                                  for (@f <- fCh) {
+                                    match f {
+                                      (true, refundFacet) => {
+                                        PurseStore!("withdraw", assetId, amount, *wCh) |
+                                        for (@w <- wCh) {
+                                          match w {
+                                            (true, payment) => {
+                                              new rCh, bCh in {
+                                                rl!(`__ROOT_URI__`, *rCh) |
+                                                for (Root <- rCh) {
+                                                  Root!("resolve", "component:transfer-book", 1, *bCh) |
+                                                  for (@(true, bookUri, _) <- bCh) {
+                                                    new bc in {
+                                                      rl!(bookUri, *bc) |
+                                                      for (TransferBook <- bc) {
+                                                        TransferBook!("send", ownerId,
+                                                          *recipientFacet, refundFacet,
+                                                          assetId, amount, payment,
+                                                          secretHash, expiry, *ret2)
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                            _ => { ret2!(w) }
+                                          }
+                                        }
+                                      }
+                                      _ => { ret2!(f) }
+                                    }
+                                  }
+                                }
+                              }
+                              _ => { ret2!((false, "not owner")) }
+                            }
+                          }
+                        }
+                      } |
+
+                      contract account(@"claimTransfer", dId, @transferUri, @secret, ret2) = {
+                        new vCh in {
+                          AccountGate!("verify", *dId, *vCh) |
+                          for (@v <- vCh) {
+                            match v {
+                              (true, Nil) => {
+                                new tc in {
+                                  rl!(transferUri, *tc) |
+                                  for (TransferContract <- tc) {
+                                    TransferContract!("claim", secret, *ret2)
+                                  }
+                                }
+                              }
+                              _ => { ret2!((false, "not owner")) }
+                            }
+                          }
+                        }
+                      } |
+
+                      contract account(@"refundTransfer", dId, @transferUri, ret2) = {
+                        new vCh in {
+                          AccountGate!("verify", *dId, *vCh) |
+                          for (@v <- vCh) {
+                            match v {
+                              (true, Nil) => {
+                                new tc in {
+                                  rl!(transferUri, *tc) |
+                                  for (TransferContract <- tc) {
+                                    TransferContract!("refund", *dId, *ret2)
+                                  }
+                                }
                               }
                               _ => { ret2!((false, "not owner")) }
                             }

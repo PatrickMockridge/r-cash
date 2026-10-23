@@ -1,0 +1,171 @@
+// v0.4 TransferBook: one escrow contract per transfer, no shared escrow purse.
+// The book only allocates ids. Each TransferContract is the authoritative cell
+// for its own payment, claim hash, expiry and terminal status: claim and refund
+// consume the same cell, so exactly one of them can win.
+// Placeholders: __ROOT_URI__.
+new
+  TransferBook, bookState,
+  TransferContract,
+  transferNow,
+  rl(`rho:registry:lookup`),
+  rs(`rho:registry:insertArbitrary`),
+  revAddress(`rho:rev:address`),
+  deployerIdOps(`rho:rchain:deployerId:ops`),
+  deployerId(`rho:rchain:deployerId`),
+  deployId(`rho:rchain:deployId`),
+  rootCh, Root, uBook, ack
+in {
+
+  contract transferNow(ret) = {
+    new rCh, cCh in {
+      rl!(`__ROOT_URI__`, *rCh) |
+      for (Root <- rCh) {
+        Root!("resolve", "component:clock", 1, *cCh) |
+        for (@(true, clockUri, _) <- cCh) {
+          new cc in {
+            rl!(clockUri, *cc) |
+            for (Clock <- cc) { Clock!("now", *ret) }
+          }
+        }
+      }
+    }
+  } |
+
+  contract TransferBook(@"send", @senderId, recipientFacet, refundFacet,
+                        @assetId, @amount, payment, @secretHash, @expiry, ret) = {
+    if (amount <= 0) { ret!((false, "amount")) }
+    else {
+      new nowCh in {
+        transferNow!(*nowCh) |
+        for (@now <- nowCh) {
+          if (expiry <= now) { ret!((false, "expiry")) }
+          else {
+            for (@s <- bookState) {
+              match s.get("nextId") {
+                id => {
+                  new TransferContract, transferState, uCh in {
+                    contract TransferContract(@"claim", @secret, ret2) = {
+                      for (@ts <- transferState) {
+                        match ts.get("status") {
+                          "open" => {
+                            new rCh, ccCh, hCh in {
+                              rl!(`__ROOT_URI__`, *rCh) |
+                              for (Root <- rCh) {
+                                Root!("resolve", "component:claim-code", 1, *ccCh) |
+                                for (@(true, claimUri, _) <- ccCh) {
+                                  new cCh in {
+                                    rl!(claimUri, *cCh) |
+                                    for (ClaimCode <- cCh) {
+                                      ClaimCode!("hash", secret, *hCh) |
+                                      for (@h <- hCh) {
+                                        if (h != secretHash) {
+                                          transferState!(ts) |
+                                          ret2!((false, "bad secret"))
+                                        } else {
+                                          new dCh in {
+                                            recipientFacet!("deposit", *payment, *dCh) |
+                                            for (@d <- dCh) {
+                                              transferState!({"status": "claimed"}) |
+                                              ret2!(d)
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                          _ => { transferState!(ts) | ret2!((false, "closed")) }
+                        }
+                      }
+                    } |
+
+                    contract TransferContract(@"refund", dId, ret2) = {
+                      for (@ts <- transferState) {
+                        match ts.get("status") {
+                          "open" => {
+                            new rCh, cCh, nowCh2, pkCh, aCh in {
+                              rl!(`__ROOT_URI__`, *rCh) |
+                              for (Root <- rCh) {
+                                Root!("resolve", "component:clock", 1, *cCh) |
+                                for (@(true, clockUri, _) <- cCh) {
+                                  new cc in {
+                                    rl!(clockUri, *cc) |
+                                    for (Clock <- cc) {
+                                      Clock!("now", *nowCh2) |
+                                      for (@now2 <- nowCh2) {
+                                        if (now2 < expiry) {
+                                          transferState!(ts) |
+                                          ret2!((false, "not expired"))
+                                        } else {
+                                          deployerIdOps!("pubKeyBytes", *dId, *pkCh) |
+                                          for (@pk <- pkCh) {
+                                            revAddress!("fromPublicKey", pk, *aCh) |
+                                            for (@addr <- aCh) {
+                                              if (addr != senderId) {
+                                                transferState!(ts) |
+                                                ret2!((false, "not sender"))
+                                              } else {
+                                                new dCh in {
+                                                  refundFacet!("deposit", *payment, *dCh) |
+                                                  for (@d <- dCh) {
+                                                    transferState!({"status": "refunded"}) |
+                                                    ret2!(d)
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                          _ => { transferState!(ts) | ret2!((false, "closed")) }
+                        }
+                      }
+                    } |
+
+                    contract TransferContract(@"info", ret2) = {
+                      for (@ts <<- transferState) {
+                        ret2!((true, {
+                          "sender": senderId,
+                          "asset": assetId,
+                          "amount": amount,
+                          "secretHash": secretHash,
+                          "expiry": expiry,
+                          "status": ts.get("status")
+                        }))
+                      }
+                    } |
+
+                    transferState!({"status": "open"}) |
+                    bookState!(s.set("nextId", id + 1)) |
+                    rs!(bundle+{*TransferContract}, *uCh) |
+                    for (@uri <- uCh) { ret!((true, id, uri)) }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  } |
+
+  bookState!({"nextId": 0}) |
+
+  rl!(`__ROOT_URI__`, *rootCh) |
+  for (Root <- rootCh) {
+    rs!(bundle+{*TransferBook}, *uBook) |
+    for (@uri <- uBook) {
+      Root!("register", "component:transfer-book", uri, 1, "domain", *deployerId, *ack) |
+      for (@r <- ack) { deployId!([uri]) }
+    }
+  }
+}

@@ -21,8 +21,10 @@ the next build.
 | Accounts | `AccountFactory` creates an `Account`, `PurseStore` and `AccountGate` per owner; `AssetResolver` maps `REV` and listed currencies to brand/issuer; deposit, withdraw, balance and deposit-facet; owner check by caller `deployerId`; the vault proof stays in the account closure |
 | Issuer checks | system deploy, attestations, supply, params, custody, open → deposit REV → mint → repay → withdraw; partial liquidation, underwater write-off, the debt/bad-debt conservation invariant and the liquidation-capability refusal all pass on the devnet |
 | Account checks | key-signed deposit via deposit facet, balance, withdraw, empty stablecoin purse through the registry, and a foreign deployer refused by `AccountGate` |
+| Transfers | `TransferBook` allocates ids and creates a per-transfer `TransferContract`; claim by secret preimage, refund after expiry by the sender, wrong-secret and foreign-refund refusals, and closed-terminal refusals all pass |
+| Markets | `MarketTerms` + `MarketIndex` + `MarketDirectory` + `MarketFactory` (`50_market`) with `PoolTemplate`/`assemblePool` (`51_pool`); a REV/V4T market is created from sponsor-signed terms, seeded from a vault-backed account, activated and swapped at the oracle rate minus the spread |
 | Gates | build, measure, architecture, capture, language and TLA gates pass; the old capture finding is gone |
-| Next | send/claim/refund, convert/liquidity/market listing, v0.4 install manifest and client surfaces |
+| Next | liquidity-remove and seed lock, market pause/delist tests, v0.4 install manifest and client surfaces |
 
 The stablecoin design is DAI-like: REV-only collateral, per-currency systems, MCR,
 interest, liquidation and bad debt, with separate contracts per authority. Bridged
@@ -94,9 +96,9 @@ is `contracts/components.json`.
 
 ## Platform constraints that shaped the build
 
-- Deploy term limit 65,536 bytes; parser depth 128; the bundle free-variable check. Large contracts
-  (pool, transfer book) are deployed in separate terms and their live names are held in
-  `ComponentRegistry` instead of a bundle.
+- Deploy term limit 65,536 bytes; parser depth 128; the bundle free-variable check. Singleton
+  components are registered by URI in Root and resolved at arm entry; only locally created
+  capabilities are captured in bundles.
 - BigInt intermediates require `.toInt()` at fixed-point boundaries.
 - Name/value quoting and duplicate binder rules in Rholang are strict; see `PLATFORM.md`.
 

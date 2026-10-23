@@ -93,7 +93,7 @@ in {
   contract boundsTerms(@terms, @values, ret) = {
     new keysCh in {
       keysCh!(["marketId", "slug", "base", "quote", "version",
-               "sponsorPubKey", "sponsorOwnerId", "baseZoneUri", "quoteZoneUri",
+               "sponsorPubKey", "sponsorOwnerId",
                "baseFeedPolicyHash", "quoteFeedPolicyHash", "baseSpreadBps",
                "skewSpreadBps", "maxTradeBps", "minLiquidity",
                "firstDepositToleranceBps", "depthFloorQuote", "minTicketQuote",

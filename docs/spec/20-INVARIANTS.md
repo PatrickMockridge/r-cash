@@ -21,7 +21,7 @@ means a devnet scenario, `TLA+` names the model in `spec/tla`.
 | I11 | `totalShares = lpMinted − lpBurned` | `FxPool` | share update and LP mint/burn in one transition | TLA+ `PoolConservation`, unit |
 | I12 | Depth floor, min ticket, max trade and first-deposit tolerance | `FxPool` | gate inside the consumed-state critical section; tolerance from params | unit, scenario |
 | I13 | Lock is one-shot; release only to beneficiary after height; cancel only by admin | `LiquidityLock` | one cell; consume-first funding; P4 | unit, scenario |
-| I14 | Transfer status changes at most once; `open → claimed` xor `open → refunded` | `TransferContract` | one per-transfer cell consume | TLA+ `TransferExclusivity`, unit |
+| I14 | Transfer status changes at most once; `open → claimed` xor `open → refunded`; a terminal transfer keeps a quiescent cell and refuses with `closed` | `TransferContract` | one per-transfer cell consume; the terminal state is re-posted after the deposit | TLA+ `TransferExclusivity`, unit |
 | I15 | No payment is stranded on a refusal | `TransferBook`, `TransferContract`, `FxPool` | P3/P6: `fail()` after value movement; no `(false, …)` after a write | unit, fault injection |
 | I19 | Admin threshold and monotone nonce | `Governor` | `authorize` checks threshold and per-domain nonce | TLA+ `AdminNonce`, unit |
 | I20 | Capability provenance and bundleability | every component | `check_captures.py`; block-boundary persistence test | TLA+ `CapabilityProvenance`, scenario |
@@ -59,36 +59,37 @@ of the encoding. `MarketTerms.put` recomputes this hash and rejects a mismatch.
 
 ### Market terms — `rcash:market-terms:v4`
 
-The v0.4 schema drops the old zone URIs and is finalized with the market components in
-Phase 4. The v3 27-value schema is not active.
+The v0.4 schema drops the old zone URIs; it is the active 25-value schema. The terms
+store is keyed by the Codec canonical string of these values, and the sponsor signs
+`rcash:market-create:v1|marketId|canonical|sponsor`.
 
 | # | Field | Enforced by |
 |---|---|---|
-| 0 | marketId | `MarketIndex.stage` recomputes `pairKey:vN` |
+| 0 | marketId | `MarketIndex.stage`; directory and index keys |
 | 1 | slug | `MarketIndex.stage` uniqueness |
 | 2 | base | `MarketIndex.stage`; pair key |
 | 3 | quote | `MarketIndex.stage`; pair key |
-| 4 | version | `MarketIndex.stage` monotonicity |
-| 5 | sponsorPubKey | sponsor signature |
-| 6 | sponsorOwnerId | `revAddress` derivation |
-| 9 | baseFeedPolicyHash | `OracleRegistry` live policy |
-| 10 | quoteFeedPolicyHash | `OracleRegistry` live policy |
-| 11 | baseSpreadBps | `FxPool` fee formula |
-| 12 | skewSpreadBps | `FxPool` fee formula |
-| 13 | maxTradeBps | `FxPool` max input |
-| 14 | minLiquidity | first deposit / share floor |
-| 15 | firstDepositToleranceBps | `FxPool` first deposit (replaces the hardcoded 1%) |
-| 16 | depthFloorQuote | `FxPool` gate and activation |
-| 17 | minTicketQuote | `FxPool` gate |
-| 18 | seedBase | `FxPool` constructor and `sealSeed` |
-| 19 | seedQuote | `FxPool` constructor and `sealSeed` |
-| 20 | seedInitialShares | `FxPool` constructor, lock and activation |
-| 21 | lockBeneficiaryPubKey | `LiquidityLock` constructor |
-| 22 | lockMinBlocks | `MarketIndex.stage` (`now + lockMinBlocks <= lockUntilHeight`) |
-| 23 | lockUntilHeight | `LiquidityLock` and activation |
-| 24 | bookDefaultExpiryBlocks | `TransferBook.send` default |
-| 25 | bookMaxExpiryBlocks | `TransferBook.send` maximum |
-| 26 | maxPairAgeBlocks | `FxPool` caller bound to `OracleHub.getPair` |
+| 4 | version | `MarketIndex.stage` monotonicity after a delisted version |
+| 5 | sponsorPubKey | sponsor signature and terms match |
+| 6 | sponsorOwnerId | sponsor record |
+| 7 | baseFeedPolicyHash | `MarketFactory` live `OracleRegistry` policy |
+| 8 | quoteFeedPolicyHash | `MarketFactory` live `OracleRegistry` policy |
+| 9 | baseSpreadBps | `FxPool` fee formula |
+| 10 | skewSpreadBps | `FxPool` fee formula |
+| 11 | maxTradeBps | `FxPool` max input |
+| 12 | minLiquidity | first deposit floor |
+| 13 | firstDepositToleranceBps | `FxPool` first deposit balance |
+| 14 | depthFloorQuote | `MarketIndex.activate` |
+| 15 | minTicketQuote | `FxPool` swap gate |
+| 16 | seedBase | listing intent; activation checks live reserves |
+| 17 | seedQuote | listing intent; activation checks live reserves |
+| 18 | seedInitialShares | listing intent |
+| 19 | lockBeneficiaryPubKey | `LiquidityLock` (next) |
+| 20 | lockMinBlocks | `LiquidityLock` (next) |
+| 21 | lockUntilHeight | `LiquidityLock` (next) |
+| 22 | bookDefaultExpiryBlocks | `TransferBook` client default |
+| 23 | bookMaxExpiryBlocks | `TransferBook` client maximum |
+| 24 | maxPairAgeBlocks | `FxPool` bound passed to `OracleHub.getPair` |
 
 Removed from the v1 schema: `depthFloorUsdE8`, `minTicketUsdE8`, `protocolFeeBps`,
 `autoPause`. They were hashed but not enforced. A field is either enforced on-chain or

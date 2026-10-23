@@ -17,7 +17,7 @@ in {
       for (AccountFactory <- ac) {
         AccountFactory!("getOrCreate", "__PUBKEY__".hexToBytes(), *oCh) |
         for (@(true, account, ownerId) <- oCh) {
-          @account!("depositFacet", *deployerId, "REV", *fCh) |
+          @account!("depositFacet", "REV", *fCh) |
           for (@fr <- fCh) {
             match fr {
               (true, facet) => {

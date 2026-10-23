@@ -187,6 +187,27 @@ def main(argv: list[str] | None = None) -> int:
     state["asset_resolver_uri"] = resolver["uris"][0]
     save(state)
 
+    transfer = step("40_transfer", "transfer", common)
+    state["transfer_book_uri"] = transfer["uris"][0]
+    save(state)
+
+    pool_template = step("51_pool", "pool_template", {
+        "__ROOT_URI__": root_uri,
+        "__ASSET_RESOLVER_URI__": resolver["uris"][0],
+    })
+    state["pool_template_uri"] = pool_template["uris"][0]
+    save(state)
+
+    market = step("50_market", "market", {
+        "__ROOT_URI__": root_uri,
+        "__ASSET_RESOLVER_URI__": resolver["uris"][0],
+    })
+    state["market_terms_uri"] = market["uris"][0]
+    state["market_directory_uri"] = market["uris"][1]
+    state["market_index_uri"] = market["uris"][2]
+    state["market_factory_uri"] = market["uris"][3]
+    save(state)
+
     identity = step("09_identity", "identity", {
         "__ROOT_URI__": root_uri,
         "__ASSET_RESOLVER_URI__": resolver["uris"][0],
