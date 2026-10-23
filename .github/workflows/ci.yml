@@ -1,0 +1,102 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  languages:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.95.0
+          targets: wasm32-unknown-unknown
+      - name: no C/C++ sources, dependencies, tools or artifacts
+        run: python3 tools/check_no_cpp.py
+
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.95.0
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: format
+        run: cargo fmt --all -- --check
+      - name: clippy
+        run: cargo clippy --workspace --exclude rcash-wasm --all-targets -- -D warnings
+      - name: tests
+        run: cargo test --workspace --exclude rcash-wasm
+
+  wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.95.0
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - name: check
+        run: cargo check -p rcash-wasm --target wasm32-unknown-unknown
+      - name: wasm tests (host)
+        run: cargo test -p rcash-wasm --features rcash-chain/native
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.95.0
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@wasm-pack
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: install
+        run: npm ci --prefix web
+      - name: build wasm
+        run: npm --prefix web run wasm:build
+      - name: wasm smoke test
+        run: npm --prefix web run test:wasm
+      - name: typecheck
+        run: npm --prefix web run typecheck
+      - name: unit tests
+        run: npm --prefix web test
+      - name: production build
+        run: npm --prefix web run build
+
+  contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: build terms
+        run: python tools/build_contracts.py
+      - name: no drift
+        run: git diff --exit-code contracts/build
+
+  # The browser journey needs a running rchain-rust devnet (Docker). It is manual
+  # for now; the protocol demo and all unit gates run without Docker.
+  e2e:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo "Run make devnet && make install, then npm --prefix web run test:e2e on a self-hosted runner."
