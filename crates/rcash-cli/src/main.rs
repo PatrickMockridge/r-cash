@@ -562,12 +562,48 @@ async fn run(cli: Cli) -> Result<ExitCode> {
                         }),
                     );
                 }
+                V4Cmd::Activate { market } => {
+                    let status = v4_signing_client(&cli)?.v4_activate(market).await?;
+                    print_json_or(
+                        &cli.json,
+                        &serde_json::json!({
+                            "market": market, "status": status,
+                        }),
+                    );
+                }
                 V4Cmd::Slot { market } => {
                     let slot = v4_reader(&cli)?.v4_slot(market).await?;
                     print_json_or(
                         &cli.json,
                         &serde_json::json!({
                             "market": market, "pool": slot.pool_uri, "lock": slot.lock_uri,
+                        }),
+                    );
+                }
+                V4Cmd::LockInfo { lock } => {
+                    let l = v4_reader(&cli)?.v4_lock_info(lock).await?;
+                    print_json_or(
+                        &cli.json,
+                        &serde_json::json!({
+                            "funded": l.funded, "released": l.released,
+                            "cancelled": l.cancelled, "untilHeight": l.until_height,
+                            "shares": l.shares,
+                        }),
+                    );
+                }
+                V4Cmd::Quote {
+                    pool,
+                    direction,
+                    amount,
+                } => {
+                    let q = v4_signing_client(&cli)?
+                        .v4_quote(pool, direction, parse_amount(amount)?)
+                        .await?;
+                    print_json_or(
+                        &cli.json,
+                        &serde_json::json!({
+                            "pool": pool, "amountOut": q.amount_out,
+                            "fee": q.fee, "rate": q.rate,
                         }),
                     );
                 }
@@ -687,6 +723,33 @@ async fn run(cli: Cli) -> Result<ExitCode> {
                         &cli.json,
                         &serde_json::json!({
                             "pool": pool, "amountOut": out,
+                        }),
+                    );
+                }
+                V4Cmd::AddLiquidity {
+                    pool,
+                    lock,
+                    base,
+                    quote,
+                    base_amount,
+                    quote_amount,
+                    until,
+                } => {
+                    let shares = v4_signing_client(&cli)?
+                        .v4_add_liquidity(
+                            pool,
+                            lock,
+                            base,
+                            quote,
+                            parse_amount(base_amount)?,
+                            parse_amount(quote_amount)?,
+                            *until,
+                        )
+                        .await?;
+                    print_json_or(
+                        &cli.json,
+                        &serde_json::json!({
+                            "pool": pool, "shares": shares,
                         }),
                     );
                 }
@@ -1170,8 +1233,18 @@ enum V4Cmd {
     Market { base: String, quote: String },
     /// Whether a market is active.
     Active { market: String },
+    /// Activate a seeded market.
+    Activate { market: String },
     /// A market's pool and lock URIs.
     Slot { market: String },
+    /// The seed lock's state.
+    LockInfo { lock: String },
+    /// A pool quote.
+    Quote {
+        pool: String,
+        direction: String,
+        amount: String,
+    },
     /// A pool's reserves.
     Reserves { pool: String },
     /// A stablecoin's total supply.
@@ -1203,6 +1276,16 @@ enum V4Cmd {
         amount: String,
         #[arg(long, default_value = "0")]
         min_out: String,
+    },
+    /// Add both sides of a market and lock the seed LP.
+    AddLiquidity {
+        pool: String,
+        lock: String,
+        base: String,
+        quote: String,
+        base_amount: String,
+        quote_amount: String,
+        until: i64,
     },
     /// Release the seed LP after the lock height and remove it.
     ReleaseLp {

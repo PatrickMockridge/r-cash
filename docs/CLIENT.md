@@ -186,7 +186,9 @@ Reads (`rcash v4 ...`):
 | `market BASE QUOTE` | `ListingViews.marketFor` |
 | `active MARKET_ID` | `ListingViews.isActive` |
 | `slot MARKET_ID` | `MarketDirectory.byId` → pool and lock URIs |
+| `lock-info LOCK` | `LiquidityLock.info` |
 | `reserves POOL` | `FxPool.reserves` |
+| `quote POOL DIR AMOUNT` | `FxPool.quote` (signed: the oracle freshness check needs a block height) |
 | `supply STABLECOIN` | `Stablecoin.supply` |
 | `transfer-info TRANSFER` | `TransferContract.info` |
 | `balance ASSET` | the caller's `Account.balance` (signed; owner-gated) |
@@ -199,7 +201,9 @@ Writes (signed by `--key`):
 | `send TO_PUB ASSET AMOUNT HASH EXPIRY` | recipient facet lookup → `Account.sendTransfer` |
 | `claim TRANSFER SECRET` | `Account.claimTransfer` (secret preimage) |
 | `refund TRANSFER` | `Account.refundTransfer` after expiry |
-| `swap POOL DIR ASSET_IN ASSET_OUT AMOUNT` | account withdraw → `FxPool.swap` → account deposit |
+| `swap POOL DIR ASSET_IN ASSET_OUT AMOUNT [--min-out]` | account withdraw → preflight quote → `FxPool.swap` → account deposit |
+| `add-liquidity POOL LOCK BASE QUOTE BASE_AMT QUOTE_AMT UNTIL` | both sides from the account → `FxPool.addLiquidity` → `LiquidityLock.fund` |
+| `activate MARKET_ID` | anyone may activate a sealed, seeded, lock-funded market |
 | `release-lp LOCK POOL BASE QUOTE` | lock release after its height → `FxPool.removeLiquidity` → account deposits |
 | `vault-mint VAULT CURRENCY COLLATERAL MINT` | vault deposit → mint → stablecoin into the account |
 | `vault-repay VAULT CURRENCY AMOUNT` | account withdraw → `VaultBook.repay` |
@@ -208,7 +212,14 @@ Writes (signed by `--key`):
 Live-tested on a fresh devnet through the CLI: `balance` 0 → `fund-rev 0.05` →
 5,000,000 base units; `send` → `claim` credited 2,000,000 units and `transfer-info`
 reported `claimed`; a second transfer was refunded after expiry and a later `claim`
-was refused `closed`.
+was refused `closed`. On the market side: `vault-mint` minted 20 V4T against REV,
+`add-liquidity` seeded and locked a v2 pool (2,900,015,000 shares), `activate` moved it
+to active, and a second key swapped 0.01 REV for 74,775,747 V4T base units.
+
+A quote is a **signed** read on this node: `explore-deploy` has no block context, so the
+oracle freshness check would see height 0. The devnet feeds are fresh for
+`maxPairAgeBlocks` (50 by default); refresh them before a gated write or the pool refuses
+`stale feed` before any funds move.
 
 Amounts accept decimals (`0.05` = 5,000,000 base units) or integers in base units where
 the command says `AMOUNT`; `parse_amount` is the one parser.

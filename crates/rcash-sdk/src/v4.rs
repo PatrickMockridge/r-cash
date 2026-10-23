@@ -249,6 +249,23 @@ impl Client {
         })
     }
 
+    /// Activate a staged market after it is seeded and its lock is funded.
+    pub async fn v4_activate(&self, market_id: &str) -> Result<String, ChainError> {
+        let index = self.require_v4()?.market_index_uri.as_str().to_string();
+        let term = format!(
+            "new rl(`rho:registry:lookup`), ch, r, deployId(`rho:rchain:deployId`) in {{ \
+             rl!(`{index}`, *ch) | for (MarketIndex <- ch) {{ \
+             MarketIndex!(\"activate\", {}, *r) | \
+             for (@x <- r) {{ deployId!(x) }} }} }}",
+            terms::s(market_id)?
+        );
+        let value = self.signed_value(&term).await?;
+        match Reply::from_value(&value)? {
+            Reply::Ok(values) => str_at(&values, 0),
+            Reply::Refused(reason) => Err(ChainError::Refused(reason)),
+        }
+    }
+
     /// A pool's reserves.
     pub async fn v4_reserves(&self, pool_uri: &str) -> Result<V4Reserves, ChainError> {
         let reply = self.v4_read(pool_uri, "\"reserves\"").await?;
@@ -271,13 +288,16 @@ impl Client {
         direction: &str,
         amount: i64,
     ) -> Result<V4Quote, ChainError> {
-        let reply = self
-            .v4_read(
-                pool_uri,
-                &format!("\"quote\", {}, {amount}", terms::s(direction)?),
-            )
-            .await?;
-        let values = reply.into_result()?;
+        let term = format!(
+            "new rl(`rho:registry:lookup`), capCh, resCh, \
+             deployId(`rho:rchain:deployId`) in {{ \
+             rl!(`{pool_uri}`, *capCh) | for (FxPool <- capCh) {{ \
+             FxPool!(\"quote\", {}, {amount}, *resCh) | \
+             for (@r <- resCh) {{ deployId!(r) }} }} }}",
+            terms::s(direction)?
+        );
+        let value = self.signed_value(&term).await?;
+        let values = Reply::from_value(&value)?.into_result()?;
         Ok(V4Quote {
             amount_out: int_at(&values, 0)?,
             fee: int_at(&values, 1)?,
@@ -448,6 +468,8 @@ impl Client {
         if direction != "b2q" && direction != "q2b" {
             return Err(decode("direction must be b2q or q2b"));
         }
+        // Preflight the feed so a stale oracle is refused before the account withdraws.
+        self.v4_quote(pool_uri, direction, 1).await?;
         let body = format!(
             "new wCh, pCh, sCh, dCh in {{ \
              @account!(\"withdraw\", *deployerId, {asset_in_lit}, {amount}, *wCh) | \
@@ -458,7 +480,7 @@ impl Client {
                (true, outPayment, out) => {{ \
                  @account!(\"deposit\", *deployerId, {asset_out_lit}, outPayment, *dCh) | \
                  for (@_ <- dCh) {{ deployId!((true, out)) }} }} \
-               _ => {{ deployId!(s) }} }} }} }} }} }}",
+               _ => {{ deployId!(1 / 0) }} }} }} }} }} }}",
             asset_in_lit = terms::s(asset_in)?,
             asset_out_lit = terms::s(asset_out)?,
             amount = amount,
@@ -492,7 +514,7 @@ impl Client {
                      @account!(\"deposit\", *deployerId, {base_lit}, basePayment, *d1) | \
                      @account!(\"deposit\", *deployerId, {quote_lit}, quotePayment, *d2) | \
                      for (@_ <- d1; @_ <- d2) {{ deployId!((true, shares)) }} }} \
-                   _ => {{ deployId!(rr) }} }} }} }} }} \
+                   _ => {{ deployId!(1 / 0) }} }} }} }} }} \
                _ => {{ deployId!(r) }} }} }} }} }}",
             base_lit = terms::s(base_asset)?,
             quote_lit = terms::s(quote_asset)?,
@@ -513,6 +535,8 @@ impl Client {
         quote_amount: i64,
         until_height: i64,
     ) -> Result<i64, ChainError> {
+        // Preflight the feed before either side leaves the account.
+        self.v4_quote(pool_uri, "b2q", 1).await?;
         let body = format!(
             "new wb, wq, pCh, aCh, lCh, fCh, d1, d2 in {{ \
              @account!(\"withdraw\", *deployerId, {base_lit}, {base_amount}, *wb) | \
@@ -529,7 +553,7 @@ impl Client {
                      for (@f <- fCh) {{ match f {{ \
                        (true, _) => deployId!((true, shares)) \
                        _ => deployId!(f) }} }} }} }} \
-                   _ => deployId!(a) }} }} }} }} }} }}",
+                   _ => deployId!(1 / 0) }} }} }} }} }} }}",
             base_lit = terms::s(base_asset)?,
             quote_lit = terms::s(quote_asset)?,
             base_amount = base_amount,
