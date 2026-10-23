@@ -68,3 +68,48 @@ TUSD stablecoin were not completed: the hosts ran out of memory and the validato
 stopped responding. This run says the hosts are below the advised minimum; it does not
 test the protocol beyond the deploy acceptance it already demonstrated. A re-run on
 8–16 GB nodes is the correct next experiment.
+
+## Joining as an observer from an adequately provisioned host
+
+An observer syncs and serves the API but does not vote, so it helps with reads and
+deploy submission rather than with the validators' quorum. It runs the same binary the
+network does (`71c6a513d`, the version `/api/status` reports).
+
+```sh
+git -C ../rholo worktree add --detach /tmp/rholo-71c6 71c6a513d
+CARGO_TARGET_DIR=/tmp/rholo-target cargo build --release -p rchain-node --bin rnode
+
+rnode run --data-dir ~/.rnode-observer \
+  --host 127.0.0.1 --api-host 127.0.0.1 --no-upnp \
+  --network-id testnet --parent-shard-id / --shard-name root \
+  --protocol-port 42400 --discovery-port 42404 \
+  --api-port-grpc-external 42401 --api-port-grpc-internal 42402 \
+  --api-port-http 42403 --api-port-admin-http 42405 \
+  --bonds-file ~/.rnode-observer/genesis/bonds.txt \
+  --wallets-file ~/.rnode-observer/genesis/wallets.txt \
+  --pos-multi-sig-public-keys 042d721140c51d83d87503d86fa85e0c835c1b80dcb086251b7c59da497c6ed508625a5c0624741278af944e74f701e4d0f5c2b447b561a1e52f164e895c24b15d \
+  --pos-multi-sig-quorum 1 \
+  --bond-minimum 1 --bond-maximum 250 --number-of-active-validators 4 \
+  --epoch-length 10 --quarantine-length 10 \
+  --bootstrap "rnode://<validator-node-id>@<validator-host>?protocol=<port>&discovery=<port>" \
+  --no-attest-on-new-blocks
+```
+
+The genesis files are network configuration, not ceremony: a joining node replays the
+genesis and must produce the same post-state hash, so both files must match the chain.
+The testnet's four bonds are the validators at 250 each; the four wallets are the
+`alice`, `bob`, `carol` and `dave` addresses at 1,000,000,000,000 drops each, and
+`--pos-multi-sig-public-keys` is dave's key (the trusted admission key). The genesis hash
+the node must reproduce is `713c0ebb0eb4ce866ae118aa1177a498b4edb2d431dd8b77d28abcdd4da9ea91`.
+
+Observed on 2026-10-23 while the validators were memory-starved:
+
+- validators A and D timed out at the protocol handshake (`Failed to send
+  FinalizedFringeRequest ... TimeOut`);
+- B and C accepted the request but never answered it; the observer stayed at height 0
+  with `peers: 1`.
+
+That is consistent with the validator side of the fringe handler having nothing to
+answer with while the chain's finality is degraded. **Restart the validator units first**;
+then the observer's retry loop restores the approved fringe, and `127.0.0.1:42403`
+becomes a healthy API for the deploy tooling.
