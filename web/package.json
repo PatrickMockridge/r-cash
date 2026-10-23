@@ -11,9 +11,10 @@
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:e2e": "playwright test",
+    "test:e2e": "npm run build && playwright test",
     "test:wasm": "node scripts/build-wasm.mjs && node tests/wasm-smoke.mjs",
-    "wasm:build": "node scripts/build-wasm.mjs"
+    "wasm:build": "node scripts/build-wasm.mjs",
+    "preview": "vite preview"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.90.0",

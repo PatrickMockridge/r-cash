@@ -18,8 +18,10 @@ npm run dev                      # builds the wasm module, copies the manifest, 
 ```
 
 `npm run build` produces `dist/`. `npm run test` runs the unit tests. `npm run test:e2e`
-runs the Playwright journey against the devnet (it refreshes the oracle through the CLI
-immediately before each freshness-gated step).
+builds the app, serves `dist` with `vite preview`, and runs the v0.4 journey against a
+running devnet: two browser wallets, the faucet, funding the sender's account, a
+claimable transfer, the recipient's claim, and the credited purse. The manifest is
+`public/devnet.json`, synced from `deployments/devnet-v4.json`.
 
 ## Screens
 
