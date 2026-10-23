@@ -1,0 +1,868 @@
+// ListingRegistry v0.2: dynamic currencies, assets, markets and immutable terms.
+//
+// Directory stays frozen as the v0.1 fallback. This registry is the source of truth for
+// every currency and market added after bootstrap. Registration and activation are
+// permissionless and gated by objective checks; admins can only pause, delist or cancel.
+//
+// Captured: listingState, rl (`rho:registry:lookup`), revAddress, OracleHub, hash, verify,
+// bd, Guard helpers.
+
+contract listingNow(ret) = {
+  new ch in { bd!(*ch) | for (@h, @s, @t <- ch) { ret!(h) } }
+} |
+
+contract listingPairKey(@base, @quote, ret) = {
+  if (base < quote) { ret!(base ++ "/" ++ quote) }
+  else { ret!(quote ++ "/" ++ base) }
+} |
+
+contract listingZoneOk(@params, ret) = {
+  new mcr, bonus, close, rate, ceiling, minD, maxD in {
+    mcr!(params.get("mcrBps")) | bonus!(params.get("bonusBps")) |
+    close!(params.get("closeFactorBps")) | rate!(params.get("ratePerBlock")) |
+    ceiling!(params.get("debtCeiling")) | minD!(params.get("minDebt")) |
+    maxD!(params.get("maxDebt")) |
+    for (@a <- mcr; @b <- bonus; @c <- close; @r <- rate; @dc <- ceiling; @mn <- minD; @mx <- maxD) {
+      if (a < 15000 || a > 50000) { ret!((false, "mcr")) }
+      else {
+        if (b < 0 || b > 2000) { ret!((false, "bonus")) }
+        else {
+          if (c < 1000 || c > 10000) { ret!((false, "close")) }
+          else {
+            if (r < 0 || r > 50000) { ret!((false, "rate")) }
+            else {
+              if (dc < 10000000000 || dc > 1000000000000000) { ret!((false, "ceiling")) }
+              else {
+                if (mn < 10000 || mn > 1000000000) { ret!((false, "min debt")) }
+                else {
+                  if (mx < mn || mx > dc) { ret!((false, "max debt")) }
+                  else { ret!((true, Nil)) }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+} |
+
+contract listingZoneParamsHash(@params, ret) = {
+  new vCh in {
+    vCh!([params.get("mcrBps"), params.get("bonusBps"), params.get("closeFactorBps"),
+          params.get("ratePerBlock"), params.get("debtCeiling"),
+          params.get("minDebt"), params.get("maxDebt")]) |
+    for (@values <- vCh) { termsHash!(*hash, "rcash:zone-params:v1", values, *ret) }
+  }
+} |
+
+contract listingCurrencyPayload(@code, @zoneUri, @paramsHashHex, @sponsorHex, ret) = {
+  ret!("rcash:listing-currency:v1|/root|" ++ code ++ "|" ++ zoneUri ++ "|"
+       ++ paramsHashHex ++ "|" ++ sponsorHex)
+} |
+
+contract listingSponsorPayload(@marketId, @sponsorHex, @termsHashHex, ret) = {
+  ret!("rcash:listing-sponsor:v1|" ++ marketId ++ "|" ++ sponsorHex ++ "|" ++ termsHashHex)
+} |
+
+contract listingMarketView(@m, ret) = {
+  ret!({
+    "marketId": m.get("marketId"),
+    "slug": m.get("slug"),
+    "base": m.get("base"),
+    "quote": m.get("quote"),
+    "version": m.get("version"),
+    "status": m.get("status"),
+    "sponsorOwnerId": m.get("sponsorOwnerId"),
+    "lpAssetId": m.get("lpAssetId"),
+    "termsHashHex": m.get("termsHashHex"),
+    "lockUntilHeight": m.get("lockUntilHeight"),
+    "depthFloorQuote": m.get("depthFloorQuote"),
+    "minTicketQuote": m.get("minTicketQuote")
+  })
+} |
+
+// ---- Currency registration --------------------------------------------------------------
+
+contract ListingRegistry(@"registerCurrency", @code, @zoneUri, @paramsHashHex, @sponsorHex,
+                         @sig, ret) = {
+  new payloadCh, hashCh, verifyCh, rlCh, capCh, curCh, parCh, addrCh, nowCh in {
+    listingCurrencyPayload!(code, zoneUri, paramsHashHex, sponsorHex, *payloadCh) |
+    for (@payload <- payloadCh) {
+      hash!(payload.toUtf8Bytes(), *hashCh) |
+      for (@digest <- hashCh) {
+        verify!(digest, sig, sponsorHex.hexToBytes(), *verifyCh) |
+        for (@ok <- verifyCh) {
+          if (ok == false) { ret!((false, "bad sponsor signature")) }
+          else {
+            rl!(zoneUri, *rlCh) |
+            for (zone <- rlCh) {
+              zone!("currency", *curCh) |
+              zone!("params", *parCh) |
+              revAddress!("fromPublicKey", sponsorHex.hexToBytes(), *addrCh) |
+              for (@curReply <- curCh; @parReply <- parCh; @ownerId <- addrCh) {
+                match curReply {
+                  (true, zoneCode) => {
+                    match parReply {
+                      (true, params) => {
+                if (zoneCode != code) { ret!((false, "zone currency mismatch")) }
+                else {
+                  new zoneOkCh, zoneHashCh in {
+                    listingZoneOk!(params, *zoneOkCh) |
+                    listingZoneParamsHash!(params, *zoneHashCh) |
+                    for (@zok <- zoneOkCh; @zhash <- zoneHashCh) {
+                      match zok {
+                        (true, Nil) => {
+                          if (zhash != paramsHashHex.hexToBytes()) {
+                            ret!((false, "params hash mismatch"))
+                          } else {
+                            listingNow!(*nowCh) |
+                            for (@now <- nowCh) {
+                              for (@s <<- listingState) {
+                                match s.get("currencies") {
+                                  Nil => ret!((false, "no currencies"))
+                                  currencies => {
+                                    match currencies.get(code) {
+                                      Nil => {
+                                        match s.get("assets") {
+                                          Nil => ret!((false, "no assets"))
+                                          assets => {
+                                            new curChOut, assetChOut in {
+                                              curChOut!({
+                                                "code": code,
+                                                "zoneUri": zoneUri,
+                                                "params": params,
+                                                "paramsHash": paramsHashHex,
+                                                "sponsorPubKey": sponsorHex,
+                                                "sponsorOwnerId": ownerId,
+                                                "status": "active",
+                                                "paused": false,
+                                                "tombstone": false,
+                                                "createdAt": now,
+                                                "activatedAt": now
+                                              }) |
+                                              assetChOut!({
+                                                "kind": "stable",
+                                                "controller": {"type": "zone", "uri": zoneUri},
+                                                "decimals": 8,
+                                                "currency": code
+                                              }) |
+                                              for (@record <- curChOut; @asset <- assetChOut) {
+                                                listingState!(
+                                                  s.set("currencies", currencies.set(code, record))
+                                                   .set("assets", assets.set(code, asset))) |
+                                                ret!((true, Nil))
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                      _ => ret!((false, "currency exists"))
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                        _ => ret!((false, "zone params out of bounds"))
+                      }
+                    }
+                  }
+                }
+                      }
+                      _ => ret!((false, "zone params"))
+                    }
+                  }
+                  _ => ret!((false, "zone currency"))
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+} |
+
+// ---- Market staging and activation ------------------------------------------------------
+
+contract ListingRegistry(@"stageMarket", @marketId, @version, @stageNonce, @base, @quote,
+                         pool, book, lock, @terms, @termsValues, @termsHashHex,
+                         @sponsorSig, ret) = {
+  new pairCh, tvhCh, hashCh, verifyCh, sponsorCh, ownerCh, payloadCh, nowCh in {
+    listingPairKey!(base, quote, *pairCh) |
+    for (@pairKey <- pairCh) {
+      if (marketId != pairKey ++ ":v" ++ version.toString()) {
+        ret!((false, "market id"))
+      } else {
+        termsHash!(*hash, "rcash:market-terms:v1", termsValues, *tvhCh) |
+        for (@computed <- tvhCh) {
+          if (computed != termsHashHex.hexToBytes()) { ret!((false, "terms hash")) }
+          else {
+            if (termsValues.nth(0) != marketId || termsValues.nth(2) != base
+                || termsValues.nth(3) != quote || termsValues.nth(4) != version.toString()) {
+              ret!((false, "terms fields"))
+            } else {
+              listingSponsorPayload!(marketId, terms.get("sponsorPubKey"),
+                                     termsHashHex, *payloadCh) |
+              for (@payload <- payloadCh) {
+                hash!(payload.toUtf8Bytes(), *hashCh) |
+                for (@digest <- hashCh) {
+                  verify!(digest, sponsorSig, terms.get("sponsorPubKey").hexToBytes(), *verifyCh) |
+                  for (@ok <- verifyCh) {
+                    if (ok == false) { ret!((false, "bad sponsor signature")) }
+                    else {
+                      revAddress!("fromPublicKey", terms.get("sponsorPubKey").hexToBytes(), *ownerCh) |
+                      for (@ownerId <- ownerCh) {
+                        if (ownerId != terms.get("sponsorOwnerId")) {
+                          ret!((false, "sponsor owner"))
+                        } else {
+                          new pPairCh, pTermsCh, pResCh, bPairCh, bTermsCh, lInfoCh, nowCh2 in {
+                            pool!("pair", *pPairCh) |
+                            pool!("terms", *pTermsCh) |
+                            pool!("reserves", *pResCh) |
+                            book!("pair", *bPairCh) |
+                            book!("terms", *bTermsCh) |
+                            lock!("info", *lInfoCh) |
+                            listingNow!(*nowCh2) |
+                            for (@(true, pbase, pquote) <- pPairCh;
+                                 @(true, pterms) <- pTermsCh;
+                                 @(true, rb, rq, ts, rate, fresh, paused) <- pResCh;
+                                 @(true, bbase, bquote) <- bPairCh;
+                                 @(true, bterms) <- bTermsCh;
+                                 @(true, linfo) <- lInfoCh;
+                                 @now <- nowCh2) {
+                              if (pbase != base || pquote != quote || bbase != base || bquote != quote) {
+                                ret!((false, "pair mismatch"))
+                              } else {
+                                if (pterms.get("termsHash") != computed
+                                    || bterms.get("termsHash") != computed
+                                    || linfo.get("termsHash") != computed) {
+                                  ret!((false, "terms drift"))
+                                } else {
+                                  if (rb != terms.get("seedBase") || rq != terms.get("seedQuote")) {
+                                    ret!((false, "seed mismatch"))
+                                  } else {
+                                    if (linfo.get("marketId") != marketId
+                                        || linfo.get("beneficiaryPubKey") != terms.get("sponsorPubKey")
+                                        || linfo.get("shares") != terms.get("seedInitialShares")
+                                        || linfo.get("untilHeight") != terms.get("lockUntilHeight")
+                                        || linfo.get("funded") != true
+                                        || linfo.get("released") != false) {
+                                      ret!((false, "lock mismatch"))
+                                    } else {
+                                      if (now + terms.get("lockMinBlocks") > terms.get("lockUntilHeight")) {
+                                        ret!((false, "lock too short"))
+                                      } else {
+                                        listingStage!(marketId, version, pairKey, stageNonce,
+                                                      base, quote, *pool, *book, *lock, terms,
+                                                      termsValues, termsHashHex, computed,
+                                                      ownerId, now, *ret)
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+} |
+
+contract listingStage(@marketId, @version, @pairKey, @stageNonce, @base, @quote,
+                       pool, book, lock, @terms, @termsValues, @termsHashHex,
+                       @computed, @ownerId, @now, ret) = {
+  for (@s <- listingState) {
+    match s.get("markets") {
+      Nil => { listingState!(s) | ret!((false, "no markets")) }
+      markets => {
+        match markets.get(marketId) {
+          Nil => {
+            match s.get("byPair") {
+              Nil => { listingState!(s) | ret!((false, "no pair map")) }
+              byPair => {
+                match byPair.get(pairKey) {
+                  Nil => {
+                    match s.get("byPairVersion") {
+                      Nil => { listingState!(s) | ret!((false, "no versions")) }
+                      byVersions => {
+                        match byVersions.get(pairKey) {
+                          Nil => { listingStoreDraft!(s, markets, byPair, byVersions, marketId,
+                                                      version, pairKey, stageNonce, base, quote,
+                                                      *pool, *book, *lock, terms, termsValues,
+                                                      termsHashHex, computed, ownerId, now, *ret) }
+                          last => {
+                            if (version <= last) { listingState!(s) | ret!((false, "version")) }
+                            else { listingStoreDraft!(s, markets, byPair, byVersions, marketId,
+                                                       version, pairKey, stageNonce, base, quote,
+                                                       *pool, *book, *lock, terms, termsValues,
+                                                       termsHashHex, computed, ownerId, now, *ret) }
+                          }
+                        }
+                      }
+                    }
+                  }
+                  existingId => {
+                    match markets.get(existingId) {
+                      Nil => { listingState!(s) | ret!((false, "pair map stale")) }
+                      existing => {
+                        if (existing.get("status") == "active") {
+                          listingState!(s) | ret!((false, "pair has active market"))
+                        } else {
+                          match s.get("byPairVersion") {
+                            Nil => { listingState!(s) | ret!((false, "no versions")) }
+                            byVersions => {
+                              match byVersions.get(pairKey) {
+                                Nil => { listingStoreDraft!(s, markets, byPair, byVersions, marketId,
+                                                            version, pairKey, stageNonce, base, quote,
+                                                            *pool, *book, *lock, terms, termsValues,
+                                                            termsHashHex, computed, ownerId, now, *ret) }
+                                last => {
+                                  if (version <= last) { listingState!(s) | ret!((false, "version")) }
+                                  else { listingStoreDraft!(s, markets, byPair, byVersions, marketId,
+                                                             version, pairKey, stageNonce, base, quote,
+                                                             *pool, *book, *lock, terms, termsValues,
+                                                             termsHashHex, computed, ownerId, now, *ret) }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+          _ => { listingState!(s) | ret!((false, "market exists")) }
+        }
+      }
+    }
+  }
+} |
+
+contract listingStoreDraft(@s, @markets, @byPair, @byVersions, @marketId, @version, @pairKey,
+                            @stageNonce, @base, @quote, pool, book, lock, @terms,
+                            @termsValues, @termsHashHex, @computed, @ownerId, @now, ret) = {
+  new recordCh, viewCh in {
+    viewCh!({
+      "marketId": marketId,
+      "slug": terms.get("slug"),
+      "base": base,
+      "quote": quote,
+      "version": version,
+      "status": "draft",
+      "sponsorOwnerId": ownerId,
+      "lpAssetId": terms.get("lpAssetId"),
+      "termsHashHex": termsHashHex,
+      "lockUntilHeight": terms.get("lockUntilHeight"),
+      "depthFloorQuote": terms.get("depthFloorQuote"),
+      "minTicketQuote": terms.get("minTicketQuote")
+    }) |
+    recordCh!({
+      "marketId": marketId,
+      "slug": terms.get("slug"),
+      "base": base,
+      "quote": quote,
+      "pairKey": pairKey,
+      "version": version,
+      "status": "draft",
+      "stageNonce": stageNonce,
+      "pool": *pool,
+      "book": *book,
+      "lock": *lock,
+      "terms": terms,
+      "termsValues": termsValues,
+      "termsHash": computed,
+      "termsHashHex": termsHashHex,
+      "sponsorPubKey": terms.get("sponsorPubKey"),
+      "sponsorOwnerId": ownerId,
+      "seedBase": terms.get("seedBase"),
+      "seedQuote": terms.get("seedQuote"),
+      "initialShares": terms.get("seedInitialShares"),
+      "lockUntilHeight": terms.get("lockUntilHeight"),
+      "depthFloorQuote": terms.get("depthFloorQuote"),
+      "minTicketQuote": terms.get("minTicketQuote"),
+      "baseFeedPolicyHash": terms.get("baseFeedPolicyHash"),
+      "quoteFeedPolicyHash": terms.get("quoteFeedPolicyHash"),
+      "lpAssetId": terms.get("lpAssetId"),
+      "createdAt": now,
+      "activatedAt": 0
+    }) |
+    for (@view <- viewCh; @record <- recordCh) {
+      match s.get("marketViews") {
+        Nil => { listingState!(s) | ret!((false, "no market views")) }
+        views => {
+          listingState!(s.set("markets", markets.set(marketId, record))
+                          .set("marketViews", views.set(marketId, view))
+                          .set("byPairVersion", byVersions.set(pairKey, version))) |
+          ret!((true, Nil))
+        }
+      }
+    }
+  }
+} |
+
+contract ListingRegistry(@"activateMarket", @marketId, @stageNonce, @termsHashHex, ret) = {
+  for (@s <<- listingState) {
+    match s.get("markets") {
+      Nil => ret!((false, "no markets"))
+      markets => {
+        match markets.get(marketId) {
+          Nil => ret!((false, "no market"))
+          m => {
+            if (m.get("status") != "draft") { ret!((false, "not draft")) }
+            else {
+              if (m.get("stageNonce") != stageNonce || m.get("termsHashHex") != termsHashHex) {
+                ret!((false, "draft mismatch"))
+              } else {
+                new pairCh in {
+                  listingPairKey!(m.get("base"), m.get("quote"), *pairCh) |
+                  for (@pairKey <- pairCh) {
+                    new baseCurCh, quoteCurCh, pairFeedCh, bfCh, qfCh, resCh in {
+                      ListingRegistry!("currency", m.get("base"), *baseCurCh) |
+                      ListingRegistry!("currency", m.get("quote"), *quoteCurCh) |
+                      OracleHub!("getPair", m.get("base"), m.get("quote"), *pairFeedCh) |
+                      OracleHub!("feedStatus", m.get("base"), *bfCh) |
+                      OracleHub!("feedStatus", m.get("quote"), *qfCh) |
+                      match m.get("pool") {
+                        poolCap => {
+                      @poolCap!("reserves", *resCh) |
+                      for (@bc <- baseCurCh; @qc <- quoteCurCh; @pf <- pairFeedCh;
+                           @bf <- bfCh; @qf <- qfCh;
+                           @(true, rb, rq, ts, rate, fresh, paused) <- resCh) {
+                        if (bc == (false, "unknown currency") || qc == (false, "unknown currency")) {
+                          ret!((false, "currency"))
+                        } else {
+                          match bc {
+                            (true, brec) => {
+                              match qc {
+                                (true, qrec) => {
+                                  if (brec.get("status") != "active" || qrec.get("status") != "active") {
+                                    ret!((false, "currency inactive"))
+                                  } else {
+                                    match pf {
+                                      (true, feed) => {
+                                        if (feed.get("fresh") != true) { ret!((false, "stale oracle")) }
+                                        else {
+                                          if (bf.get("policyHash") != m.get("baseFeedPolicyHash").hexToBytes()
+                                              || qf.get("policyHash") != m.get("quoteFeedPolicyHash").hexToBytes()) {
+                                            ret!((false, "feed policy drift"))
+                                          } else {
+                                            new valueCh in {
+                                              valueCh!(((rb * rate) / 100000000).toInt() + rq) |
+                                              for (@value <- valueCh) {
+                                                if (value < m.get("depthFloorQuote")) {
+                                                  ret!((false, "below depth floor"))
+                                                } else {
+                                                  listingActivate!(s, markets, m, pairKey, *ret)
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                      _ => ret!((false, "feed error"))
+                                    }
+                                  }
+                                }
+                                _ => ret!((false, "quote currency"))
+                              }
+                            }
+                            _ => ret!((false, "base currency"))
+                          }
+                        }
+                      }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+} |
+
+contract listingActivate(@s, @markets, @m, @pairKey, ret) = {
+  for (@cur <- listingState) {
+    match cur.get("markets") {
+      Nil => ret!((false, "no markets"))
+      curMarkets => {
+        match curMarkets.get(m.get("marketId")) {
+          Nil => ret!((false, "no market"))
+          fresh => {
+            match cur.get("byPair") {
+              Nil => ret!((false, "no pair map"))
+              byPair => {
+                match byPair.get(pairKey) {
+                  Nil => {
+                    match cur.get("marketViews") {
+                      Nil => ret!((false, "no market views"))
+                      views => {
+                        match views.get(m.get("marketId")) {
+                          Nil => ret!((false, "no market view"))
+                          v => {
+                            listingState!(cur.set("markets", curMarkets.set(m.get("marketId"),
+                              fresh.set("status", "active").set("activatedAt", m.get("createdAt"))))
+                              .set("marketViews", views.set(m.get("marketId"), v.set("status", "active")))
+                              .set("byPair", byPair.set(pairKey, m.get("marketId")))) |
+                            ret!((true, Nil))
+                          }
+                        }
+                      }
+                    }
+                  }
+                  _ => ret!((false, "pair active"))
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+} |
+
+// ---- Views ------------------------------------------------------------------------------
+
+contract ListingRegistry(@"currency", @code, ret) = {
+  for (@s <<- listingState) {
+    match s.get("currencies") {
+      Nil => ret!((false, "no currencies"))
+      currencies => {
+        match currencies.get(code) {
+          Nil => ret!((false, "unknown currency"))
+          record => ret!((true, record))
+        }
+      }
+    }
+  }
+} |
+
+contract ListingRegistry(@"asset", @assetId, ret) = {
+  for (@s <<- listingState) {
+    match s.get("assets") {
+      Nil => ret!((false, "no assets"))
+      assets => {
+        match assets.get(assetId) {
+          Nil => ret!((false, "unknown asset"))
+          meta => ret!((true, meta))
+        }
+      }
+    }
+  }
+} |
+
+contract ListingRegistry(@"currencies", ret) = {
+  for (@s <<- listingState) {
+    match s.get("currencies") { Nil => ret!((true, {})) cs => ret!((true, cs)) }
+  }
+} |
+
+contract ListingRegistry(@"assets", ret) = {
+  for (@s <<- listingState) {
+    match s.get("assets") { Nil => ret!((true, {})) a => ret!((true, a)) }
+  }
+} |
+
+contract ListingRegistry(@"markets", ret) = {
+  for (@s <<- listingState) {
+    match s.get("marketViews") {
+      Nil => ret!((true, {}))
+      views => ret!((true, views))
+    }
+  }
+} |
+
+contract ListingRegistry(@"marketView", @marketId, ret) = {
+  for (@s <<- listingState) {
+    match s.get("markets") {
+      Nil => ret!((false, "no markets"))
+      markets => {
+        match markets.get(marketId) {
+          Nil => ret!((false, "no market"))
+          m => {
+            new vCh in { listingMarketView!(m, *vCh) | for (@v <- vCh) { ret!((true, v)) } }
+          }
+        }
+      }
+    }
+  }
+} |
+
+contract ListingRegistry(@"marketFor", @source, @dest, ret) = {
+  new pairCh in {
+    listingPairKey!(source, dest, *pairCh) |
+    for (@pairKey <- pairCh) {
+      for (@s <<- listingState) {
+        match s.get("byPair") {
+          Nil => ret!((false, "no market"))
+          byPair => {
+            match byPair.get(pairKey) {
+              Nil => ret!((false, "no market"))
+              marketId => {
+                match s.get("markets") {
+                  Nil => ret!((false, "no market"))
+                  markets => {
+                    match markets.get(marketId) {
+                      Nil => ret!((false, "no market"))
+                      m => {
+                        if (m.get("status") != "active") { ret!((false, "no market")) }
+                        else { ret!((true, marketId)) }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+} |
+
+contract ListingRegistry(@"marketCapsById", @marketId, ret) = {
+  for (@s <<- listingState) {
+    match s.get("markets") {
+      Nil => ret!((false, "no markets"))
+      markets => {
+        match markets.get(marketId) {
+          Nil => ret!((false, "no market"))
+          m => ret!((true, {"pool": m.get("pool"), "book": m.get("book"), "lock": m.get("lock")}))
+        }
+      }
+    }
+  }
+} |
+
+contract ListingRegistry(@"terms", @marketId, ret) = {
+  for (@s <<- listingState) {
+    match s.get("markets") {
+      Nil => ret!((false, "no markets"))
+      markets => {
+        match markets.get(marketId) {
+          Nil => ret!((false, "no market"))
+          m => ret!((true, {"terms": m.get("terms"), "termsValues": m.get("termsValues"),
+                            "termsHashHex": m.get("termsHashHex")}))
+        }
+      }
+    }
+  }
+} |
+
+contract ListingRegistry(@"isActive", @marketId, ret) = {
+  for (@s <<- listingState) {
+    match s.get("markets") {
+      Nil => ret!((true, false))
+      markets => {
+        match markets.get(marketId) {
+          Nil => ret!((true, false))
+          m => {
+            if (m.get("status") != "active") { ret!((true, false)) }
+            else {
+              new pairCh in {
+                listingPairKey!(m.get("base"), m.get("quote"), *pairCh) |
+                for (@pairKey <- pairCh) {
+                  new feedCh in {
+                    OracleHub!("getPair", m.get("base"), m.get("quote"), *feedCh) |
+                    for (@r <- feedCh) {
+                      match r {
+                        (true, feed) => {
+                          if (feed.get("fresh") == true) { ret!((true, true)) }
+                          else { ret!((true, false)) }
+                        }
+                        _ => ret!((true, false))
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+} |
+
+// ---- Admin: pause, delist, cancel -------------------------------------------------------
+
+contract listingAdminApply(@action, @args, @nonce, ret) = {
+  for (@s <- listingState) {
+    if (nonce <= s.get("govNonce")) {
+      listingState!(s) | ret!((false, "replay"))
+    } else {
+      if (action == "pauseMarket") {
+        match args.nth(0) {
+          marketId => {
+            match args.nth(1) {
+              p => {
+                match s.get("markets") {
+                  Nil => { listingState!(s) | ret!((false, "no markets")) }
+                  markets => {
+                    match markets.get(marketId) {
+                      Nil => { listingState!(s) | ret!((false, "no market")) }
+                      m => {
+                        match s.get("marketViews") {
+                          Nil => { listingState!(s) | ret!((false, "no market views")) }
+                          views => {
+                            match views.get(marketId) {
+                              Nil => { listingState!(s) | ret!((false, "no market view")) }
+                              v => {
+                                if (p == 1) {
+                                  listingState!(s.set("markets", markets.set(marketId, m.set("status", "paused")))
+                                                  .set("marketViews", views.set(marketId, v.set("status", "paused")))
+                                                  .set("govNonce", nonce)) |
+                                  ret!((true, Nil))
+                                } else {
+                                  listingState!(s.set("markets", markets.set(marketId, m.set("status", "active")))
+                                                  .set("marketViews", views.set(marketId, v.set("status", "active")))
+                                                  .set("govNonce", nonce)) |
+                                  ret!((true, Nil))
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      } else {
+        if (action == "delistMarket") {
+          match args.nth(0) {
+            marketId => {
+              match s.get("markets") {
+                Nil => { listingState!(s) | ret!((false, "no markets")) }
+                markets => {
+                  match markets.get(marketId) {
+                    Nil => { listingState!(s) | ret!((false, "no market")) }
+                    m => {
+                      match s.get("byPair") {
+                        Nil => { listingState!(s) | ret!((false, "no pair map")) }
+                        byPair => {
+                          match s.get("marketViews") {
+                            Nil => { listingState!(s) | ret!((false, "no market views")) }
+                            views => {
+                              match views.get(marketId) {
+                                Nil => { listingState!(s) | ret!((false, "no market view")) }
+                                v => {
+                                  listingState!(s.set("markets", markets.set(marketId, m.set("status", "delisted")))
+                                                  .set("marketViews", views.set(marketId, v.set("status", "delisted")))
+                                                  .set("govNonce", nonce)) |
+                                  ret!((true, Nil))
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        } else {
+          if (action == "cancelMarket") {
+            match args.nth(0) {
+              marketId => {
+                match s.get("markets") {
+                  Nil => { listingState!(s) | ret!((false, "no markets")) }
+                  markets => {
+                    match markets.get(marketId) {
+                      Nil => { listingState!(s) | ret!((false, "no market")) }
+                      m => {
+                        if (m.get("status") != "draft") { listingState!(s) | ret!((false, "not draft")) }
+                        else {
+                          listingState!(s.set("markets", markets.set(marketId, m.set("status", "cancelled")))
+                                          .set("govNonce", nonce)) |
+                          ret!((true, Nil))
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          } else {
+            if (action == "pauseCurrency") {
+              match args.nth(0) {
+                code => { match args.nth(1) { p => {
+                  match s.get("currencies") {
+                    Nil => { listingState!(s) | ret!((false, "no currencies")) }
+                    currencies => { match currencies.get(code) {
+                      Nil => { listingState!(s) | ret!((false, "no currency")) }
+                      rec => {
+                        if (p == 1) {
+                          listingState!(s.set("currencies", currencies.set(code,
+                            rec.set("status", "paused").set("paused", true))).set("govNonce", nonce)) |
+                          ret!((true, Nil))
+                        } else {
+                          listingState!(s.set("currencies", currencies.set(code,
+                            rec.set("status", "active").set("paused", false))).set("govNonce", nonce)) |
+                          ret!((true, Nil))
+                        }
+                      }
+                    } }
+                  }
+                } } }
+              }
+            } else {
+              listingState!(s) | ret!((false, "unknown action"))
+            }
+          }
+        }
+      }
+    }
+  }
+} |
+
+contract ListingRegistry(@"admin", @nonce, @action, @args, @sigs, ret) = {
+  for (@s <<- listingState) {
+    match s.get("admins") {
+      Nil => ret!((false, "no admins"))
+      admins => {
+        match s.get("threshold") {
+          threshold => {
+            match s.get("govNonce") {
+              lastNonce => {
+                if (nonce <= lastNonce) { ret!((false, "replay")) }
+                else {
+                  new okCh in {
+                    verifyAdmin!("markets", nonce, action, args, sigs, admins, threshold, *okCh) |
+                    for (@ok <- okCh) {
+                      if (ok) { listingAdminApply!(action, args, nonce, *ret) }
+                      else { ret!((false, "signatures")) }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+} |
