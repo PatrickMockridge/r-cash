@@ -1,0 +1,28 @@
+// A deploy that is not the owner obtains the account capability and is refused.
+// Placeholders: __ROOT_URI__, __OWNER_PUB__.
+new
+  rl(`rho:registry:lookup`),
+  rootCh, afCh, ac, oCh, bCh,
+  deployId(`rho:rchain:deployId`),
+  deployerId(`rho:rchain:deployerId`)
+in {
+  rl!(`__ROOT_URI__`, *rootCh) |
+  for (Root <- rootCh) {
+    Root!("resolve", "component:account-factory", 1, *afCh) |
+    for (@(true, afUri, _) <- afCh) {
+      rl!(afUri, *ac) |
+      for (AccountFactory <- ac) {
+        AccountFactory!("getOrCreate", "__OWNER_PUB__".hexToBytes(), *oCh) |
+        for (@(true, account, ownerId) <- oCh) {
+          @account!("balance", *deployerId, "REV", *bCh) |
+          for (@b <- bCh) {
+            match b {
+              (false, "not owner") => { deployId!("balance-refused") }
+              other => { deployId!(other) }
+            }
+          }
+        }
+      }
+    }
+  }
+}

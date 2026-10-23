@@ -9,7 +9,7 @@ means a devnet scenario, `TLA+` names the model in `spec/tla`.
 | ID | Invariant | Owner | Enforcement | Test |
 |---|---|---|---|---|
 | I1 | Quiescent linearity: one `Full` in every cell | every stateful component | every consumed path re-posts; P1/P6 | TLA+ `CellLinearity`, unit |
-| I2 | Currency code unique; stablecoin URI matches `StablecoinDirectory`; params hash matches the factory attestation | `CurrencyRegistry` | single-cell commit after reading the directory and verifying the attestation | unit, scenario |
+| I2 | Currency code unique; stablecoin URI, params hash and sponsor match the live attestation; the directory is written only after that check | `CurrencyRegistry`, `StablecoinDirectory` | one registry consume at commit; the registry holds the directory's only write capability | unit, scenario |
 | I3 | One active market per pair; version strictly increases | `MarketIndex` | `stage`/`activate` consume one cell; `byPair` in the same cell | TLA+ `PoolConservation` peer, scenario |
 | I4 | Legal market transitions: `draft → active → paused/active → delisted`, `draft → cancelled`; terminal states do not revive | `MarketIndex` | transition table in the arm | unit, scenario |
 | I5 | Terms integrity: `termsHash = H(schema, values)`; no mutation | `MarketTerms` | content-addressed `put` recomputes the hash | unit, vectors |
@@ -30,9 +30,19 @@ means a devnet scenario, `TLA+` names the model in `spec/tla`.
 
 ## 2. Stablecoin issuer (v0.4)
 
-The DAI-like, REV-collateralised issuer is specified in Phase 1. The old CDP
-accounting section is deleted; the new issuer will define stablecoin supply, vault
-debt, accrual and liquidation invariants in its own section when implemented.
+The issuer is DAI-like with REV-only collateral and separate contracts per authority. The
+old CDP accounting section is deleted; these are the issuer's invariants.
+
+| ID | Invariant | Owner | Enforcement | Test |
+|---|---|---|---|---|
+| S1 | `supply = totalPrincipal = minted − burned`; `supply ≤ maxSupply`; only the VaultBook/Engine hold the scoped mint/burn caps | `Stablecoin` | one `issuerState` cell; cap comparison before the ERTP mint/burn; P3 commit | unit |
+| S2 | `totalDebt = Σ vault.debt` and `totalCollateral = Σ vault.collateral` | `VaultBook` | every arm writes the vault and all totals through one `vaultUpdate` commit | unit |
+| S3 | `totalDebt + badDebt = supply + totalAccruedInterest` | `VaultBook` + `Stablecoin` | the same commit carries the debt, interest, bad-debt and supply deltas; no second principal ledger | unit, scenario |
+| S4 | Mint and collateral withdrawal preserve `health(collateral, debt, rate, mcr)`; mint also enforces min/max debt and the ceiling | `VaultBook` | `CollateralMath.health` before the commit; stale feed or missing rate is a refusal | unit |
+| S5 | Only an unhealthy vault is liquidatable, bounded by the close factor, and only through the liquidation capability | `VaultBook`, `LiquidationEngine` | the engine holds the only `liquidationAuth`; the arm checks health and `ceil(debt·closeFactor)` | unit, scenario |
+| S6 | A liquidation seizes `payout(repay, bonus, rate)` or, when the vault cannot cover that slice, all collateral only if the repayment covers the collateral's value; the uncovered residual is booked to `badDebt` and the debt cleared | `VaultBook` | effect-then-commit: burn, custody withdraw, then one vault/totals write; any refusal aborts the deploy | unit, scenario |
+| S7 | REV leaves custody only through the custody capability; stablecoin leaves supply only through burn; a refusal on `liquidate` returns the payment | `CollateralCustody`, `Stablecoin`, `VaultBook` | scoped caps in closure; the liquidate arm peeks the amount and returns `(false, reason, payment)` before any consume | unit |
+| S8 | One system per currency; listing requires the sponsor signature and the live attestation | `CurrencyRegistry` | registry consume at commit; directory write with a registry-only capability | unit, scenario |
 
 ## 3. Canonical groups (v3)
 

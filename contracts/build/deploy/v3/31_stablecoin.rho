@@ -9,7 +9,8 @@ new
   CollateralCustody,
   RiskParameters,
   VaultBook, vaultState,
-  stablecoinCheck,
+  LiquidationEngine,
+  stablecoinCheck, vaultLiquidateCommit,
   vaultNow, vaultPrice, vaultMath, vaultUpdate, vaultGovernor, vaultAccountFactory,
   rl(`rho:registry:lookup`),
   rs(`rho:registry:insertArbitrary`),
@@ -18,9 +19,9 @@ new
   deployId(`rho:rchain:deployId`),
   currencyCh, paramsCh, paramsHashCh, sponsorCh, checkCh, nowCh,
   ertpCh, kitCh, revIssuerCh, burnPurseCh, revPurseCh, burnFacetCh,
-  mintAuth, burnAuth, custodyAuth,
-  uSC, uCustody, uParams, uVault,
-  scUri, custodyUri, paramsUri, vaultUri, attCh
+  mintAuth, burnAuth, custodyAuth, liquidationAuth,
+  uSC, uCustody, uParams, uVault, uLiq,
+  scUri, custodyUri, paramsUri, vaultUri, liqUri, attCh
 in {
 
   contract stablecoinCheck(@currency, @params, @paramsHash, @sponsorHex, @sig, ret) = {
@@ -179,6 +180,81 @@ in {
                       }
                     }
                   }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  } |
+
+  // Effect-then-commit liquidation: burn the liquidator's stablecoin, seize REV
+  // from custody, then write the vault and totals in one cell update. Any
+  // refusal aborts the deploy, so a half-settled liquidation cannot persist.
+  contract vaultLiquidateCommit(@s, @v, @ownerId, @now2, @accrued, @amount,
+                                @seized, @writeOff, payment, ret2) = {
+    new burnCh, wdCh, nsCh in {
+      for (@s2 <- vaultState) {
+        match s2.get("vaults").get(ownerId) {
+          Nil => { ret2!(1 / 0) }
+          v2 => {
+            if (v2.get("auth") != v.get("auth") || s2.get("rev") != s.get("rev")) {
+              ret2!(1 / 0)
+            } else {
+              Stablecoin!("burn", *payment, amount, *burnAuth, *burnCh) |
+              for (@b <- burnCh) {
+                match b {
+                  (true, burned, supply) => {
+                    CollateralCustody!("withdraw", seized, *custodyAuth, *wdCh) |
+                    for (@w <- wdCh) {
+                      match w {
+                        (true, paymentOut) => {
+                          if (writeOff == true) {
+                            vaultUpdate!(s2, ownerId, {
+                              "auth": v2.get("auth"),
+                              "collateral": 0,
+                              "debt": 0,
+                              "lastHeight": now2
+                            }, s2.get("totalDebt") - v2.get("debt"),
+                            s2.get("totalAccruedInterest") + (accrued - v2.get("debt")),
+                            s2.get("totalCollateral") - seized,
+                            s2.get("badDebt") + (accrued - amount),
+                            s2.get("rev") + 1, *nsCh) |
+                            for (@ns <- nsCh) {
+                              vaultState!(ns) |
+                              ret2!((true, paymentOut, {
+                                "repaid": amount,
+                                "seized": seized,
+                                "badDebt": accrued - amount
+                              }))
+                            }
+                          } else {
+                            vaultUpdate!(s2, ownerId, {
+                              "auth": v2.get("auth"),
+                              "collateral": v2.get("collateral") - seized,
+                              "debt": accrued - amount,
+                              "lastHeight": now2
+                            }, s2.get("totalDebt") + (accrued - v2.get("debt")) - amount,
+                            s2.get("totalAccruedInterest") + (accrued - v2.get("debt")),
+                            s2.get("totalCollateral") - seized,
+                            s2.get("badDebt"),
+                            s2.get("rev") + 1, *nsCh) |
+                            for (@ns <- nsCh) {
+                              vaultState!(ns) |
+                              ret2!((true, paymentOut, {
+                                "repaid": amount,
+                                "seized": seized,
+                                "badDebt": 0
+                              }))
+                            }
+                          }
+                        }
+                        _ => { ret2!(1 / 0) }
+                      }
+                    }
+                  }
+                  _ => { ret2!(1 / 0) }
                 }
               }
             }
@@ -348,7 +424,7 @@ in {
   } |
 
   contract CollateralCustody(@"balance", ret2) = {
-    @revPurse!("balance", *ret2)
+    @revPurse!("getCurrentAmount", *ret2)
   } |
 
   contract CollateralCustody(@"attest", ret2) = {
@@ -731,6 +807,103 @@ in {
     }
   } |
 
+  // Permissionless liquidation. The only authority is the liquidation cap held by
+  // LiquidationEngine. A liquidator burns stablecoin and receives REV at the
+  // accrual-consistent price plus the bonus, bounded by the close factor. If the
+  // vault cannot cover the bonus slice, it may be cleared only by repaying at
+  // least the collateral's value; the uncovered residual is written to badDebt.
+  contract VaultBook(@"liquidate", @ownerId, @auth, payment, @minCollateral, ret2) = {
+    if (auth != *liquidationAuth) { ret2!((false, "bad liquidation authority", *payment)) }
+    else {
+      new amtCh in {
+        Stablecoin!("amountOf", *payment, *amtCh) |
+        for (@a <- amtCh) {
+          match a {
+            (true, amount) => {
+              if (amount <= 0) { ret2!((false, "amount", *payment)) }
+              else {
+                for (@s <<- vaultState) {
+                  match s.get("vaults").get(ownerId) {
+                    Nil => { ret2!((false, "no vault", *payment)) }
+                    v => {
+                      new nowCh2, rateCh, accCh, mathCh in {
+                        vaultNow!(*nowCh2) |
+                        vaultPrice!(currency, params.get("maxOracleAge"), *rateCh) |
+                        for (@now2 <- nowCh2; @rr <- rateCh) {
+                          match rr {
+                            (rate, fresh) => {
+                              if (fresh == false) { ret2!((false, "stale feed", *payment)) }
+                              else {
+                                if (rate <= 0) { ret2!((false, "no rate", *payment)) }
+                                else {
+                                  vaultMath!(*mathCh) |
+                                  for (CollateralMath <- mathCh) {
+                                    CollateralMath!("accrue", v.get("debt"), v.get("lastHeight"),
+                                                    now2, params.get("ratePerBlock"), *accCh) |
+                                    for (@accrued <- accCh) {
+                                      new hCh, pCh in {
+                                        CollateralMath!("health", v.get("collateral"), accrued,
+                                                        rate, params.get("mcrBps"), *hCh) |
+                                        for (@healthy <- hCh) {
+                                          if (healthy) { ret2!((false, "healthy", *payment)) }
+                                          else {
+                                            match ((accrued * params.get("closeFactorBps") + 9999) / 10000).toInt() {
+                                              maxRepay => {
+                                                if (amount > maxRepay) {
+                                                  ret2!((false, "close factor", *payment))
+                                                } else {
+                                                  CollateralMath!("payout", amount,
+                                                                  params.get("bonusBps"),
+                                                                  rate, *pCh) |
+                                                  for (@seized0 <- pCh) {
+                                                    if (seized0 <= v.get("collateral")) {
+                                                      if (seized0 < minCollateral) {
+                                                        ret2!((false, "slippage", *payment))
+                                                      } else {
+                                                        vaultLiquidateCommit!(s, v, ownerId, now2,
+                                                          accrued, amount, seized0, false,
+                                                          *payment, *ret2)
+                                                      }
+                                                    } else {
+                                                      if (amount * 100000000 < v.get("collateral") * rate) {
+                                                        ret2!((false, "underwater repayment", *payment))
+                                                      } else {
+                                                        if (v.get("collateral") < minCollateral) {
+                                                          ret2!((false, "slippage", *payment))
+                                                        } else {
+                                                          vaultLiquidateCommit!(s, v, ownerId, now2,
+                                                            accrued, amount, v.get("collateral"), true,
+                                                            *payment, *ret2)
+                                                        }
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            _ => { ret2!((false, "not a stablecoin payment", *payment)) }
+          }
+        }
+      }
+    }
+  } |
+
   contract VaultBook(@"vault", @ownerId, ret2) = {
     for (@s <<- vaultState) {
       match s.get("vaults").get(ownerId) {
@@ -770,6 +943,19 @@ in {
     for (@s <<- vaultState) { ret2!((true, s.get("vaults").keys())) }
   } |
 
+  contract VaultBook(@"totals", ret2) = {
+    for (@s <<- vaultState) {
+      ret2!((true, {
+        "totalDebt": s.get("totalDebt"),
+        "totalAccruedInterest": s.get("totalAccruedInterest"),
+        "totalCollateral": s.get("totalCollateral"),
+        "badDebt": s.get("badDebt"),
+        "paused": s.get("paused"),
+        "rev": s.get("rev")
+      }))
+    }
+  } |
+
   contract VaultBook(@"params", ret2) = {
     ret2!((true, params))
   } |
@@ -806,6 +992,19 @@ in {
     }))
   } |
 
+  // The engine holds the liquidation cap; the VaultBook keeps the accounting.
+  // Anyone may call the engine, but nothing else can act as a liquidator.
+  contract LiquidationEngine(@"liquidate", @ownerId, payment, @minCollateral, ret2) = {
+    VaultBook!("liquidate", ownerId, *liquidationAuth, *payment, minCollateral, *ret2)
+  } |
+
+  contract LiquidationEngine(@"attest", ret2) = {
+    ret2!((true, {
+      "currency": currency,
+      "template": "rcash:liquidation-engine:v1"
+    }))
+  } |
+
                     issuerState!({
                       "totalPrincipal": 0,
                       "maxSupply": params.get("debtCeiling")
@@ -823,11 +1022,13 @@ in {
                     rs!(bundle+{*CollateralCustody}, *uCustody) |
                     rs!(bundle+{*RiskParameters}, *uParams) |
                     rs!(bundle+{*VaultBook}, *uVault) |
+                    rs!(bundle+{*LiquidationEngine}, *uLiq) |
                     for (@scUri <- uSC; @custodyUri <- uCustody;
-                         @paramsUri <- uParams; @vaultUri <- uVault) {
+                         @paramsUri <- uParams; @vaultUri <- uVault;
+                         @liqUri <- uLiq) {
                       Stablecoin!("attest", *attCh) |
                       for (@att <- attCh) {
-                        deployId!([scUri, custodyUri, paramsUri, vaultUri, att])
+                        deployId!([scUri, custodyUri, paramsUri, vaultUri, liqUri, att])
                       }
                     }
                   }

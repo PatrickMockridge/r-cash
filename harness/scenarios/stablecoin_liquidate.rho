@@ -1,0 +1,39 @@
+// Liquidate one vault through the engine and return the liquidation summary,
+// the resulting vault view and the VaultBook totals.
+// Placeholders: __HOLDER_URI__, __LIQ_URI__, __VAULT_URI__, __OWNER_ID__,
+//               __AMOUNT__, __MIN_COLLATERAL__.
+new
+  rl(`rho:registry:lookup`),
+  hCh, lCh, vCh, pCh, rCh, vv, tt,
+  deployId(`rho:rchain:deployId`)
+in {
+  rl!(`__HOLDER_URI__`, *hCh) |
+  rl!(`__LIQ_URI__`, *lCh) |
+  rl!(`__VAULT_URI__`, *vCh) |
+  for (Holder <- hCh; LiquidationEngine <- lCh; VaultBook <- vCh) {
+    Holder!("take", __AMOUNT__, *pCh) |
+    for (@p <- pCh) {
+      match p {
+        (true, payment) => {
+          LiquidationEngine!("liquidate", "__OWNER_ID__", payment,
+                             __MIN_COLLATERAL__, *rCh) |
+          for (@res <- rCh) {
+            match res {
+              (true, revPayment, summary) => {
+                VaultBook!("vault", "__OWNER_ID__", *vv) |
+                for (@view <- vv) {
+                  VaultBook!("totals", *tt) |
+                  for (@totals <- tt) {
+                    deployId!([summary, view, totals])
+                  }
+                }
+              }
+              _ => { deployId!(res) }
+            }
+          }
+        }
+        _ => { deployId!(p) }
+      }
+    }
+  }
+}

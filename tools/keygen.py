@@ -136,10 +136,12 @@ def main(argv: list[str] | None = None) -> int:
         for name, rec in keys.items():
             if name == "deployer":
                 continue
-            if rec.get("funded"):
-                continue
+            # Always attempt the drip: the local flag cannot distinguish a fresh
+            # devnet from the chain that funded it. The endpoint is idempotent.
             try:
-                faucet(rec["address"], args.http)
+                response = faucet(rec["address"], args.http)
+                if response.get("deployError"):
+                    raise RuntimeError(response["deployError"])
                 rec["funded"] = True
                 print(f"faucet: {name} {rec['address']}")
             except urllib.error.HTTPError as e:

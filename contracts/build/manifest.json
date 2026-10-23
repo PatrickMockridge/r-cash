@@ -82,13 +82,13 @@
       "source_bytes": 729
     },
     "contracts/build/deploy/v3/09_identity.rho": {
-      "brace_depth": 16,
-      "contracts": 4,
-      "grammar_depth": 27,
-      "minified_bytes": 1774,
+      "brace_depth": 30,
+      "contracts": 14,
+      "grammar_depth": 50,
+      "minified_bytes": 5672,
       "operator_run": 3,
-      "sha256": "f49f1901b2c73bbfbbccbf02eb7324e828dc710707c6b3fea9221979bc54e408",
-      "source_bytes": 2999
+      "sha256": "4517bae9e9f024062402911a1ae55e7a8c1d99c28cd111d6b45be8756e9ca8e3",
+      "source_bytes": 13714
     },
     "contracts/build/deploy/v3/12_oracle_registry.rho": {
       "brace_depth": 20,
@@ -108,6 +108,15 @@
       "sha256": "cca092e8e5f73d2d404a6781bca25be7d9ef413b79e5166b624cb21f31f7c48c",
       "source_bytes": 4506
     },
+    "contracts/build/deploy/v3/14_asset_resolver.rho": {
+      "brace_depth": 17,
+      "contracts": 2,
+      "grammar_depth": 29,
+      "minified_bytes": 1877,
+      "operator_run": 3,
+      "sha256": "d17ab83730db411e251b56e5520a936ab3f867c415dd1baf234312e42a89c42e",
+      "source_bytes": 3172
+    },
     "contracts/build/deploy/v3/31_feed.rho": {
       "brace_depth": 26,
       "contracts": 12,
@@ -119,12 +128,21 @@
     },
     "contracts/build/deploy/v3/31_stablecoin.rho": {
       "brace_depth": 41,
-      "contracts": 30,
+      "contracts": 35,
       "grammar_depth": 66,
-      "minified_bytes": 17950,
+      "minified_bytes": 22361,
       "operator_run": 5,
-      "sha256": "02e9a1db3bf417c9d1649490a162d5525cad7e76bbf246b42ac2aa29576cc8a0",
-      "source_bytes": 33634
+      "sha256": "766bcc0885f19855bd4b345473e7c8cb5fbeeeb8d8ca59873e842391bf05b92c",
+      "source_bytes": 43762
+    },
+    "contracts/build/deploy/v3/32_currency_registry.rho": {
+      "brace_depth": 32,
+      "contracts": 9,
+      "grammar_depth": 53,
+      "minified_bytes": 5018,
+      "operator_run": 4,
+      "sha256": "97c2aa4252689998e21096062614884b7ce48712a8124b073d925a3479a2a7b2",
+      "source_bytes": 9563
     }
   },
   "schema": "rcash:contract-metrics:v1"

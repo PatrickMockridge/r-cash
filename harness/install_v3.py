@@ -163,10 +163,6 @@ def main(argv: list[str] | None = None) -> int:
         state[f"{name}_uri"] = result["uris"][0]
         save(state)
 
-    identity = step("09_identity", "identity", common)
-    state["account_factory_uri"] = identity["uris"][0]
-    save(state)
-
     allowlist = "[" + ", ".join(
         f'"{keys[n]["public"]}"' for n in ["reporter1", "reporter2", "reporter3"]
     ) + "]"
@@ -180,6 +176,22 @@ def main(argv: list[str] | None = None) -> int:
 
     hub = step("13_oracle_hub", "oracle_hub", common)
     state["oracle_hub_uri"] = hub["uris"][0]
+    save(state)
+
+    currencies = step("32_currency_registry", "currency_registry", common)
+    state["stablecoin_directory_uri"] = currencies["uris"][0]
+    state["currency_registry_uri"] = currencies["uris"][1]
+    save(state)
+
+    resolver = step("14_asset_resolver", "asset_resolver", common)
+    state["asset_resolver_uri"] = resolver["uris"][0]
+    save(state)
+
+    identity = step("09_identity", "identity", {
+        "__ROOT_URI__": root_uri,
+        "__ASSET_RESOLVER_URI__": resolver["uris"][0],
+    })
+    state["account_factory_uri"] = identity["uris"][0]
     save(state)
 
     print(json.dumps(state, indent=2))

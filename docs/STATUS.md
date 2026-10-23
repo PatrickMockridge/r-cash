@@ -16,10 +16,13 @@ the next build.
 |---|---|
 | Deleted | v0.1/v0.2/v0.3 CDP contracts, vault arms, CDP tests/scenarios, `CdpAccounting` TLA, SDK/CLI/WASM vault methods, web Mint screen, CDP docs sections |
 | Retained | Root, Clock, Verifier, Codec, Bounds (with `checkIssuer`), AdminGuard, Governor, AmmMath, OracleMath, ClaimCode, OracleRegistry/Feed/Hub, AccountFactory account capability |
-| Stablecoin issuer | `Stablecoin`, `CollateralCustody`, `RiskParameters`, `VaultBook`, `CollateralMath`; signed params, bounded risk, mint/repay/withdraw and REV custody |
-| Issuer checks | stablecoin system deploy, attestations, supply, params, custody, and open → deposit REV → mint → repay → withdraw all pass on a fresh devnet |
+| Stablecoin issuer | `Stablecoin`, `CollateralCustody`, `RiskParameters`, `VaultBook`, `CollateralMath`, `LiquidationEngine`; signed params, bounded risk, mint/repay/withdraw, REV custody, partial liquidation and bad-debt write-off |
+| Listing | `CurrencyRegistry` + `StablecoinDirectory`: sponsor signature, live attestation, one system per currency, governor-gated pause |
+| Accounts | `AccountFactory` creates an `Account`, `PurseStore` and `AccountGate` per owner; `AssetResolver` maps `REV` and listed currencies to brand/issuer; deposit, withdraw, balance and deposit-facet; owner check by caller `deployerId`; the vault proof stays in the account closure |
+| Issuer checks | system deploy, attestations, supply, params, custody, open → deposit REV → mint → repay → withdraw; partial liquidation, underwater write-off, the debt/bad-debt conservation invariant and the liquidation-capability refusal all pass on the devnet |
+| Account checks | key-signed deposit via deposit facet, balance, withdraw, empty stablecoin purse through the registry, and a foreign deployer refused by `AccountGate` |
 | Gates | build, measure, architecture, capture, language and TLA gates pass; the old capture finding is gone |
-| Next | liquidation engine, stablecoin factory/directory/currency registry, full accounts/purses, send/claim/refund, convert/liquidity/market listing |
+| Next | send/claim/refund, convert/liquidity/market listing, v0.4 install manifest and client surfaces |
 
 The stablecoin design is DAI-like: REV-only collateral, per-currency systems, MCR,
 interest, liquidation and bad debt, with separate contracts per authority. Bridged

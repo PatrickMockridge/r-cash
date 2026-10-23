@@ -19,7 +19,7 @@ in {
       for (AccountFactory <- ac) {
         AccountFactory!("getOrCreate", "__PUBKEY__".hexToBytes(), *oCh) |
         for (@(true, account, ownerId) <- oCh) {
-          @account!("vaultOpen", `__VAULT_URI__`, *zCh) |
+          @account!("vaultOpen", *deployerId, `__VAULT_URI__`, *zCh) |
           for (@z <- zCh) {
             match z {
               (true, auth) => {

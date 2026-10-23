@@ -43,8 +43,13 @@ created capability in its closure, so no live capability crosses a deploy.
 
 | Factory | Directory | Writes |
 |---|---|---|
-| `StablecoinFactory` (Phase 1) | `StablecoinDirectory` | `currency → {stablecoinUri, vaultBookUri, paramsHash, sponsor}` |
+| `CurrencyRegistry` (signed system deploy) | `StablecoinDirectory` | `currency → {stablecoinUri, custodyUri, paramsUri, vaultUri, liquidationUri, paramsHash, sponsor, status}` |
 | `MarketFactory` | `MarketDirectory` | `marketId → {poolUri, bookUri, lockUri, termsHash}` |
+
+There is no separate stablecoin factory in v0.4: `31_stablecoin.rho` verifies the sponsor
+signature, bounds and params hash before creating the system, so the deploy is the creation
+gate. `CurrencyRegistry` verifies the live attestation and writes the directory; the
+directory's only write capability is in the registry's closure.
 
 `OracleFeed` is deployed per currency by its sponsor; `OracleRegistry.registerFeed` binds
 the URI after the sponsor signature and feed attestation check. There is no feed factory.
@@ -71,18 +76,45 @@ by a block boundary before the next.
 | 03 | `Governor` | `component:governor` |
 | 07 | `OracleRegistry` | `component:oracle-registry` |
 | 08 | `OracleHub` | `component:oracle-hub` |
-| 09 | `MarketFactory` + `MarketDirectory` + `MarketTerms` + `MarketIndex` | `component:market-*` |
-| 10 | `AssetResolver`, `ListingViews` | `component:asset-resolver`, `component:listing-views` |
-| 11 | `TransferClient` | `component:transfer-client` |
-| 12 | `AccountFactory` | `component:account-factory` |
-| 13 | per currency: deploy `31_stablecoin` with signed params, then register in `CurrencyRegistry` (listing increment) | `stablecoin:<CODE>` |
-| 13 | per currency: `OracleFeed`, then `OracleRegistry.registerFeed` | `feed:<CODE>` |
-| 14 | per market: `MarketFactory.createMarket`, seed, lock, activate | `market:<PAIR>:vN` |
+| 09 | `CurrencyRegistry` + `StablecoinDirectory` | `component:currency-registry`, `component:stablecoin-directory` |
+| 10 | `AssetResolver` | `component:asset-resolver` |
+| 11 | `AccountFactory` (creates `Account`, `PurseStore`, `AccountGate` per owner) | `component:account-factory` |
+| 12 | per currency: deploy `31_stablecoin` with signed params, then `CurrencyRegistry.register` with the sponsor signature | `currency:<CODE>` |
+| 12 | per currency: `OracleFeed`, then `OracleRegistry.registerFeed` | `feed:<CODE>` |
+| 13 | per market: `MarketFactory.createMarket`, seed, lock, activate | `market:<PAIR>:vN` |
+| 14 | `TransferClient`, `ListingViews` | `component:transfer-client`, `component:listing-views` |
 | 99 | `Root.freeze` | — |
 
 The installer writes `deployments/devnet-v4.json` only after the final step. Each step
 records the deploy id, block hash, block number, URIs, measured bytes/depth and phlo. A
 failed step aborts the install; it never writes a half-installed manifest.
+
+## 3b. Currency listing and liquidation
+
+Listing is evidence-first and idempotent per code:
+
+1. The sponsor deploys `31_stablecoin` with the canonical params, hash and signature; the
+   deploy refuses a bad signature, out-of-bounds params, a hash mismatch or a duplicate
+   system for the code (the registry check below is the authoritative duplicate gate).
+2. `CurrencyRegistry.register(code, scUri, custodyUri, paramsUri, vaultUri, liqUri,
+   paramsHash, sponsor, sig)` verifies `rcash:currency-register:v1|code|scUri|paramsHash|sponsor`,
+   calls the live `Stablecoin.attest`, and requires the currency, params hash and sponsor to
+   match. It then writes `StablecoinDirectory` and the currency record in one commit.
+3. A duplicate code is refused before the signature check; a bad signature is refused before
+   the directory write. `setPaused` is governor-gated per domain `currency-registry`.
+
+Liquidation is permissionless but capability-bound:
+
+1. A liquidator takes a stablecoin payment and calls `LiquidationEngine.liquidate(ownerId,
+   payment, minCollateral)`.
+2. The VaultBook accrues interest, rejects a healthy vault, bounds the repayment by
+   `ceil(debt · closeFactorBps / 10000)` and computes the seizure with `CollateralMath.payout`.
+3. If the vault cannot cover the bonus slice, clearing is allowed only when the repayment
+   covers the collateral's value; the residual is booked to `badDebt` and the vault debt is
+   cleared.
+4. The burn and custody withdrawal happen before the single vault/totals commit. Any refusal
+   aborts the deploy, so a half-settled liquidation cannot persist. Refusals before the
+   consume return the payment to the caller.
 
 ## 4. Market activation
 

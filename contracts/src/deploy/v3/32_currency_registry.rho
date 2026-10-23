@@ -1,0 +1,237 @@
+// v0.4 stablecoin directory and currency registry.
+// The directory is the one index of live stablecoin systems, written only by the
+// registry. The registry lists a currency only after checking the sponsor's
+// signature, the live stablecoin attestation and one-system-per-currency.
+// Placeholders: __ROOT_URI__.
+new
+  StablecoinDirectory, stablecoinDirectoryState,
+  CurrencyRegistry, currencyState,
+  registryStatus, registryGovernor,
+  directoryAuth,
+  rl(`rho:registry:lookup`),
+  rs(`rho:registry:insertArbitrary`),
+  deployerId(`rho:rchain:deployerId`),
+  deployId(`rho:rchain:deployId`),
+  rootCh, Root, uDirectory, uRegistry,
+  attCh, dirUri, regUri
+in {
+
+  contract StablecoinDirectory(@"register", @code, @entry, @auth, ret) = {
+    if (auth != *directoryAuth) { ret!((false, "bad directory authority")) }
+    else {
+      for (@s <- stablecoinDirectoryState) {
+        match s.get("systems").get(code) {
+          Nil => {
+            stablecoinDirectoryState!(
+              s.set("systems", s.get("systems").set(code, entry))
+               .set("rev", s.get("rev") + 1)) |
+            ret!((true, Nil))
+          }
+          existing => {
+            stablecoinDirectoryState!(s) |
+            ret!((false, "exists", existing))
+          }
+        }
+      }
+    }
+  } |
+
+  contract StablecoinDirectory(@"lookup", @code, ret) = {
+    for (@s <<- stablecoinDirectoryState) {
+      match s.get("systems").get(code) {
+        Nil => { ret!((false, "no system")) }
+        entry => { ret!((true, entry)) }
+      }
+    }
+  } |
+
+  contract StablecoinDirectory(@"entries", ret) = {
+    for (@s <<- stablecoinDirectoryState) {
+      ret!((true, s.get("systems").keys()))
+    }
+  } |
+
+  contract registryStatus(@paused, ret) = {
+    if (paused == true) { ret!("paused") } else { ret!("active") }
+  } |
+
+  contract registryGovernor(ret) = {
+    new gCh, gc in {
+      rl!(`__ROOT_URI__`, *gCh) |
+      for (Root <- gCh) {
+        Root!("resolve", "component:governor", 1, *gCh) |
+        for (@(true, govUri, _) <- gCh) {
+          rl!(govUri, *gc) |
+          for (Governor <- gc) { ret!(*Governor) }
+        }
+      }
+    }
+  } |
+
+  contract CurrencyRegistry(@"register", @code, @scUri, @custodyUri, @paramsUri,
+                            @vaultUri, @liqUri, @paramsHash, @sponsorHex, @sig,
+                            ret) = {
+    for (@s <<- currencyState) {
+      match s.get("currencies").get(code) {
+        Nil => {
+          new rCh, vCh, dCh, okCh, saCh, dregCh in {
+            rl!(`__ROOT_URI__`, *rCh) |
+            for (RegRoot <- rCh) {
+              RegRoot!("resolve", "component:verifier", 1, *vCh) |
+              for (@(true, verUri, _) <- vCh) {
+                new vc in {
+                  rl!(verUri, *vc) |
+                  for (Verifier <- vc) {
+                    Verifier!("hash",
+                      ("rcash:currency-register:v1|" ++ code ++ "|" ++ scUri
+                       ++ "|" ++ paramsHash ++ "|" ++ sponsorHex).toUtf8Bytes(),
+                      *dCh) |
+                    for (@digest <- dCh) {
+                      Verifier!("sigOk", digest, sig, sponsorHex.hexToBytes(), *okCh) |
+                      for (@ok <- okCh) {
+                        if (ok == false) { ret!((false, "bad sponsor signature")) }
+                        else {
+                          new scCh in {
+                            rl!(scUri, *scCh) |
+                            for (SC <- scCh) {
+                              SC!("attest", *saCh) |
+                              for (@att <- saCh) {
+                                match att {
+                                  (true, a) => {
+                                    if (a.get("currency") != code) {
+                                      ret!((false, "currency mismatch"))
+                                    } else {
+                                      if (a.get("paramsHash") != paramsHash) {
+                                        ret!((false, "params hash"))
+                                      } else {
+                                        if (a.get("sponsor") != sponsorHex) {
+                                          ret!((false, "sponsor mismatch"))
+                                        } else {
+                                          new entryCh in {
+                                            entryCh!({
+                                              "stablecoinUri": scUri,
+                                              "custodyUri": custodyUri,
+                                              "paramsUri": paramsUri,
+                                              "vaultUri": vaultUri,
+                                              "liquidationUri": liqUri,
+                                              "paramsHash": paramsHash,
+                                              "sponsor": sponsorHex,
+                                              "status": "active"
+                                            }) |
+                                            for (@entry <- entryCh) {
+                                              StablecoinDirectory!("register", code,
+                                                entry, *directoryAuth, *dregCh) |
+                                              for (@dr <- dregCh) {
+                                                match dr {
+                                                  (true, Nil) => {
+                                                    for (@s2 <- currencyState) {
+                                                      match s2.get("currencies").get(code) {
+                                                        Nil => {
+                                                          currencyState!(
+                                                            s2.set("currencies",
+                                                              s2.get("currencies").set(code, entry))
+                                                              .set("rev", s2.get("rev") + 1)) |
+                                                          ret!((true, entry))
+                                                        }
+                                                        existing => {
+                                                          currencyState!(s2) |
+                                                          ret!(1 / 0)
+                                                        }
+                                                      }
+                                                    }
+                                                  }
+                                                  _ => { ret!(dr) }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                  _ => { ret!((false, "bad attestation")) }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        existing => { ret!((false, "exists", existing)) }
+      }
+    }
+  } |
+
+  contract CurrencyRegistry(@"currency", @code, ret) = {
+    for (@s <<- currencyState) {
+      match s.get("currencies").get(code) {
+        Nil => { ret!((false, "no currency")) }
+        entry => { ret!((true, entry)) }
+      }
+    }
+  } |
+
+  contract CurrencyRegistry(@"currencies", ret) = {
+    for (@s <<- currencyState) {
+      ret!((true, s.get("currencies").keys()))
+    }
+  } |
+
+  contract CurrencyRegistry(@"setPaused", @code, @paused, @nonce, @sigs, ret) = {
+    new gCh, vCh, stCh in {
+      registryGovernor!(*gCh) |
+      for (Governor <- gCh) {
+        Governor!("authorize", "currency-registry", nonce, "setPaused",
+                  code ++ "|" ++ paused.toString(), sigs, *vCh) |
+        for (@v <- vCh) {
+          match v {
+            (true, Nil) => {
+              registryStatus!(paused, *stCh) |
+              for (@status <- stCh) {
+                for (@s <- currencyState) {
+                  match s.get("currencies").get(code) {
+                    Nil => { currencyState!(s) | ret!((false, "no currency")) }
+                    entry => {
+                      currencyState!(
+                        s.set("currencies",
+                          s.get("currencies").set(code, entry.set("status", status)))
+                         .set("rev", s.get("rev") + 1)) |
+                      ret!((true, status))
+                    }
+                  }
+                }
+              }
+            }
+            _ => { ret!(v) }
+          }
+        }
+      }
+    }
+  } |
+
+  stablecoinDirectoryState!({"systems": {}, "rev": 0}) |
+  currencyState!({"currencies": {}, "rev": 0}) |
+
+  rl!(`__ROOT_URI__`, *rootCh) |
+  for (Root <- rootCh) {
+    rs!(bundle+{*StablecoinDirectory}, *uDirectory) |
+    rs!(bundle+{*CurrencyRegistry}, *uRegistry) |
+    for (@dirUri <- uDirectory; @regUri <- uRegistry) {
+      Root!("register", "component:stablecoin-directory", dirUri, 1, "registry",
+           *deployerId, *attCh) |
+      for (@r <- attCh) {
+        Root!("register", "component:currency-registry", regUri, 1, "registry",
+             *deployerId, *attCh) |
+        for (@r2 <- attCh) {
+          deployId!([dirUri, regUri])
+        }
+      }
+    }
+  }
+}

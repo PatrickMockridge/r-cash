@@ -1,0 +1,30 @@
+// Attempt a liquidation with a caller-supplied name where the liquidation cap
+// is required. The VaultBook must refuse and hand the payment back.
+// Placeholders: __HOLDER_URI__, __VAULT_URI__, __OWNER_ID__, __AMOUNT__.
+new
+  rl(`rho:registry:lookup`),
+  hCh, vCh, pCh, rCh,
+  deployId(`rho:rchain:deployId`)
+in {
+  rl!(`__HOLDER_URI__`, *hCh) |
+  rl!(`__VAULT_URI__`, *vCh) |
+  for (Holder <- hCh; VaultBook <- vCh) {
+    Holder!("take", __AMOUNT__, *pCh) |
+    for (@p <- pCh) {
+      match p {
+        (true, payment) => {
+          new bogus in {
+            VaultBook!("liquidate", "__OWNER_ID__", *bogus, payment, 0, *rCh) |
+            for (@r <- rCh) {
+              match r {
+                (false, "bad liquidation authority", lost) => { deployId!("refused") }
+                other => { deployId!(other) }
+              }
+            }
+          }
+        }
+        _ => { deployId!(p) }
+      }
+    }
+  }
+}

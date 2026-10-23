@@ -14,6 +14,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -61,8 +62,17 @@ def decode(value):
 
 
 def deploy_call(term: str, secret: str) -> list:
-    deploy_id = node.deploy(term, secret, phlo_limit=PHLO)
-    variant, payload = node.wait_processed(deploy_id, timeout=180)
+    # A deploy submitted immediately after the installer can see a stale balance:
+    # the previous deploy's phlo refund lands one finalization late. Retry that
+    # one error; every other failure is real.
+    for attempt in range(3):
+        deploy_id = node.deploy(term, secret, phlo_limit=PHLO)
+        variant, payload = node.wait_processed(deploy_id, timeout=180)
+        error = str(payload.get("deployError") or "")
+        if variant == "processedwitherror" and "insufficient funds" in error and attempt < 2:
+            time.sleep(3)
+            continue
+        break
     if variant != "processedwithsuccess":
         raise AssertionError(f"{variant}: {json.dumps(payload)[:2000]}")
     return decode(payload.get("deployResult"))

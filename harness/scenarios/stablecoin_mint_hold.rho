@@ -1,0 +1,90 @@
+// Mint stablecoin against REV and park it in a holder purse for a later deploy.
+// The holder is registered so a liquidation deploy can take a payment from it.
+// Placeholders: __ROOT_URI__, __SC_URI__, __VAULT_URI__, __PUBKEY__,
+//               __FUND__, __COLLATERAL__, __MINT__.
+new
+  rl(`rho:registry:lookup`),
+  rs(`rho:registry:insertArbitrary`),
+  rootCh, scCh, vc, afCh, ac, oCh, zCh,
+  ertpCh, revIssuerCh, purseCh, fundCh, wdCh, depCh,
+  mintCh, brandCh, issuerCh, scPurseCh, scDepCh,
+  deployId(`rho:rchain:deployId`),
+  deployerId(`rho:rchain:deployerId`)
+in {
+  rl!(`__ROOT_URI__`, *rootCh) |
+  rl!(`__SC_URI__`, *scCh) |
+  rl!(`__VAULT_URI__`, *vc) |
+  rl!(`rho:rchain:ertp`, *ertpCh) |
+  for (Root <- rootCh; Stablecoin <- scCh; VaultBook <- vc; @(_, ERTP) <- ertpCh) {
+    Root!("resolve", "component:account-factory", 1, *afCh) |
+    for (@(true, afUri, _) <- afCh) {
+      rl!(afUri, *ac) |
+      for (AccountFactory <- ac) {
+        AccountFactory!("getOrCreate", "__PUBKEY__".hexToBytes(), *oCh) |
+        for (@(true, account, ownerId) <- oCh) {
+          @account!("vaultOpen", *deployerId, `__VAULT_URI__`, *zCh) |
+          for (@z <- zCh) {
+            match z {
+              (true, auth) => {
+                @ERTP!("getRevIssuer", *revIssuerCh) |
+                for (@(revBrand, revIssuer) <- revIssuerCh) {
+                  @revIssuer!("makeEmptyPurse", *purseCh) |
+                  for (@(true, purse) <- purseCh) {
+                    @purse!("revFund", *deployerId, __FUND__, *fundCh) |
+                    for (@_ <- fundCh) {
+                      @purse!("withdraw", (revBrand, __COLLATERAL__), *wdCh) |
+                      for (@(true, payment) <- wdCh) {
+                        VaultBook!("deposit", ownerId, auth, payment, *depCh) |
+                        for (@d <- depCh) {
+                          match d {
+                            (true, _) => {
+                              VaultBook!("mint", ownerId, auth, __MINT__, *mintCh) |
+                              for (@m <- mintCh) {
+                                match m {
+                                  (true, stablePayment, debt) => {
+                                    Stablecoin!("brand", *brandCh) |
+                                    Stablecoin!("issuer", *issuerCh) |
+                                    for (@(true, brand) <- brandCh;
+                                         @(true, issuer) <- issuerCh) {
+                                      @issuer!("makeEmptyPurse", *scPurseCh) |
+                                      for (@(true, scPurse) <- scPurseCh) {
+                                        @scPurse!("deposit", stablePayment, *scDepCh) |
+                                        for (@sd <- scDepCh) {
+                                          match sd {
+                                            (true, bal) => {
+                                              new Holder, uHolder in {
+                                                contract Holder(@"take", @amount, ret) = {
+                                                  @scPurse!("withdraw", (brand, amount), *ret)
+                                                } |
+                                                rs!(bundle+{*Holder}, *uHolder) |
+                                                for (@holderUri <- uHolder) {
+                                                  deployId!([holderUri, ownerId])
+                                                }
+                                              }
+                                            }
+                                            _ => { deployId!(sd) }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                  _ => { deployId!(m) }
+                                }
+                              }
+                            }
+                            _ => { deployId!(d) }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+              _ => { deployId!(z) }
+            }
+          }
+        }
+      }
+    }
+  }
+}

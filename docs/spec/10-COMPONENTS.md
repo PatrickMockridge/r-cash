@@ -29,12 +29,16 @@ separately and do not create a runtime cycle.
 | `Stablecoin` | `issuerState` | `brand`, `issuer`, `supply`, `mint`, `burn`, `amountOf`, `attest` | Owns the ERTP kit. Only the VaultBook holds the scoped mint/burn caps. |
 | `CollateralCustody` | none; REV purse in closure | `deposit`, `withdraw`, `balance`, `attest` | Holds the currency's REV purse; only the VaultBook holds the custody cap. |
 | `RiskParameters` | none; params in closure | `params`, `attest` | Immutable MCR, bonus, close factor, rate, ceiling, min/max debt and max oracle age. |
-| `VaultBook` | `vaultState` | `open`, `deposit`, `mint`, `withdraw`, `repay`, `vault`, `vaults`, `params`, `pause`, `attest` | Atomic vault/accounting cluster. Enforces health, ceiling, min/max debt and pause; no second principal ledger. |
+| `VaultBook` | `vaultState` | `open`, `deposit`, `mint`, `withdraw`, `repay`, `liquidate`, `vault`, `vaults`, `totals`, `params`, `pause`, `attest` | Atomic vault/accounting cluster. Enforces health, ceiling, min/max debt, close factor and pause; no second principal ledger. |
 | `CollateralMath` | none | `accrue`, `health`, `payout`, `seize` | Pure issuer arithmetic; replaces the deleted RiskMath. |
-| `LiquidationEngine` (next) | none | `liquidate` | Permissionless liquidation with the liquidation authority only. |
+| `LiquidationEngine` | none | `liquidate`, `attest` | Holds the only liquidation capability. Permissionless callers burn stablecoin and receive REV; the VaultBook keeps the accounting. |
+| `CurrencyRegistry` | `currencyState` | `register`, `currency`, `currencies`, `setPaused` | Sponsor-signed currency listing. Verifies the live stablecoin attestation, then writes the directory. |
+| `StablecoinDirectory` | `stablecoinDirectoryState` | `register`, `lookup`, `entries` | The one code → system index. Only the registry holds its write capability. |
 
-The system is deployed per currency by `31_stablecoin.rho`; the stablecoin factory,
-directory and currency registry are the next listing increment.
+The system is deployed per currency by the signed `31_stablecoin.rho`: the deploy verifies
+the sponsor signature, bounds and params hash before it creates anything. The directory and
+registry are one deploy (`32_currency_registry.rho`); there is no separate on-chain
+factory in v0.4, because the creation path is already signature- and bounds-gated.
 
 ## 2. Authority and discovery
 
@@ -48,7 +52,7 @@ directory and currency registry are the next listing increment.
 
 | Component | State | Interface | Responsibility |
 |---|---|---|---|
-| `CurrencyRegistry` (planned v0.4) | `currencyState` | `register`, `currency`, `currencies`, `admin` | Currency records. Registration requires the sponsor deployer key, a signature over the stablecoin-system URI and params hash, a `StablecoinDirectory(code)` match and the live stablecoin attestation. Status is `active` or `paused`. |
+| `CurrencyRegistry` | `currencyState` | `register`, `currency`, `currencies`, `setPaused` | Currency records. Registration requires a sponsor signature over the system URI and params hash, and the live stablecoin attestation; the registry then writes `StablecoinDirectory(code)`, so the directory match is structural. Status is `active` or `paused`; pause is governor-gated. |
 | `MarketTerms` | `termsState` | `put`, `get`, `boundsOk` | Content-addressed `termsHash → {terms, values}`. `put` recomputes the hash and rejects a mismatch. |
 | `MarketIndex` | `marketState` | `stage`, `activate`, `pause`, `delist`, `cancel`, `market`, `marketFor`, `status`, `isActive`, `admin` | Market status, pair uniqueness, version monotonicity and nonce in one cell. |
 | `MarketDirectory` | `directoryState` | `bind`, `seal`, `unseal`, `byId`, `slot` | Per-market `{poolUri, bookUri, lockUri, termsHash, sealed}`. Only `MarketFactory` writes; a draft slot may be overwritten, then sealed. |
@@ -66,13 +70,12 @@ directory and currency registry are the next listing increment.
 | `TransferBook` (market) | `bookState` | `send`, `nextId`, `terms`, `escrows`, `attest`, `admin` | Allocates ids, performs the swap, creates a `TransferContract` per transfer. |
 | `TransferContract` (transfer, R) | `transferState` | `claim`, `refund`, `info` | Authoritative transfer object: record, payment and claim token in one cell. |
 | `TradabilityGate` | none | `admit(status, fresh, value, inputValue, terms)` | Pure policy verdict; receives all inputs and never calls back into the pool. |
-| `AccountFactory` | `factoryState` | `getOrCreate`, `verify`, `accountOf`; `authorize`/`consumeAuth` next | One account per owner. The proof is created inside the account contract and never returned or passed through a message; `verify` compares it by name. The account currently exposes `vaultOpen`; purses and transfers arrive with the account layer. |
-| `AccountProvisioner` | none | `create(ownerId, pubKeyBytes)` | Orchestrates the three account templates. |
-| `Account` (owner, R) | `purseStoreUri`, `transferClientUri` | `deposit`, `withdraw`, `balance`, `depositFacet`, `sendTransfer`, `claimTransfer`, `refundTransfer` | Owner-authenticated thin payment router. Holds the `PurseStore` capability and resolves the transfer client; no vault state or CDP arms. |
-| `PurseStore` (owner, R) | `purseState` | `ensure`, `deposit`, `withdraw`, `balance`, `facet` | One purse per asset; ERTP custody. |
-| `AccountGate` (owner, R) | none | `verify(deployerId)` | Owner authentication; no state. |
+| `AccountFactory` | `factoryState` | `getOrCreate`, `verify`, `accountOf` | One account per owner. `getOrCreate` creates the `Account`, `PurseStore` and `AccountGate`; the vault proof is created inside the account contract and never returned or passed through a message. |
+| `Account` (owner, R) | none; `PurseStore` and proof in closure | `vaultOpen`, `deposit`, `withdraw`, `balance`, `depositFacet`; transfer arms next | Owner-authenticated thin payment router. Every arm takes the caller's `deployerId`, checks it in `AccountGate`, then routes to `PurseStore`; no vault state. |
+| `PurseStore` (owner, R) | `purseState` | `ensure`, `deposit`, `withdraw`, `balance`, `facet` | One ERTP purse per asset, created through `AssetResolver`; `balance` reads the purse's `getCurrentAmount`. |
+| `AccountGate` (owner, R) | none | `verify` | Derives the caller's REV address from `deployerId` and compares it with the owner; no state. |
 | `TransferClient` | none | `send`, `claim`, `refund`, `info` | Account-side transfer orchestration; resolves the book and market. |
-| `AssetResolver` | none | `meta(assetId)`, `issuer(assetId)`, `makePurse(assetId)`, `makeFacet(assetId)` | Derives asset metadata and read-only issuer/purse capabilities from the registries; no second copy of asset truth. |
+| `AssetResolver` | none | `issuer(assetId)`, `kind(assetId)` | `REV` resolves through ERTP; every other id resolves through `CurrencyRegistry` and the live `Stablecoin`. Resolution happens at arm entry; no registry capability is cached. |
 | `ListingViews` | none | `currency`, `asset`, `assets`, `markets`, `marketView`, `marketFor`, `terms`, `isActive` | Read-only projection of the registries, markets and feeds. |
 
 ## 5. Atomic clusters

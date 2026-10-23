@@ -1,0 +1,81 @@
+// Owner deposit, balance and withdraw through a v0.4 account purse.
+// Returns [ownerId, balance after deposit, balance after withdraw, V4T balance].
+// Placeholders: __ROOT_URI__, __PUBKEY__, __FUND__, __DEPOSIT__, __WITHDRAW__.
+new
+  rl(`rho:registry:lookup`),
+  rootCh, afCh, ac, oCh, fCh, bCh, wCh, b2Ch, b3Ch,
+  ertpCh, revIssuerCh, purseCh, fundCh, wdCh, depCh,
+  deployId(`rho:rchain:deployId`),
+  deployerId(`rho:rchain:deployerId`)
+in {
+  rl!(`__ROOT_URI__`, *rootCh) |
+  rl!(`rho:rchain:ertp`, *ertpCh) |
+  for (Root <- rootCh; @(_, ERTP) <- ertpCh) {
+    Root!("resolve", "component:account-factory", 1, *afCh) |
+    for (@(true, afUri, _) <- afCh) {
+      rl!(afUri, *ac) |
+      for (AccountFactory <- ac) {
+        AccountFactory!("getOrCreate", "__PUBKEY__".hexToBytes(), *oCh) |
+        for (@(true, account, ownerId) <- oCh) {
+          @account!("depositFacet", *deployerId, "REV", *fCh) |
+          for (@fr <- fCh) {
+            match fr {
+              (true, facet) => {
+                @ERTP!("getRevIssuer", *revIssuerCh) |
+                for (@(revBrand, revIssuer) <- revIssuerCh) {
+                  @revIssuer!("makeEmptyPurse", *purseCh) |
+                  for (@(true, purse) <- purseCh) {
+                    @purse!("revFund", *deployerId, __FUND__, *fundCh) |
+                    for (@_ <- fundCh) {
+                      @purse!("withdraw", (revBrand, __DEPOSIT__), *wdCh) |
+                      for (@(true, payment) <- wdCh) {
+                        @facet!("deposit", payment, *depCh) |
+                        for (@d <- depCh) {
+                          match d {
+                            (true, _) => {
+                              @account!("balance", *deployerId, "REV", *bCh) |
+                              for (@b <- bCh) {
+                                match b {
+                                  (true, bal1) => {
+                                    @account!("withdraw", *deployerId, "REV",
+                                              __WITHDRAW__, *wCh) |
+                                    for (@w <- wCh) {
+                                      match w {
+                                        (true, paymentOut) => {
+                                          @account!("balance", *deployerId, "REV", *b2Ch) |
+                                          for (@b2 <- b2Ch) {
+                                            match b2 {
+                                              (true, bal2) => {
+                                                @account!("balance", *deployerId, "V4T", *b3Ch) |
+                                                for (@b3 <- b3Ch) {
+                                                  deployId!([ownerId, bal1, bal2, b3])
+                                                }
+                                              }
+                                              _ => { deployId!(b2) }
+                                            }
+                                          }
+                                        }
+                                        _ => { deployId!(w) }
+                                      }
+                                    }
+                                  }
+                                  _ => { deployId!(b) }
+                                }
+                              }
+                            }
+                            _ => { deployId!(d) }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+              _ => { deployId!(fr) }
+            }
+          }
+        }
+      }
+    }
+  }
+}

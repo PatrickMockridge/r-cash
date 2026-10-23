@@ -1,0 +1,97 @@
+// v0.4 AssetResolver: assetId -> brand and issuer, for the payment layer.
+// "REV" is native; every other id is a currency listed in CurrencyRegistry and
+// resolves through its live Stablecoin contract. Resolution happens at arm entry;
+// no registry capability is cached in a bundle.
+// Placeholders: __ROOT_URI__.
+new
+  AssetResolver,
+  rl(`rho:registry:lookup`),
+  rs(`rho:registry:insertArbitrary`),
+  deployerId(`rho:rchain:deployerId`),
+  deployId(`rho:rchain:deployId`),
+  rootCh, Root, uResolver, ack
+in {
+
+  contract AssetResolver(@"issuer", @assetId, ret) = {
+    if (assetId == "REV") {
+      new ec, revCh in {
+        rl!(`rho:rchain:ertp`, *ec) |
+        for (@(_, ERTP) <- ec) {
+          @ERTP!("getRevIssuer", *revCh) |
+          for (@(revBrand, revIssuer) <- revCh) {
+            ret!((true, revBrand, revIssuer))
+          }
+        }
+      }
+    } else {
+      new rCh, regCh, eCh, scCh, bCh, iCh in {
+        rl!(`__ROOT_URI__`, *rCh) |
+        for (Root <- rCh) {
+          Root!("resolve", "component:currency-registry", 1, *regCh) |
+          for (@(true, regUri, _) <- regCh) {
+            new rc in {
+              rl!(regUri, *rc) |
+              for (CurrencyRegistry <- rc) {
+                CurrencyRegistry!("currency", assetId, *eCh) |
+                for (@e <- eCh) {
+                  match e {
+                    (true, entry) => {
+                      match entry.get("stablecoinUri") { scUri => {
+                        rl!(scUri, *scCh) |
+                        for (Stablecoin <- scCh) {
+                          Stablecoin!("brand", *bCh) |
+                          Stablecoin!("issuer", *iCh) |
+                          for (@(true, brand) <- bCh;
+                               @(true, issuer) <- iCh) {
+                            ret!((true, brand, issuer))
+                          }
+                        }
+                      } }
+                    }
+                    _ => { ret!((false, "unknown asset")) }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  } |
+
+  contract AssetResolver(@"kind", @assetId, ret) = {
+    if (assetId == "REV") { ret!((true, "rev")) }
+    else {
+      new rCh, regCh, eCh in {
+        rl!(`__ROOT_URI__`, *rCh) |
+        for (Root <- rCh) {
+          Root!("resolve", "component:currency-registry", 1, *regCh) |
+          for (@(true, regUri, _) <- regCh) {
+            new rc in {
+              rl!(regUri, *rc) |
+              for (CurrencyRegistry <- rc) {
+                CurrencyRegistry!("currency", assetId, *eCh) |
+                for (@e <- eCh) {
+                  match e {
+                    (true, entry) => { ret!((true, "stablecoin")) }
+                    _ => { ret!((false, "unknown asset")) }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  } |
+
+  rl!(`__ROOT_URI__`, *rootCh) |
+  for (Root <- rootCh) {
+    rs!(bundle+{*AssetResolver}, *uResolver) |
+    for (@uri <- uResolver) {
+      Root!("register", "component:asset-resolver", uri, 1, "registry",
+           *deployerId, *ack) |
+      for (@r <- ack) { deployId!([uri]) }
+    }
+  }
+}

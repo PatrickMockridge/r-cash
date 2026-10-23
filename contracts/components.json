@@ -13,7 +13,17 @@
       "contracts/build/deploy/v3/31_stablecoin.rho": {
         "bytes": 24576,
         "depth": 96,
-        "contracts": 30
+        "contracts": 35
+      },
+      "contracts/build/deploy/v3/09_identity.rho": {
+        "bytes": 16384,
+        "depth": 96,
+        "contracts": 16
+      },
+      "contracts/build/deploy/v3/14_asset_resolver.rho": {
+        "bytes": 8192,
+        "depth": 48,
+        "contracts": 2
       }
     }
   },
@@ -276,26 +286,24 @@
         "register",
         "currency",
         "currencies",
-        "setPaused",
-        "admin"
+        "setPaused"
       ],
       "dependencies": [
         "Root",
-        "Bounds",
-        "Codec",
         "Verifier",
-        "Clock",
-        "Governor"
+        "Governor",
+        "Stablecoin",
+        "StablecoinDirectory"
       ],
       "creates": [],
       "system": [],
-      "deploy": "contracts/src/deploy/v4/11_currency_registry.rho",
+      "deploy": "contracts/src/deploy/v3/32_currency_registry.rho",
       "instance_key": null,
-      "status": "planned",
+      "status": "implemented",
       "budget": {
         "bytes": 16384,
-        "depth": 48,
-        "contracts": 9
+        "depth": 96,
+        "contracts": 12
       }
     },
     {
@@ -534,27 +542,23 @@
       "stateful": false,
       "state_cell": null,
       "arms": [
-        "meta",
         "issuer",
-        "makePurse",
-        "makeFacet"
+        "kind"
       ],
       "dependencies": [
         "Root",
         "CurrencyRegistry",
-        "MarketIndex",
-        "MarketDirectory",
-        "OracleRegistry"
+        "Stablecoin"
       ],
       "creates": [],
       "system": [
         "rho:rchain:ertp"
       ],
-      "deploy": "contracts/src/deploy/v3/16_views.rho",
+      "deploy": "contracts/src/deploy/v3/14_asset_resolver.rho",
       "instance_key": null,
-      "status": "planned",
+      "status": "implemented",
       "budget": {
-        "bytes": 16384,
+        "bytes": 8192,
         "depth": 48,
         "contracts": 2
       }
@@ -760,31 +764,35 @@
       "name": "AccountFactory",
       "kind": "account",
       "stateful": true,
-      "state_cell": "accountsState",
+      "state_cell": "factoryState",
       "arms": [
         "getOrCreate",
         "accountOf",
-        "verify",
-        "authorize",
-        "consumeAuth"
+        "verify"
       ],
       "dependencies": [
         "Root",
-        "AccountProvisioner",
-        "Verifier",
-        "Clock"
+        "PurseStore",
+        "AccountGate",
+        "AssetResolver"
       ],
-      "creates": [],
+      "creates": [
+        "Account",
+        "PurseStore",
+        "AccountGate"
+      ],
       "system": [
-        "rho:rchain:deployerId:ops"
+        "rho:rchain:deployerId:ops",
+        "rho:rev:address",
+        "rho:rchain:deployerId"
       ],
       "deploy": "contracts/src/deploy/v3/09_identity.rho",
       "instance_key": null,
       "status": "implemented",
       "budget": {
-        "bytes": 4096,
-        "depth": 48,
-        "contracts": 3
+        "bytes": 16384,
+        "depth": 96,
+        "contracts": 16
       }
     },
     {
@@ -903,30 +911,25 @@
     {
       "name": "Account",
       "kind": "account",
-      "stateful": true,
-      "state_cell": "accountState",
+      "stateful": false,
+      "state_cell": null,
       "arms": [
+        "vaultOpen",
         "deposit",
         "withdraw",
         "balance",
-        "depositFacet",
-        "sendTransfer",
-        "claimTransfer",
-        "refundTransfer"
+        "depositFacet"
       ],
       "dependencies": [
-        "Root",
         "AccountGate",
         "PurseStore",
-        "AssetResolver",
-        "TransferClient",
-        "AccountFactory"
+        "VaultBook"
       ],
       "creates": [],
       "system": [],
-      "deploy": "contracts/src/deploy/v3/51_account.rho",
+      "deploy": "contracts/src/deploy/v3/09_identity.rho",
       "instance_key": "owner",
-      "status": "planned",
+      "status": "implemented",
       "budget": {
         "bytes": 16384,
         "depth": 48,
@@ -946,16 +949,16 @@
         "facet"
       ],
       "dependencies": [
-        "Root",
         "AssetResolver"
       ],
       "creates": [],
       "system": [
-        "rho:rchain:ertp"
+        "rho:rchain:ertp",
+        "rho:registry:lookup"
       ],
-      "deploy": "contracts/src/deploy/v3/51_account.rho",
+      "deploy": "contracts/src/deploy/v3/09_identity.rho",
       "instance_key": "owner",
-      "status": "planned",
+      "status": "implemented",
       "budget": {
         "bytes": 12288,
         "depth": 48,
@@ -971,17 +974,16 @@
         "verify"
       ],
       "dependencies": [
-        "Root",
-        "Verifier"
+        "Root"
       ],
       "creates": [],
       "system": [
         "rho:rchain:deployerId:ops",
         "rho:rev:address"
       ],
-      "deploy": "contracts/src/deploy/v3/51_account.rho",
+      "deploy": "contracts/src/deploy/v3/09_identity.rho",
       "instance_key": "owner",
-      "status": "planned",
+      "status": "implemented",
       "budget": {
         "bytes": 4096,
         "depth": 32,
@@ -1065,7 +1067,7 @@
       "budget": {
         "bytes": 24576,
         "depth": 96,
-        "contracts": 30
+        "contracts": 35
       }
     },
     {
@@ -1090,7 +1092,7 @@
       "budget": {
         "bytes": 24576,
         "depth": 96,
-        "contracts": 30
+        "contracts": 35
       }
     },
     {
@@ -1111,7 +1113,7 @@
       "budget": {
         "bytes": 24576,
         "depth": 96,
-        "contracts": 30
+        "contracts": 35
       }
     },
     {
@@ -1129,7 +1131,9 @@
         "vaults",
         "params",
         "pause",
-        "attest"
+        "attest",
+        "liquidate",
+        "totals"
       ],
       "dependencies": [
         "Root",
@@ -1152,7 +1156,7 @@
       "budget": {
         "bytes": 24576,
         "depth": 96,
-        "contracts": 30
+        "contracts": 35
       }
     },
     {
@@ -1168,13 +1172,13 @@
       ],
       "creates": [],
       "system": [],
-      "deploy": "contracts/src/deploy/v4/31_stablecoin.rho",
+      "deploy": "contracts/src/deploy/v3/31_stablecoin.rho",
       "instance_key": "currency",
-      "status": "planned",
+      "status": "implemented",
       "budget": {
-        "bytes": 8192,
-        "depth": 48,
-        "contracts": 2
+        "bytes": 24576,
+        "depth": 96,
+        "contracts": 35
       }
     },
     {
@@ -1221,20 +1225,16 @@
         "lookup",
         "entries"
       ],
-      "dependencies": [
-        "Root",
-        "Verifier",
-        "Codec"
-      ],
+      "dependencies": [],
       "creates": [],
       "system": [],
-      "deploy": "contracts/src/deploy/v4/30_stablecoin_factory.rho",
+      "deploy": "contracts/src/deploy/v3/32_currency_registry.rho",
       "instance_key": null,
-      "status": "planned",
+      "status": "implemented",
       "budget": {
-        "bytes": 8192,
-        "depth": 32,
-        "contracts": 2
+        "bytes": 16384,
+        "depth": 96,
+        "contracts": 12
       }
     }
   ]
