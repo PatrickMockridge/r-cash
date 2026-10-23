@@ -1,6 +1,8 @@
-// v0.3 AccountFactory: ownerId -> proof authority.
-// The proof is created once and returned only by getOrCreate; verify compares
-// the unforgeable name. Account provisioning arrives in Phase 5.
+// v0.4 AccountFactory: ownerId -> account capability and proof authority.
+// getOrCreate creates the account contract with the proof in its closure. The
+// proof is never returned or passed through a message; verify compares it by
+// name. The full purse/transfer Account arrives in Phase 2; this first account
+// exposes vaultOpen so the issuer can be used without a proof leak.
 // Placeholders: __ROOT_URI__.
 new
   AccountFactory, factoryState,
@@ -22,17 +24,33 @@ in {
               for (@s2 <- factoryState) {
                 match s2.get("accounts").get(ownerId) {
                   Nil => {
-                    new proof in {
+                    new proof, account in {
+                      contract account(@"vaultOpen", @vaultUri, ret2) = {
+                        new vc in {
+                          rl!(vaultUri, *vc) |
+                          for (VaultBook <- vc) {
+                            VaultBook!("open", ownerId, *proof, *ret2)
+                          }
+                        }
+                      } |
                       factoryState!(s2.set("accounts",
-                        s2.get("accounts").set(ownerId, *proof))) |
-                      ret!((true, ownerId, *proof))
+                        s2.get("accounts").set(ownerId, {
+                          "account": bundle+{*account},
+                          "proof": *proof
+                        }))) |
+                      ret!((true, bundle+{*account}, ownerId))
                     }
                   }
-                  _ => { factoryState!(s2) | ret!((true, ownerId, false)) }
+                  entry => {
+                    factoryState!(s2) |
+                    ret!((true, entry.get("account"), ownerId))
+                  }
                 }
               }
             }
-            _ => { ret!((true, ownerId, false)) }
+            entry => {
+              ret!((true, entry.get("account"), ownerId))
+            }
           }
         }
       }
@@ -43,7 +61,7 @@ in {
     for (@s <<- factoryState) {
       match s.get("accounts").get(ownerId) {
         Nil => { ret!((true, false)) }
-        stored => { ret!((true, stored == *proof)) }
+        stored => { ret!((true, stored.get("proof") == *proof)) }
       }
     }
   } |
@@ -52,7 +70,7 @@ in {
     for (@s <<- factoryState) {
       match s.get("accounts").get(ownerId) {
         Nil => { ret!((false, "no account")) }
-        _ => { ret!((true, ownerId)) }
+        entry => { ret!((true, entry.get("account"))) }
       }
     }
   } |

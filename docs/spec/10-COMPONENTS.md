@@ -16,11 +16,25 @@ separately and do not create a runtime cycle.
 | `Clock` | none | `now()` | One block-height source. |
 | `Verifier` | none | `hash(bytes)`, `sigOk(digest, sig, pubKey)`, `claimHash(secret)` | One crypto boundary. |
 | `Codec` | none | `canonical(schema, values)`, `hash(schema, values)` | Length-prefixed canonical encoding and hashing. |
-| `Bounds` | none | `checkZone`, `checkFeed`, `checkPool`, `checkBook`, `checkTerms` | Pure on-chain bounds for every canonical group. |
+| `Bounds` | none | `checkIssuer`, `checkFeed`, `checkPool`, `checkBook`, `checkTerms` | Pure on-chain bounds for every canonical group. |
 | `AdminGuard` | none | `verify(domain, nonce, action, argsHash, sigs, admins, threshold)` | Threshold signature verification over `rcash:admin:v1|domain|nonce|action|args`. |
 | `AmmMath` | none | `value`, `weight`, `fee`, `out`, `shares` | Pure FPMM arithmetic, floor outputs and shares. |
 | `OracleMath` | none | `median3`, `fresh`, `rate` | Median, spread, freshness, cross rate. |
 | `ClaimCode` | none | `hash(secret)` | Claim-secret hashing. |
+
+### v0.4 stablecoin issuer
+
+| Component | State | Interface | Responsibility |
+|---|---|---|---|
+| `Stablecoin` | `issuerState` | `brand`, `issuer`, `supply`, `mint`, `burn`, `amountOf`, `attest` | Owns the ERTP kit. Only the VaultBook holds the scoped mint/burn caps. |
+| `CollateralCustody` | none; REV purse in closure | `deposit`, `withdraw`, `balance`, `attest` | Holds the currency's REV purse; only the VaultBook holds the custody cap. |
+| `RiskParameters` | none; params in closure | `params`, `attest` | Immutable MCR, bonus, close factor, rate, ceiling, min/max debt and max oracle age. |
+| `VaultBook` | `vaultState` | `open`, `deposit`, `mint`, `withdraw`, `repay`, `vault`, `vaults`, `params`, `pause`, `attest` | Atomic vault/accounting cluster. Enforces health, ceiling, min/max debt and pause; no second principal ledger. |
+| `CollateralMath` | none | `accrue`, `health`, `payout`, `seize` | Pure issuer arithmetic; replaces the deleted RiskMath. |
+| `LiquidationEngine` (next) | none | `liquidate` | Permissionless liquidation with the liquidation authority only. |
+
+The system is deployed per currency by `31_stablecoin.rho`; the stablecoin factory,
+directory and currency registry are the next listing increment.
 
 ## 2. Authority and discovery
 
@@ -28,7 +42,7 @@ separately and do not create a runtime cycle.
 |---|---|---|---|
 | `Governor` | `governorState` | `authorize(domain, nonce, action, argsHash, sigs)`, `admins()`, `admin(...)` | Owns the admin set, threshold and per-domain nonce. Units call `authorize` and apply the verified intent. `AdminGuard` is its pure verifier. |
 
-`OracleRegistry` and `MarketDirectory`. `Directory` and `ComponentRegistry` are deleted.
+`Root` is the only singleton directory. Per-instance URIs live in `StablecoinDirectory`, `OracleRegistry` and `MarketDirectory`. `Directory` and `ComponentRegistry` are deleted.
 
 ## 3. Registries
 
@@ -52,7 +66,7 @@ separately and do not create a runtime cycle.
 | `TransferBook` (market) | `bookState` | `send`, `nextId`, `terms`, `escrows`, `attest`, `admin` | Allocates ids, performs the swap, creates a `TransferContract` per transfer. |
 | `TransferContract` (transfer, R) | `transferState` | `claim`, `refund`, `info` | Authoritative transfer object: record, payment and claim token in one cell. |
 | `TradabilityGate` | none | `admit(status, fresh, value, inputValue, terms)` | Pure policy verdict; receives all inputs and never calls back into the pool. |
-| `AccountFactory` | `factoryState` | `getOrCreate`, `verify`, `accountOf`; `authorize`/`consumeAuth` next | One proof per owner; the proof name is created once and returned only by `getOrCreate`. Account provisioning and one-shot auth tokens arrive with the account layer. |
+| `AccountFactory` | `factoryState` | `getOrCreate`, `verify`, `accountOf`; `authorize`/`consumeAuth` next | One account per owner. The proof is created inside the account contract and never returned or passed through a message; `verify` compares it by name. The account currently exposes `vaultOpen`; purses and transfers arrive with the account layer. |
 | `AccountProvisioner` | none | `create(ownerId, pubKeyBytes)` | Orchestrates the three account templates. |
 | `Account` (owner, R) | `purseStoreUri`, `transferClientUri` | `deposit`, `withdraw`, `balance`, `depositFacet`, `sendTransfer`, `claimTransfer`, `refundTransfer` | Owner-authenticated thin payment router. Holds the `PurseStore` capability and resolves the transfer client; no vault state or CDP arms. |
 | `PurseStore` (owner, R) | `purseState` | `ensure`, `deposit`, `withdraw`, `balance`, `facet` | One purse per asset; ERTP custody. |

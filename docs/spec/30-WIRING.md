@@ -75,7 +75,7 @@ by a block boundary before the next.
 | 10 | `AssetResolver`, `ListingViews` | `component:asset-resolver`, `component:listing-views` |
 | 11 | `TransferClient` | `component:transfer-client` |
 | 12 | `AccountFactory` | `component:account-factory` |
-| 13 | per currency: `StablecoinFactory.create`, then `CurrencyRegistry.register` (Phase 1) | `stablecoin:<CODE>` |
+| 13 | per currency: deploy `31_stablecoin` with signed params, then register in `CurrencyRegistry` (listing increment) | `stablecoin:<CODE>` |
 | 13 | per currency: `OracleFeed`, then `OracleRegistry.registerFeed` | `feed:<CODE>` |
 | 14 | per market: `MarketFactory.createMarket`, seed, lock, activate | `market:<PAIR>:vN` |
 | 99 | `Root.freeze` | — |

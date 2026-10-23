@@ -10,6 +10,27 @@ new
   rootCh, Root, uBounds, ack
 in {
 
+  contract Bounds(@"checkIssuer", @params, ret) = {
+    new mcr, bonus, close, rate, ceiling, minD, maxD, age in {
+      mcr!(params.get("mcrBps")) | bonus!(params.get("bonusBps")) |
+      close!(params.get("closeFactorBps")) | rate!(params.get("ratePerBlock")) |
+      ceiling!(params.get("debtCeiling")) | minD!(params.get("minDebt")) |
+      maxD!(params.get("maxDebt")) | age!(params.get("maxOracleAge")) |
+      for (@a <- mcr; @b <- bonus; @c <- close; @r <- rate;
+           @dc <- ceiling; @mn <- minD; @mx <- maxD; @ag <- age) {
+        if (a < 10000 || a > 50000) { ret!((false, "mcr")) }
+        else { if (b < 0 || b > 5000) { ret!((false, "bonus")) }
+        else { if (c < 1 || c > 10000) { ret!((false, "close")) }
+        else { if (r < 0 || r > 50000) { ret!((false, "rate")) }
+        else { if (dc < 10000000000 || dc > 1000000000000000) { ret!((false, "ceiling")) }
+        else { if (mn < 10000 || mn > 1000000000) { ret!((false, "min debt")) }
+        else { if (mx < mn || mx > dc) { ret!((false, "max debt")) }
+        else { if (ag < 1 || ag > 1000) { ret!((false, "oracle age")) }
+        else { ret!((true, Nil)) } } } } } } } }
+      }
+    }
+  } |
+
   contract Bounds(@"checkFeed", @quorum, @age, @spread, @minP, @maxP, @tb, @tms, ret) = {
     if (quorum < 1 || quorum > 3) { ret!((false, "quorum")) }
     else { if (age < 1) { ret!((false, "age")) }

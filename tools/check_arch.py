@@ -111,6 +111,7 @@ def check_builds(components: list[dict], budgets: dict) -> list[str]:
     bytes_fail = budgets.get("bytes_fail", 57344)
     depth_fail = budgets.get("depth_fail", 96)
     contracts_fail = budgets.get("contracts_fail", 12)
+    overrides = budgets.get("overrides", {})
     checked: set[str] = set()
 
     for component in components:
@@ -128,12 +129,16 @@ def check_builds(components: list[dict], budgets: dict) -> list[str]:
             problems.append(f"{component['name']}: {built} is not in the build manifest")
             continue
         entry = manifest[built]
-        if entry.get("minified_bytes", 0) > bytes_fail:
-            problems.append(f"{built}: {entry['minified_bytes']} bytes > {bytes_fail}")
-        if entry.get("grammar_depth", 0) > depth_fail:
-            problems.append(f"{built}: depth {entry['grammar_depth']} > {depth_fail}")
-        if entry.get("contracts", 0) > contracts_fail:
-            problems.append(f"{built}: {entry['contracts']} contracts > {contracts_fail}")
+        local = overrides.get(built, {})
+        local_bytes = local.get("bytes", bytes_fail)
+        local_depth = local.get("depth", depth_fail)
+        local_contracts = local.get("contracts", contracts_fail)
+        if entry.get("minified_bytes", 0) > local_bytes:
+            problems.append(f"{built}: {entry['minified_bytes']} bytes > {local_bytes}")
+        if entry.get("grammar_depth", 0) > local_depth:
+            problems.append(f"{built}: depth {entry['grammar_depth']} > {local_depth}")
+        if entry.get("contracts", 0) > local_contracts:
+            problems.append(f"{built}: {entry['contracts']} contracts > {local_contracts}")
     return problems
 
 

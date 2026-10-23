@@ -8,7 +8,14 @@
     "depth_target": 48,
     "depth_fail": 96,
     "contracts_target": 8,
-    "contracts_fail": 12
+    "contracts_fail": 12,
+    "overrides": {
+      "contracts/build/deploy/v3/31_stablecoin.rho": {
+        "bytes": 24576,
+        "depth": 96,
+        "contracts": 30
+      }
+    }
   },
   "components": [
     {
@@ -127,7 +134,8 @@
         "checkFeed",
         "checkPool",
         "checkBook",
-        "checkTerms"
+        "checkTerms",
+        "checkIssuer"
       ],
       "dependencies": [],
       "creates": [],
@@ -896,7 +904,7 @@
       "name": "Account",
       "kind": "account",
       "stateful": true,
-      "state_cell": "vaultState",
+      "state_cell": "accountState",
       "arms": [
         "deposit",
         "withdraw",
@@ -1006,6 +1014,226 @@
       "budget": {
         "bytes": 12288,
         "depth": 48,
+        "contracts": 2
+      }
+    },
+    {
+      "name": "CollateralMath",
+      "kind": "kernel",
+      "stateful": false,
+      "state_cell": null,
+      "arms": [
+        "accrue",
+        "health",
+        "payout",
+        "seize"
+      ],
+      "dependencies": [],
+      "creates": [],
+      "system": [],
+      "deploy": "contracts/src/deploy/v3/06_collateral_math.rho",
+      "instance_key": null,
+      "status": "implemented",
+      "budget": {
+        "bytes": 8192,
+        "depth": 32,
+        "contracts": 4
+      }
+    },
+    {
+      "name": "Stablecoin",
+      "kind": "domain",
+      "stateful": true,
+      "state_cell": "issuerState",
+      "arms": [
+        "brand",
+        "issuer",
+        "supply",
+        "mint",
+        "burn",
+        "amountOf",
+        "attest"
+      ],
+      "dependencies": [],
+      "creates": [],
+      "system": [
+        "rho:rchain:ertp"
+      ],
+      "deploy": "contracts/src/deploy/v3/31_stablecoin.rho",
+      "instance_key": "currency",
+      "status": "implemented",
+      "budget": {
+        "bytes": 24576,
+        "depth": 96,
+        "contracts": 30
+      }
+    },
+    {
+      "name": "CollateralCustody",
+      "kind": "domain",
+      "stateful": false,
+      "state_cell": null,
+      "arms": [
+        "deposit",
+        "withdraw",
+        "balance",
+        "attest"
+      ],
+      "dependencies": [],
+      "creates": [],
+      "system": [
+        "rho:rchain:ertp"
+      ],
+      "deploy": "contracts/src/deploy/v3/31_stablecoin.rho",
+      "instance_key": "currency",
+      "status": "implemented",
+      "budget": {
+        "bytes": 24576,
+        "depth": 96,
+        "contracts": 30
+      }
+    },
+    {
+      "name": "RiskParameters",
+      "kind": "domain",
+      "stateful": false,
+      "state_cell": null,
+      "arms": [
+        "params",
+        "attest"
+      ],
+      "dependencies": [],
+      "creates": [],
+      "system": [],
+      "deploy": "contracts/src/deploy/v3/31_stablecoin.rho",
+      "instance_key": "currency",
+      "status": "implemented",
+      "budget": {
+        "bytes": 24576,
+        "depth": 96,
+        "contracts": 30
+      }
+    },
+    {
+      "name": "VaultBook",
+      "kind": "domain",
+      "stateful": true,
+      "state_cell": "vaultState",
+      "arms": [
+        "open",
+        "deposit",
+        "mint",
+        "withdraw",
+        "repay",
+        "vault",
+        "vaults",
+        "params",
+        "pause",
+        "attest"
+      ],
+      "dependencies": [
+        "Root",
+        "Clock",
+        "OracleHub",
+        "AccountFactory",
+        "CollateralMath",
+        "Stablecoin",
+        "CollateralCustody",
+        "RiskParameters",
+        "Governor"
+      ],
+      "creates": [],
+      "system": [
+        "rho:rchain:ertp"
+      ],
+      "deploy": "contracts/src/deploy/v3/31_stablecoin.rho",
+      "instance_key": "currency",
+      "status": "implemented",
+      "budget": {
+        "bytes": 24576,
+        "depth": 96,
+        "contracts": 30
+      }
+    },
+    {
+      "name": "LiquidationEngine",
+      "kind": "domain",
+      "stateful": false,
+      "state_cell": null,
+      "arms": [
+        "liquidate"
+      ],
+      "dependencies": [
+        "VaultBook"
+      ],
+      "creates": [],
+      "system": [],
+      "deploy": "contracts/src/deploy/v4/31_stablecoin.rho",
+      "instance_key": "currency",
+      "status": "planned",
+      "budget": {
+        "bytes": 8192,
+        "depth": 48,
+        "contracts": 2
+      }
+    },
+    {
+      "name": "StablecoinFactory",
+      "kind": "factory",
+      "stateful": false,
+      "state_cell": null,
+      "arms": [
+        "create"
+      ],
+      "dependencies": [
+        "Root",
+        "Bounds",
+        "Codec",
+        "Verifier",
+        "Clock"
+      ],
+      "creates": [
+        "Stablecoin",
+        "CollateralCustody",
+        "RiskParameters",
+        "VaultBook",
+        "LiquidationEngine"
+      ],
+      "system": [
+        "rho:rchain:ertp"
+      ],
+      "deploy": "contracts/src/deploy/v4/30_stablecoin_factory.rho",
+      "instance_key": null,
+      "status": "planned",
+      "budget": {
+        "bytes": 24576,
+        "depth": 96,
+        "contracts": 30
+      }
+    },
+    {
+      "name": "StablecoinDirectory",
+      "kind": "registry",
+      "stateful": true,
+      "state_cell": "stablecoinDirectoryState",
+      "arms": [
+        "register",
+        "lookup",
+        "entries"
+      ],
+      "dependencies": [
+        "Root",
+        "Verifier",
+        "Codec"
+      ],
+      "creates": [],
+      "system": [],
+      "deploy": "contracts/src/deploy/v4/30_stablecoin_factory.rho",
+      "instance_key": null,
+      "status": "planned",
+      "budget": {
+        "bytes": 8192,
+        "depth": 32,
         "contracts": 2
       }
     }

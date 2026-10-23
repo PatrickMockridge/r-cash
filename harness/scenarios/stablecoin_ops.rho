@@ -1,0 +1,77 @@
+// Stablecoin issuer end-to-end: open a vault, deposit REV, mint, repay, withdraw.
+// Placeholders: __ROOT_URI__, __VAULT_URI__, __PUBKEY__, __FUND__,
+//               __COLLATERAL__, __MINT__.
+new
+  rl(`rho:registry:lookup`),
+  rootCh, afCh, ac, vc,
+  oCh, zCh, depCh, mintCh, repayCh, withdrawCh,
+  ertpCh, revIssuerCh, purseCh, fundCh, wdCh,
+  deployId(`rho:rchain:deployId`),
+  deployerId(`rho:rchain:deployerId`)
+in {
+  rl!(`__ROOT_URI__`, *rootCh) |
+  rl!(`__VAULT_URI__`, *vc) |
+  rl!(`rho:rchain:ertp`, *ertpCh) |
+  for (Root <- rootCh; VaultBook <- vc; @(_, ERTP) <- ertpCh) {
+    Root!("resolve", "component:account-factory", 1, *afCh) |
+    for (@(true, afUri, _) <- afCh) {
+      rl!(afUri, *ac) |
+      for (AccountFactory <- ac) {
+        AccountFactory!("getOrCreate", "__PUBKEY__".hexToBytes(), *oCh) |
+        for (@(true, account, ownerId) <- oCh) {
+          @account!("vaultOpen", `__VAULT_URI__`, *zCh) |
+          for (@z <- zCh) {
+            match z {
+              (true, auth) => {
+                @ERTP!("getRevIssuer", *revIssuerCh) |
+                for (@(revBrand, revIssuer) <- revIssuerCh) {
+                  @revIssuer!("makeEmptyPurse", *purseCh) |
+                  for (@(true, purse) <- purseCh) {
+                    @purse!("revFund", *deployerId, __FUND__, *fundCh) |
+                    for (@_ <- fundCh) {
+                      @purse!("withdraw", (revBrand, __COLLATERAL__), *wdCh) |
+                      for (@(true, payment) <- wdCh) {
+                        VaultBook!("deposit", ownerId, auth, payment, *depCh) |
+                        for (@d <- depCh) {
+                          match d {
+                            (true, _) => {
+                              VaultBook!("mint", ownerId, auth, __MINT__, *mintCh) |
+                              for (@m <- mintCh) {
+                                match m {
+                                  (true, stablePayment, debt) => {
+                                    VaultBook!("repay", ownerId, auth, stablePayment, *repayCh) |
+                                    for (@rr <- repayCh) {
+                                      match rr {
+                                        (true, _) => {
+                                          VaultBook!("withdraw", ownerId, auth, __COLLATERAL__, *withdrawCh) |
+                                          for (@w <- withdrawCh) {
+                                            match w {
+                                              (true, paymentOut) => { deployId!("ops-ok") }
+                                              _ => { deployId!(w) }
+                                            }
+                                          }
+                                        }
+                                        _ => { deployId!(rr) }
+                                      }
+                                    }
+                                  }
+                                  _ => { deployId!(m) }
+                                }
+                              }
+                            }
+                            _ => { deployId!(d) }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+              _ => { deployId!(z) }
+            }
+          }
+        }
+      }
+    }
+  }
+}

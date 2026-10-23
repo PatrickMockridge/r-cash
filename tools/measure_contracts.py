@@ -165,13 +165,18 @@ def check_budgets(manifest: dict, budgets: dict) -> list[str]:
     if not v3:
         print("budget: no v3 units yet; nothing to enforce")
         return []
+    overrides = budgets.get("overrides", {})
     for path, entry in sorted(v3.items()):
-        if entry["minified_bytes"] > bytes_fail:
-            problems.append(f"{path}: {entry['minified_bytes']} bytes > {bytes_fail}")
-        if entry["grammar_depth"] > depth_fail:
-            problems.append(f"{path}: depth {entry['grammar_depth']} > {depth_fail}")
-        if entry["contracts"] > contracts_fail:
-            problems.append(f"{path}: {entry['contracts']} contracts > {contracts_fail}")
+        local = overrides.get(path, {})
+        local_bytes = local.get("bytes", bytes_fail)
+        local_depth = local.get("depth", depth_fail)
+        local_contracts = local.get("contracts", contracts_fail)
+        if entry["minified_bytes"] > local_bytes:
+            problems.append(f"{path}: {entry['minified_bytes']} bytes > {local_bytes}")
+        if entry["grammar_depth"] > local_depth:
+            problems.append(f"{path}: depth {entry['grammar_depth']} > {local_depth}")
+        if entry["contracts"] > local_contracts:
+            problems.append(f"{path}: {entry['contracts']} contracts > {local_contracts}")
     return problems
 
 

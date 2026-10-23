@@ -19,13 +19,13 @@
       "source_bytes": 2073
     },
     "contracts/build/deploy/v3/02_bounds.rho": {
-      "brace_depth": 13,
-      "contracts": 6,
-      "grammar_depth": 18,
-      "minified_bytes": 3477,
+      "brace_depth": 14,
+      "contracts": 7,
+      "grammar_depth": 19,
+      "minified_bytes": 4522,
       "operator_run": 3,
-      "sha256": "d0d1fb01252487943ef7487ddbb9b90a0ea12e823c2ba1c723e62374622f7864",
-      "source_bytes": 4297
+      "sha256": "7bcb38e09f2182f32976bb3628d90f3b16cbba1e750253636e82c543b2ac50b7",
+      "source_bytes": 5474
     },
     "contracts/build/deploy/v3/03_admin_guard.rho": {
       "brace_depth": 10,
@@ -54,6 +54,15 @@
       "sha256": "676f0be5ebc555dcf639f3248696707ad978b44cf2d876d4a1f0ba8945a3979a",
       "source_bytes": 2523
     },
+    "contracts/build/deploy/v3/06_collateral_math.rho": {
+      "brace_depth": 7,
+      "contracts": 4,
+      "grammar_depth": 10,
+      "minified_bytes": 1318,
+      "operator_run": 5,
+      "sha256": "2ae3a6142fcce54db0bd4535595592cdd2238211b1e94975f9bf709abfe0c724",
+      "source_bytes": 1942
+    },
     "contracts/build/deploy/v3/07_oracle_math.rho": {
       "brace_depth": 12,
       "contracts": 8,
@@ -73,13 +82,13 @@
       "source_bytes": 729
     },
     "contracts/build/deploy/v3/09_identity.rho": {
-      "brace_depth": 14,
-      "contracts": 3,
-      "grammar_depth": 23,
-      "minified_bytes": 1483,
+      "brace_depth": 16,
+      "contracts": 4,
+      "grammar_depth": 27,
+      "minified_bytes": 1774,
       "operator_run": 3,
-      "sha256": "60a082202df9422c360621e48209ad9bb3f4cf18f67b40c68b631ac3e350aac5",
-      "source_bytes": 2166
+      "sha256": "f49f1901b2c73bbfbbccbf02eb7324e828dc710707c6b3fea9221979bc54e408",
+      "source_bytes": 2999
     },
     "contracts/build/deploy/v3/12_oracle_registry.rho": {
       "brace_depth": 20,
@@ -107,6 +116,15 @@
       "operator_run": 4,
       "sha256": "d2fe02fe1506ba8ec1ea5693f034b85f2a40feb31b905976800261e53bf0b5cd",
       "source_bytes": 14806
+    },
+    "contracts/build/deploy/v3/31_stablecoin.rho": {
+      "brace_depth": 41,
+      "contracts": 30,
+      "grammar_depth": 66,
+      "minified_bytes": 17950,
+      "operator_run": 5,
+      "sha256": "02e9a1db3bf417c9d1649490a162d5525cad7e76bbf246b42ac2aa29576cc8a0",
+      "source_bytes": 33634
     }
   },
   "schema": "rcash:contract-metrics:v1"

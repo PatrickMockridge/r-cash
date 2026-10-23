@@ -15,9 +15,11 @@ the next build.
 | Area | Result |
 |---|---|
 | Deleted | v0.1/v0.2/v0.3 CDP contracts, vault arms, CDP tests/scenarios, `CdpAccounting` TLA, SDK/CLI/WASM vault methods, web Mint screen, CDP docs sections |
-| Retained | Root, Clock, Verifier, Codec, Bounds (without `checkZone`), AdminGuard, Governor, AmmMath, OracleMath, ClaimCode, OracleRegistry/Feed/Hub, AccountFactory identity |
+| Retained | Root, Clock, Verifier, Codec, Bounds (with `checkIssuer`), AdminGuard, Governor, AmmMath, OracleMath, ClaimCode, OracleRegistry/Feed/Hub, AccountFactory account capability |
+| Stablecoin issuer | `Stablecoin`, `CollateralCustody`, `RiskParameters`, `VaultBook`, `CollateralMath`; signed params, bounded risk, mint/repay/withdraw and REV custody |
+| Issuer checks | stablecoin system deploy, attestations, supply, params, custody, and open → deposit REV → mint → repay → withdraw all pass on a fresh devnet |
 | Gates | build, measure, architecture, capture, language and TLA gates pass; the old capture finding is gone |
-| Next | composable REV-backed stablecoin issuer (issuer, custody, vault book, liquidation, risk parameters), accounts/purses, send/claim/refund, convert/liquidity/market listing |
+| Next | liquidation engine, stablecoin factory/directory/currency registry, full accounts/purses, send/claim/refund, convert/liquidity/market listing |
 
 The stablecoin design is DAI-like: REV-only collateral, per-currency systems, MCR,
 interest, liquidation and bad debt, with separate contracts per authority. Bridged

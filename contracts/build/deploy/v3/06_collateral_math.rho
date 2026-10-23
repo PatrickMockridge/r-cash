@@ -1,0 +1,62 @@
+// v0.4 CollateralMath: pure arithmetic for the REV-backed stablecoin issuer.
+// This replaces the deleted RiskMath; it is new issuer infrastructure, not the old
+// lending product.
+// Placeholders: __ROOT_URI__.
+new
+  CollateralMath,
+  rl(`rho:registry:lookup`),
+  rs(`rho:registry:insertArbitrary`),
+  deployerId(`rho:rchain:deployerId`),
+  deployId(`rho:rchain:deployId`),
+  rootCh, Root, uMath, ack
+in {
+
+  // Per-block interest, rounded up. Time is block height.
+  contract CollateralMath(@"accrue", @debt, @last, @now, @rate, ret) = {
+    if (debt <= 0) { ret!(debt) }
+    else {
+      if (now <= last || rate <= 0) { ret!(debt) }
+      else {
+        match ((debt * rate * (now - last) + 999999999999) / 1000000000000).toInt() {
+          interest => ret!(debt + interest)
+        }
+      }
+    }
+  } |
+
+  contract CollateralMath(@"health", @collateral, @debt, @rate, @mcrBps, ret) = {
+    if (debt <= 0) { ret!(true) }
+    else {
+      if (rate <= 0) { ret!(false) }
+      else {
+        match ((collateral * rate) / 100000000).toInt() {
+          local => { ret!(local * 10000 >= debt * mcrBps) }
+        }
+      }
+    }
+  } |
+
+  // Collateral seized for repaying `amount`, including the liquidation bonus.
+  // The VaultBook caps the result at the vault's collateral.
+  contract CollateralMath(@"payout", @amount, @bonusBps, @rate, ret) = {
+    if (rate <= 0) { ret!(0) }
+    else {
+      match ((amount * (10000 + bonusBps) * 100000000) / (rate * 10000)).toInt() {
+        seized => ret!(seized)
+      }
+    }
+  } |
+
+  contract CollateralMath(@"seize", @amount, @bonusBps, @rate, ret) = {
+    CollateralMath!("payout", amount, bonusBps, rate, *ret)
+  } |
+
+  rl!(`__ROOT_URI__`, *rootCh) |
+  for (Root <- rootCh) {
+    rs!(bundle+{*CollateralMath}, *uMath) |
+    for (@uri <- uMath) {
+      Root!("register", "component:collateral-math", uri, 1, "kernel", *deployerId, *ack) |
+      for (@r <- ack) { deployId!([uri]) }
+    }
+  }
+}

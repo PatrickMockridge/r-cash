@@ -158,7 +158,7 @@ def main(argv: list[str] | None = None) -> int:
     state["governor_uri"] = governor["uris"][0]
     save(state)
 
-    for name in ["05_amm_math", "07_oracle_math", "08_claim_code"]:
+    for name in ["05_amm_math", "06_collateral_math", "07_oracle_math", "08_claim_code"]:
         result = step(name, name, common)
         state[f"{name}_uri"] = result["uris"][0]
         save(state)
