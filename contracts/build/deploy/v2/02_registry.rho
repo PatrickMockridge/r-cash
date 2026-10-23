@@ -283,7 +283,7 @@ contract ListingRegistry(@"registerCurrency", @code, @zoneUri, @paramsHashHex, @
                           } else {
                             listingNow!(*nowCh) |
                             for (@now <- nowCh) {
-                              for (@s <<- listingState) {
+                              for (@s <- listingState) {
                                 match s.get("currencies") {
                                   Nil => ret!((false, "no currencies"))
                                   currencies => {
@@ -406,17 +406,12 @@ contract ListingRegistry(@"stageMarket", @marketId, @version, @stageNonce, @base
                                     || linfo.get("termsHash") != computed) {
                                   ret!((false, "terms drift"))
                                 } else {
-                                  if (rb != terms.get("seedBase") || rq != terms.get("seedQuote")) {
-                                    ret!((false, "seed mismatch"))
+                                  if (linfo.get("marketId") != marketId
+                                      || linfo.get("beneficiaryPubKey") != terms.get("sponsorPubKey")
+                                      || linfo.get("untilHeight") != terms.get("lockUntilHeight")
+                                      || linfo.get("cancelled") == true) {
+                                    ret!((false, "lock mismatch"))
                                   } else {
-                                    if (linfo.get("marketId") != marketId
-                                        || linfo.get("beneficiaryPubKey") != terms.get("sponsorPubKey")
-                                        || linfo.get("shares") != terms.get("seedInitialShares")
-                                        || linfo.get("untilHeight") != terms.get("lockUntilHeight")
-                                        || linfo.get("funded") != true
-                                        || linfo.get("released") != false) {
-                                      ret!((false, "lock mismatch"))
-                                    } else {
                                       if (now + terms.get("lockMinBlocks") > terms.get("lockUntilHeight")) {
                                         ret!((false, "lock too short"))
                                       } else {
@@ -632,7 +627,30 @@ contract ListingRegistry(@"activateMarket", @marketId, @stageNonce, @termsHashHe
                                                 if (value < m.get("depthFloorQuote")) {
                                                   ret!((false, "below depth floor"))
                                                 } else {
-                                                  listingActivate!(s, markets, m, pairKey, *ret)
+                                                  match m.get("lock") {
+                                                    lockCap => {
+                                                      new lCh in {
+                                                        @lockCap!("info", *lCh) |
+                                                        for (@(true, li) <- lCh) {
+                                                          if (li.get("funded") != true
+                                                              || li.get("shares") != m.get("initialShares")
+                                                              || li.get("untilHeight") != m.get("lockUntilHeight")) {
+                                                            ret!((false, "lock"))
+                                                          } else {
+                                                            if (rb != m.get("seedBase") || rq != m.get("seedQuote")) {
+                                                              ret!((false, "seed"))
+                                                            } else {
+                                                              if (ts < m.get("initialShares") + 100000000) {
+                                                                ret!((false, "shares"))
+                                                              } else {
+                                                                listingActivate!(s, markets, m, pairKey, *ret)
+                                                              }
+                                                            }
+                                                          }
+                                                        }
+                                                      }
+                                                    }
+                                                  }
                                                 }
                                               }
                                             }
@@ -661,7 +679,6 @@ contract ListingRegistry(@"activateMarket", @marketId, @stageNonce, @termsHashHe
         }
       }
     }
-  }
 } |
 
 contract listingActivate(@s, @markets, @m, @pairKey, ret) = {
