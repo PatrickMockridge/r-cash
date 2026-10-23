@@ -1,0 +1,25 @@
+// v0.2 install step 1: Directory + ComponentRegistry, unlocked.
+// The installer registers the component names in a later step and locks the Directory then.
+// Returns (directoryUri, componentsUri) on deployId.
+new
+  Directory,
+  Components,
+  state,
+  componentsState,
+  uriDirCh,
+  uriCompCh,
+  rs(`rho:registry:insertArbitrary`),
+  deployId(`rho:rchain:deployId`)
+in {
+  state!({"names": {}, "assets": {}, "locked": false, "admins": [], "threshold": 2, "govNonce": 0}) |
+  componentsState!({"locked": false}) |
+
+  // @@INLINE:core/Directory.inc@@
+  // @@INLINE:core/ComponentRegistry.inc@@
+
+  rs!(bundle+{*Directory}, *uriDirCh) |
+  rs!(bundle+{*Components}, *uriCompCh) |
+  for (@dirUri <- uriDirCh; @compUri <- uriCompCh) {
+    deployId!((dirUri, compUri))
+  }
+}

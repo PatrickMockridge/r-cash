@@ -1,0 +1,28 @@
+// v0.2 install step 4: AccountFactory with the registry-aware Account body.
+// Placeholders: __DIRECTORY_URI__, __REGISTRY_URI__.
+// Returns the AccountFactory URI on deployId.
+new
+  AccountFactory,
+  factoryState,
+  Directory,
+  ListingRegistry,
+  dirCh,
+  regCh,
+  rl(`rho:registry:lookup`),
+  revAddress(`rho:rev:address`),
+  deployerIdOps(`rho:rchain:deployerId:ops`),
+  uriCh,
+  rs(`rho:registry:insertArbitrary`),
+  deployId(`rho:rchain:deployId`)
+in {
+  rl!(`__DIRECTORY_URI__`, *dirCh) |
+  rl!(`__REGISTRY_URI__`, *regCh) |
+  for (Directory <- dirCh; ListingRegistry <- regCh) {
+    factoryState!({}) |
+
+    // @@INLINE:core/AccountFactoryV2.inc@@
+
+    rs!(bundle+{*AccountFactory}, *uriCh) |
+    for (@uri <- uriCh) { deployId!(uri) }
+  }
+}

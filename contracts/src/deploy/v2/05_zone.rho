@@ -1,0 +1,87 @@
+// v0.2 install step 6: one CurrencyZone for a new currency.
+// Placeholders: __CURRENCY__, __ZONE_PARAMS__, __ADMIN_KEYS__, __ORACLE_URI__,
+//               __ACCOUNTS_URI__.
+// Returns (zoneUri, brand, issuer) on deployId.
+new
+  rl(`rho:registry:lookup`),
+  ertpCh,
+  kitCh,
+  revIssuerCh,
+  burnPurseCh,
+  revPurseCh,
+  burnFacetCh,
+  zone,
+  zoneState,
+  uriCh,
+  oracleCh,
+  OracleHub,
+  accountsCh,
+  AccountFactory,
+  currencyCh,
+  rs(`rho:registry:insertArbitrary`),
+  bd(`rho:block:data`),
+  hash(`rho:crypto:blake2b256Hash`),
+  verify(`rho:crypto:secp256k1Verify`),
+  deployId(`rho:rchain:deployId`),
+  guardArgsToString,
+  guardArgsAppend,
+  guardAnySig,
+  guardCount,
+  verifyAdmin,
+  zoneNow,
+  zoneAccrue,
+  zoneRate,
+  zoneHealth,
+  zoneBadInc,
+  zoneUpdate,
+  zoneAdminApply,
+  zonePayout
+in {
+  currencyCh!("__CURRENCY__") |
+  for (@currency <- currencyCh) {
+  rl!(`__ORACLE_URI__`, *oracleCh) |
+  rl!(`__ACCOUNTS_URI__`, *accountsCh) |
+  for (OracleHub <- oracleCh; AccountFactory <- accountsCh) {
+    rl!(`rho:rchain:ertp`, *ertpCh) |
+    for (@(_, ERTP) <- ertpCh) {
+      @ERTP!("makeIssuerKit", *kitCh) |
+      @ERTP!("getRevIssuer", *revIssuerCh) |
+      for (@(brand, mint, issuer) <- kitCh; @(revBrand, revIssuer) <- revIssuerCh) {
+        @issuer!("makeEmptyPurse", *burnPurseCh) |
+        @revIssuer!("makeEmptyPurse", *revPurseCh) |
+        for (@(true, burnPurse) <- burnPurseCh; @(true, revPurse) <- revPurseCh) {
+          @burnPurse!("getDepositFacet", *burnFacetCh) |
+          for (@(true, burnFacet) <- burnFacetCh) {
+            zoneState!({
+              "currency": currency,
+              "vaults": {},
+              "totalDebt": 0,
+              "totalCollateral": 0,
+              "badDebt": 0,
+              "params": {
+                "mcrBps": __ZONE_MCR__,
+                "bonusBps": __ZONE_BONUS__,
+                "closeFactorBps": __ZONE_CLOSE__,
+                "ratePerBlock": __ZONE_RATE__,
+                "debtCeiling": __ZONE_CEILING__,
+                "minDebt": __ZONE_MIN_DEBT__,
+                "maxDebt": __ZONE_MAX_DEBT__
+              },
+              "paused": false,
+              "admins": __ADMIN_KEYS__,
+              "threshold": 2,
+              "govNonce": 0
+            }) |
+
+            // @@INLINE:lib/Guard.inc@@
+            // @@INLINE:stable/CurrencyZone.inc@@
+
+            rs!(bundle+{*zone}, *uriCh) |
+            for (@uri <- uriCh) { deployId!((uri, brand, issuer)) }
+          }
+        }
+      }
+    }
+  }
+  }
+}

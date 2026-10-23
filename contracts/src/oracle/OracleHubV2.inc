@@ -183,8 +183,7 @@ contract oracleFeedPayload(@currency, @k0, @k1, @k2, @sponsor, @quorum, @age, @s
 } |
 
 // Store a price and, while inactive, count trial participation. Consumes state once.
-contract oracleStoreV2(@currency, @index, @price, @height, ret) = {
-  for (@s <- oracleState) {
+contract oracleStoreV2(@s, @currency, @index, @price, @height, ret) = {
     match s.get("feeds") {
       Nil => { oracleState!(s) | ret!((false, "no feeds")) }
       feeds => {
@@ -275,7 +274,6 @@ contract oracleStoreV2(@currency, @index, @price, @height, ret) = {
         }
       }
     }
-  }
 } |
 
 // Open a feed. Permissionless with the sponsor's signature; the three reporters must be
@@ -525,25 +523,25 @@ contract OracleHubV2(@"submit", @currency, @price, @height, @index, @pubKey, @si
   new nowCh in {
     oracleNowV2!(*nowCh) |
     for (@now <- nowCh) {
-      for (@s <<- oracleState) {
+      for (@s <- oracleState) {
         match s.get("feeds") {
-          Nil => ret!((false, "no feeds"))
+          Nil => { oracleState!(s) | ret!((false, "no feeds")) }
           feeds => {
             match feeds.get(currency) {
-              Nil => ret!((false, "no feed"))
+              Nil => { oracleState!(s) | ret!((false, "no feed")) }
               feed => {
-                if (feed.get("paused")) { ret!((false, "feed paused")) }
+                if (feed.get("paused")) { oracleState!(s) | ret!((false, "feed paused")) }
                 else {
-                  if (index < 0 || index >= 3) { ret!((false, "bad index")) }
+                  if (index < 0 || index >= 3) { oracleState!(s) | ret!((false, "bad index")) }
                   else {
                     match feed.get("reporters") {
                       reporters => {
                         match reporters.nth(index) {
                           allowed => {
                         if (allowed == pubKey) {
-                          if (height > now) { ret!((false, "future height")) }
+                          if (height > now) { oracleState!(s) | ret!((false, "future height")) }
                           else {
-                            if ((now - height) > 1000) { ret!((false, "stale height")) }
+                            if ((now - height) > 1000) { oracleState!(s) | ret!((false, "stale height")) }
                             else {
                               new hashCh, vCh in {
                                 match ("rcash:oracle:v1|/root|" ++ currency ++ "|"
@@ -553,8 +551,8 @@ contract OracleHubV2(@"submit", @currency, @price, @height, @index, @pubKey, @si
                                     for (@digest <- hashCh) {
                                       verify!(digest, sig, pubKey, *vCh) |
                                       for (@ok <- vCh) {
-                                        if (ok) { oracleStoreV2!(currency, index, price, height, *ret) }
-                                        else { ret!((false, "bad signature")) }
+                                        if (ok) { oracleStoreV2!(s, currency, index, price, height, *ret) }
+                                        else { oracleState!(s) | ret!((false, "bad signature")) }
                                       }
                                     }
                                   }
@@ -562,7 +560,7 @@ contract OracleHubV2(@"submit", @currency, @price, @height, @index, @pubKey, @si
                               }
                             }
                           }
-                        } else { ret!((false, "not the reporter at that index")) }
+                        } else { oracleState!(s) | ret!((false, "not the reporter at that index")) }
                         }
                       }
                     }

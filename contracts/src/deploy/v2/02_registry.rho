@@ -1,0 +1,59 @@
+// v0.2 install step 3: ListingRegistry.
+// Placeholders: __ORACLE_URI__, __ADMIN_KEYS__.
+// Returns the registry URI on deployId.
+new
+  ListingRegistry,
+  listingState,
+  rl(`rho:registry:lookup`),
+  revAddress(`rho:rev:address`),
+  OracleHub,
+  oracleCh,
+  bd(`rho:block:data`),
+  hash(`rho:crypto:blake2b256Hash`),
+  verify(`rho:crypto:secp256k1Verify`),
+  uriCh,
+  rs(`rho:registry:insertArbitrary`),
+  deployId(`rho:rchain:deployId`),
+  termsJoin,
+  termsCanonical,
+  termsHash,
+  guardArgsToString,
+  guardArgsAppend,
+  guardAnySig,
+  guardCount,
+  verifyAdmin,
+  listingNow,
+  listingPairKey,
+  listingZoneOk,
+  listingZoneParamsHash,
+  listingCurrencyPayload,
+  listingSponsorPayload,
+  listingMarketView,
+  listingStage,
+  listingStoreDraft,
+  listingActivate,
+  listingAdminApply
+in {
+  rl!(`__ORACLE_URI__`, *oracleCh) |
+  for (OracleHub <- oracleCh) {
+    // @@INLINE:lib/Guard.inc@@
+    // @@INLINE:lib/Terms.inc@@
+    // @@INLINE:listing/ListingRegistry.inc@@
+
+    listingState!({
+      "currencies": {},
+      "assets": {"REV": {"kind": "rev", "controller": {"type": "rev"}, "decimals": 8}},
+      "markets": {},
+      "marketViews": {},
+      "byPair": {},
+      "byPairVersion": {},
+      "bounds": {},
+      "admins": __ADMIN_KEYS__,
+      "threshold": 2,
+      "govNonce": 0
+    }) |
+
+    rs!(bundle+{*ListingRegistry}, *uriCh) |
+    for (@uri <- uriCh) { deployId!(uri) }
+  }
+}
