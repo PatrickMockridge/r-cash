@@ -83,7 +83,7 @@ in {
             "threshold": 2,
             "govNonce": 0
           }) |
-// ---- begin lib/Guard.inc ----
+// ---- begin lib/Guard.rho ----
 // Guard: M-of-N admin signature verification over a canonical payload.
 //
 // Off-chain canonical string (tools/sign_payload.py):
@@ -172,7 +172,7 @@ contract verifyAdmin(@component, @nonce, @action, @args, @sigs, @keys, @threshol
     }
   }
 } |
-// ---- end lib/Guard.inc ----// ---- begin dex/FxPool.inc ----
+// ---- end lib/Guard.rho ----// ---- begin dex/FxPool.rho ----
 // FxPool: oracle-anchored fixed-price market maker for one directed corridor (base -> quote).
 //
 // Captured by the factory: poolState, base, quote, baseBrand, baseIssuer, basePurse,
@@ -787,7 +787,7 @@ contract pool(@"admin", @nonce, @action, @args, @sigs, ret) = {
     }
   }
 } |
-// ---- end dex/FxPool.inc ----
+// ---- end dex/FxPool.rho ----
           Components!("set", "pool:NGN/KES:fpmm", *pool, *ack) |
           for (@_ <- ack) { deployId!("pool-installed") }
         }

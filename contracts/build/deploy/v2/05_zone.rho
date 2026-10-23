@@ -72,7 +72,7 @@ in {
               "threshold": 2,
               "govNonce": 0
             }) |
-// ---- begin lib/Guard.inc ----
+// ---- begin lib/Guard.rho ----
 // Guard: M-of-N admin signature verification over a canonical payload.
 //
 // Off-chain canonical string (tools/sign_payload.py):
@@ -161,8 +161,8 @@ contract verifyAdmin(@component, @nonce, @action, @args, @sigs, @keys, @threshol
     }
   }
 } |
-// ---- end lib/Guard.inc ----
-// ---- begin stable/CurrencyZone.inc ----
+// ---- end lib/Guard.rho ----
+// ---- begin stable/CurrencyZone.rho ----
 // CurrencyZone: one local stablecoin + its REV-collateralised CDP.
 //
 // Captured by the factory:
@@ -869,7 +869,7 @@ contract zone(@"admin", @nonce, @action, @args, @sigs, ret) = {
     }
   }
 } |
-// ---- end stable/CurrencyZone.inc ----
+// ---- end stable/CurrencyZone.rho ----
             rs!(bundle+{*zone}, *uriCh) |
             for (@uri <- uriCh) { deployId!((uri, brand, issuer)) }
           }

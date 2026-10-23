@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
-"""Fail if R-Cash contains C/C++ sources, dependencies, build tools or artifacts.
+"""Fail if R-Cash contains native sources, dependencies, build tools or artifacts.
 
-This is the enforcement behind docs/LANGUAGES.md. It is deliberately stricter than
-"no .cpp files": the project previously pulled C/C++ in through cargo features and
-invoked protoc/wasm-opt from scripts. Run with:
+This is the enforcement behind docs/LANGUAGES.md. Run with:
 
-    make check-no-cpp
+    make check-languages
 """
 
 from __future__ import annotations
@@ -27,6 +25,8 @@ SOURCE_SUFFIXES = {
     ".hpp",
     ".hxx",
     ".ino",
+    ".inc",
+    ".inl",
     ".m",
     ".mm",
     ".asm",
@@ -34,7 +34,7 @@ SOURCE_SUFFIXES = {
 SOURCE_NAMES = {"CMakeLists.txt"}
 ARTIFACT_SUFFIXES = {".o", ".a", ".so", ".dll", ".dylib", ".node"}
 
-# Crates that compile C/C++, invoke a C/C++ tool, or were removed for doing so.
+# Crates that build native code or invoke a native toolchain.
 FORBIDDEN_CRATES = {
     "ring",
     "cc",
@@ -125,7 +125,7 @@ def check_sources(files: list[Path]) -> None:
         if path.suffix in SOURCE_SUFFIXES or path.suffix == ".S":
             hits.append(str(path.relative_to(ROOT)))
     if hits:
-        fail("C/C++ or CMake source files are not allowed", hits)
+        fail("native source files are not allowed", hits)
 
 
 def check_artifacts(files: list[Path]) -> None:
@@ -197,7 +197,7 @@ def check_graphs() -> None:
         if forbidden:
             problems.append(f"{label}: {', '.join(sorted(forbidden))}")
     if problems:
-        fail("C/C++-compiling crates are in the dependency graph", problems)
+        fail("native-compiling crates are in the dependency graph", problems)
 
 
 def check_lockfile() -> None:
@@ -214,7 +214,7 @@ def check_lockfile() -> None:
     }
     if forbidden:
         fail(
-            "C/C++-compiling crates are in Cargo.lock (stale lock entries count)",
+            "native-compiling crates are in Cargo.lock (stale lock entries count)",
             sorted(forbidden),
         )
 
@@ -240,7 +240,7 @@ def check_tools() -> None:
             if match:
                 hits.append(f"{path.relative_to(ROOT)}:{number}: {match.group(1)}")
     if hits:
-        fail("a C/C++ build tool is referenced by an executable/build file", hits)
+        fail("a native build tool is referenced by an executable/build file", hits)
 
 
 def main() -> None:
@@ -251,7 +251,7 @@ def main() -> None:
     check_graphs()
     check_tools()
     print(
-        "no-cpp: clean "
+        "languages: clean "
         f"({len(files)} tracked files; host and wasm graphs; lockfile; tool scripts)"
     )
 

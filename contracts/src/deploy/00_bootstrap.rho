@@ -61,15 +61,15 @@ in {
     "govNonce": 0
   }) |
 
-  // @@INLINE:core/Directory.inc@@
+  // @@INLINE:core/Directory.rho@@
 
   componentsState!({"locked": false}) |
 
-  // @@INLINE:core/ComponentRegistry.inc@@
+  // @@INLINE:core/ComponentRegistry.rho@@
 
   factoryState!({}) |
 
-  // @@INLINE:core/AccountFactory.inc@@
+  // @@INLINE:core/AccountFactory.rho@@
 
   oracleState!({
     "reporters": __REPORTER_KEYS__,
@@ -86,9 +86,9 @@ in {
     "govNonce": 0
   }) |
 
-  // @@INLINE:lib/Guard.inc@@
+  // @@INLINE:lib/Guard.rho@@
 
-  // @@INLINE:oracle/OracleHub.inc@@
+  // @@INLINE:oracle/OracleHub.rho@@
 
   // A trusted bootstrap helper: create a CurrencyZone, install it, return (uri, zone, brand, issuer).
   contract createCurrencyZone(@currency, @params, @admins, @threshold, ret) = {
@@ -143,7 +143,7 @@ in {
                 "govNonce": 0
               }) |
 
-              // @@INLINE:stable/CurrencyZone.inc@@
+              // @@INLINE:stable/CurrencyZone.rho@@
 
               rs!(bundle+{*zone}, *uriCh) |
               for (@uri <- uriCh) { ret!((uri, brand, issuer)) }

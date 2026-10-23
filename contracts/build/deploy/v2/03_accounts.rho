@@ -19,7 +19,7 @@ in {
   rl!(`__REGISTRY_URI__`, *regCh) |
   for (Directory <- dirCh; ListingRegistry <- regCh) {
     factoryState!({}) |
-// ---- begin core/AccountFactoryV2.inc ----
+// ---- begin core/AccountFactoryV2.rho ----
 // AccountFactory: ownerId -> {account: bundle, proof: unforgeable}.
 // Captured: factoryState, revAddress, Directory, deployerIdOps.
 // The proof is passed only into the Account at creation and is never returned by getOrCreate.
@@ -37,7 +37,7 @@ contract AccountFactory(@"getOrCreate", @pubKeyBytes, ret) = {
                   proof, purseState, vaultState in {
               purseState!({}) |
               vaultState!({}) |
-// ---- begin core/AccountBodyV2.inc ----
+// ---- begin core/AccountBodyV2.rho ----
 // AccountBody: the per-key non-custodial Account. Inlined inside AccountFactory's
 // `new account, accountInternalPurse, accountLookupPurse, proof, purseState, vaultState in { ... }`.
 //
@@ -1001,7 +1001,7 @@ contract account(@"vaultInfo", deployerId, @currency, ret) = {
     }
   }
 } |
-// ---- end core/AccountBodyV2.inc ----
+// ---- end core/AccountBodyV2.rho ----
               factoryState!(accounts.set(ownerId, {
                 "account": bundle+{*account},
                 "proof": *proof
@@ -1036,7 +1036,7 @@ contract AccountFactory(@"accountOf", @ownerId, ret) = {
     }
   }
 } |
-// ---- end core/AccountFactoryV2.inc ----
+// ---- end core/AccountFactoryV2.rho ----
     rs!(bundle+{*AccountFactory}, *uriCh) |
     for (@uri <- uriCh) { deployId!(uri) }
   }

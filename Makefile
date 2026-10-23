@@ -3,7 +3,7 @@ PY := $(VENV)/bin/python
 RCHAIN_RUST_DIR ?= ../RNodeRust
 export RCHAIN_RUST_DIR
 
-.PHONY: venv image devnet down status keys build probes deploy logs clean bootstrap pool book demo legacy-demo client-test web-build check-languages check-no-cpp test-wasm
+.PHONY: venv image devnet down status keys build probes deploy logs clean bootstrap pool book demo legacy-demo client-test web-build check-languages test-wasm
 
 venv:
 	python3 -m venv $(VENV)
@@ -62,15 +62,12 @@ legacy-demo: book
 client-test:
 	cargo test --workspace --exclude rcash-wasm
 
-# The project is Rust, Rholang, Python and TypeScript. Reject C/C++ sources,
-# C/C++-compiling crates, C/C++ build tools and native artifacts.
-check-no-cpp:
-	python3 tools/check_no_cpp.py
+# The project is Rust, Rholang, Python and TypeScript. Reject native sources,
+# native-compiling crates, native build tools and native artifacts.
+check-languages:
+	python3 tools/check_languages.py
 
-# Kept as the public name for the language gate.
-check-languages: check-no-cpp
-
-# The wasm boundary is tested offline in Node; no wasm-bindgen-test/minicov.
+# The wasm boundary is tested offline in Node.
 test-wasm:
 	cargo test -p rcash-wasm --features rcash-chain/native
 	npm --prefix web run test:wasm

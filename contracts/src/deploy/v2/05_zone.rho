@@ -73,8 +73,8 @@ in {
               "govNonce": 0
             }) |
 
-            // @@INLINE:lib/Guard.inc@@
-            // @@INLINE:stable/CurrencyZone.inc@@
+            // @@INLINE:lib/Guard.rho@@
+            // @@INLINE:stable/CurrencyZone.rho@@
 
             rs!(bundle+{*zone}, *uriCh) |
             for (@uri <- uriCh) { deployId!((uri, brand, issuer)) }

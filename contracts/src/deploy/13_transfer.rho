@@ -59,7 +59,7 @@ in {
           for (@(true, escrowNgn) <- escrowNgnCh; @(true, escrowKes) <- escrowKesCh) {
             bookState!({"transfers": {}, "nextId": 0}) |
 
-            // @@INLINE:transfer/TransferBook.inc@@
+            // @@INLINE:transfer/TransferBook.rho@@
 
             Components!("set", "transfer:NGN/KES", *book, *ack) |
             for (@_ <- ack) {

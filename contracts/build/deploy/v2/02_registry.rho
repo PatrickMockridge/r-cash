@@ -36,7 +36,7 @@ new
 in {
   rl!(`__ORACLE_URI__`, *oracleCh) |
   for (OracleHub <- oracleCh) {
-// ---- begin lib/Guard.inc ----
+// ---- begin lib/Guard.rho ----
 // Guard: M-of-N admin signature verification over a canonical payload.
 //
 // Off-chain canonical string (tools/sign_payload.py):
@@ -125,8 +125,8 @@ contract verifyAdmin(@component, @nonce, @action, @args, @sigs, @keys, @threshol
     }
   }
 } |
-// ---- end lib/Guard.inc ----
-// ---- begin lib/Terms.inc ----
+// ---- end lib/Guard.rho ----
+// ---- begin lib/Terms.rho ----
 // Canonical string helpers for market terms, feed policy and parameter hashes.
 //
 // The canonical form is `schema|value0|value1|...`; the hash is BLAKE2b-256 of its UTF-8
@@ -161,8 +161,8 @@ contract termsHash(@hashCh, @schema, @items, ret) = {
     }
   }
 } |
-// ---- end lib/Terms.inc ----
-// ---- begin listing/ListingRegistry.inc ----
+// ---- end lib/Terms.rho ----
+// ---- begin listing/ListingRegistry.rho ----
 // ListingRegistry v0.2: dynamic currencies, assets, markets and immutable terms.
 //
 // Directory stays frozen as the v0.1 fallback. This registry is the source of truth for
@@ -1048,7 +1048,7 @@ contract ListingRegistry(@"admin", @nonce, @action, @args, @sigs, ret) = {
     }
   }
 } |
-// ---- end listing/ListingRegistry.inc ----
+// ---- end listing/ListingRegistry.rho ----
     listingState!({
       "currencies": {},
       "assets": {"REV": {"kind": "rev", "controller": {"type": "rev"}, "decimals": 8}},

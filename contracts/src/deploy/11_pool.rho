@@ -84,9 +84,9 @@ in {
             "govNonce": 0
           }) |
 
-          // @@INLINE:lib/Guard.inc@@
+          // @@INLINE:lib/Guard.rho@@
 
-          // @@INLINE:dex/FxPool.inc@@
+          // @@INLINE:dex/FxPool.rho@@
 
           Components!("set", "pool:NGN/KES:fpmm", *pool, *ack) |
           for (@_ <- ack) { deployId!("pool-installed") }

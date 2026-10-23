@@ -50,13 +50,15 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--check", action="store_true", help="build to memory and fail on drift")
     args = ap.parse_args(argv)
 
-    sources = sorted(SRC.rglob("*.rho"))
+    # Only deploy terms are built. Library contracts under core/, dex/, lib/,
+    # listing/, lock/, oracle/, stable/ and transfer/ are Rholang `.rho` includes
+    # resolved through @@INLINE markers; building them directly would emit
+    # non-deployable fragments.
+    sources = sorted((SRC / "deploy").rglob("*.rho"))
     if not sources:
         print("no contract sources found", file=sys.stderr)
         return 1
     for src in sources:
-        if src.parent.name == "lib":
-            continue
         dest = build_one(src)
         print(f"built {dest.relative_to(ROOT)}")
     return 0

@@ -45,9 +45,9 @@ new
   oracleRestartTrialAdmin,
   oracleAdminApplyV2
 in {
-  // @@INLINE:lib/Guard.inc@@
-  // @@INLINE:lib/Terms.inc@@
-  // @@INLINE:oracle/OracleHubV2.inc@@
+  // @@INLINE:lib/Guard.rho@@
+  // @@INLINE:lib/Terms.rho@@
+  // @@INLINE:oracle/OracleHubV2.rho@@
 
   oracleState!({
     "allowlist": __REPORTER_KEYS__,

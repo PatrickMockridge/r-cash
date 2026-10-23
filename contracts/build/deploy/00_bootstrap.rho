@@ -60,7 +60,7 @@ in {
     "threshold": 2,
     "govNonce": 0
   }) |
-// ---- begin core/Directory.inc ----
+// ---- begin core/Directory.rho ----
 // Directory: names -> component URIs, assetId -> {kind, controllerKey, decimals}.
 // State is seeded by the bootstrap term (which holds the private `state` channel):
 //   {names: Map, assets: Map, locked: Bool, admins: List, threshold: Int, govNonce: Int}
@@ -153,9 +153,9 @@ contract Directory(@"names", ret) = {
 contract Directory(@"admin", @nonce, @action, @args, @sigs, ret) = {
   ret!((false, "admin actions are phase 2"))
 } |
-// ---- end core/Directory.inc ----
+// ---- end core/Directory.rho ----
   componentsState!({"locked": false}) |
-// ---- begin core/ComponentRegistry.inc ----
+// ---- begin core/ComponentRegistry.rho ----
 // ComponentRegistry: name -> live contract channel. A large contract cannot always be wrapped in
 // a bundle on this node (the bundle free-variable check rejects some nested captures), so the
 // bootstrap holds the live name here instead of installing a bundle. The registry is a simple
@@ -212,9 +212,9 @@ contract Components(@"has", @key, ret) = {
     }
   }
 } |
-// ---- end core/ComponentRegistry.inc ----
+// ---- end core/ComponentRegistry.rho ----
   factoryState!({}) |
-// ---- begin core/AccountFactory.inc ----
+// ---- begin core/AccountFactory.rho ----
 // AccountFactory: ownerId -> {account: bundle, proof: unforgeable}.
 // Captured: factoryState, revAddress, Directory, deployerIdOps.
 // The proof is passed only into the Account at creation and is never returned by getOrCreate.
@@ -229,7 +229,7 @@ contract AccountFactory(@"getOrCreate", @pubKeyBytes, ret) = {
             new account, accountInternalPurse, accountLookupPurse, accountZone, accountVaultAuth, accountEnsurePurse, accountTransferBook, proof, purseState, vaultState in {
               purseState!({}) |
               vaultState!({}) |
-// ---- begin core/AccountBody.inc ----
+// ---- begin core/AccountBody.rho ----
 // AccountBody: the per-key non-custodial Account. Inlined inside AccountFactory's
 // `new account, accountInternalPurse, accountLookupPurse, proof, purseState, vaultState in { ... }`.
 //
@@ -1011,7 +1011,7 @@ contract account(@"vaultInfo", deployerId, @currency, ret) = {
     }
   }
 } |
-// ---- end core/AccountBody.inc ----
+// ---- end core/AccountBody.rho ----
               factoryState!(accounts.set(ownerId, {
                 "account": bundle+{*account},
                 "proof": *proof
@@ -1046,7 +1046,7 @@ contract AccountFactory(@"accountOf", @ownerId, ret) = {
     }
   }
 } |
-// ---- end core/AccountFactory.inc ----
+// ---- end core/AccountFactory.rho ----
   oracleState!({
     "reporters": __REPORTER_KEYS__,
     "prices": {},
@@ -1061,7 +1061,7 @@ contract AccountFactory(@"accountOf", @ownerId, ret) = {
     "threshold": 2,
     "govNonce": 0
   }) |
-// ---- begin lib/Guard.inc ----
+// ---- begin lib/Guard.rho ----
 // Guard: M-of-N admin signature verification over a canonical payload.
 //
 // Off-chain canonical string (tools/sign_payload.py):
@@ -1150,7 +1150,7 @@ contract verifyAdmin(@component, @nonce, @action, @args, @sigs, @keys, @threshol
     }
   }
 } |
-// ---- end lib/Guard.inc ----// ---- begin oracle/OracleHub.inc ----
+// ---- end lib/Guard.rho ----// ---- begin oracle/OracleHub.rho ----
 // OracleHub: signed reporter prices, median/freshness/spread decisions, M-of-N admin.
 //
 // State (seeded by the bootstrap):
@@ -1570,7 +1570,7 @@ contract OracleHub(@"admin", @nonce, @action, @args, @sigs, ret) = {
     }
   }
 } |
-// ---- end oracle/OracleHub.inc ----
+// ---- end oracle/OracleHub.rho ----
   // A trusted bootstrap helper: create a CurrencyZone, install it, return (uri, zone, brand, issuer).
   contract createCurrencyZone(@currency, @params, @admins, @threshold, ret) = {
     new
@@ -1623,7 +1623,7 @@ contract OracleHub(@"admin", @nonce, @action, @args, @sigs, ret) = {
                 "threshold": threshold,
                 "govNonce": 0
               }) |
-// ---- begin stable/CurrencyZone.inc ----
+// ---- begin stable/CurrencyZone.rho ----
 // CurrencyZone: one local stablecoin + its REV-collateralised CDP.
 //
 // Captured by the factory:
@@ -2330,7 +2330,7 @@ contract zone(@"admin", @nonce, @action, @args, @sigs, ret) = {
     }
   }
 } |
-// ---- end stable/CurrencyZone.inc ----
+// ---- end stable/CurrencyZone.rho ----
               rs!(bundle+{*zone}, *uriCh) |
               for (@uri <- uriCh) { ret!((uri, brand, issuer)) }
             }

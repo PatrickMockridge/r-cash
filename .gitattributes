@@ -1,0 +1,3 @@
+# Rholang sources and includes use .rho. .inc is not used in this repository.
+*.rho linguist-language=Rholang
+*.inc linguist-detectable=false

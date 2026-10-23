@@ -58,7 +58,7 @@ in {
           @quoteIssuer!("makeEmptyPurse", *escrowKesCh) |
           for (@(true, escrowNgn) <- escrowNgnCh; @(true, escrowKes) <- escrowKesCh) {
             bookState!({"transfers": {}, "nextId": 0}) |
-// ---- begin transfer/TransferBook.inc ----
+// ---- begin transfer/TransferBook.rho ----
 // TransferBook: quote/send/claim/refund for the NGN<->KES corridor.
 //
 // Captured by the deploy term: bookState, pool, AccountFactory, baseIssuer, quoteIssuer,
@@ -370,7 +370,7 @@ contract book(@"info", @transferId, ret) = {
 contract book(@"nextId", ret) = {
   for (@s <<- bookState) { ret!((true, s.get("nextId"))) }
 } |
-// ---- end transfer/TransferBook.inc ----
+// ---- end transfer/TransferBook.rho ----
             Components!("set", "transfer:NGN/KES", *book, *ack) |
             for (@_ <- ack) {
               Components!("lock", *lockAck) |

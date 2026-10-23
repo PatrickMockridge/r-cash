@@ -1,8 +1,7 @@
 //! Deploy data construction.
 //!
-//! `DeployData` is declared here with the node's protobuf field tags. Using `rchain-models`
-//! would invoke `protoc` (a C++ tool) at build time; the wire contract is the field tags,
-//! and the parity tests pin the encoded bytes.
+//! `DeployData` is declared here with the node's protobuf field tags. The field tags are
+//! the wire contract, and the parity tests pin the encoded bytes.
 
 use prost::Message;
 use rcash_core::rho::check_term_size;
@@ -13,10 +12,8 @@ use crate::error::ChainError;
 
 /// The fields of a deploy that are signed and submitted.
 ///
-/// This is the node's `DeployDataProto` shape, re-declared locally so the client build
-/// does not need `rchain-models` and therefore does not invoke `protoc` (a C++ tool).
-/// The field tags are the wire contract; `deployer`, `sig` and `sigAlgorithm` are
-/// deliberately absent.
+/// This is the node's `DeployDataProto` shape, declared locally with its protobuf field
+/// tags. `deployer`, `sig` and `sigAlgorithm` are deliberately absent.
 #[derive(Clone, PartialEq, Eq, Message, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DeployData {

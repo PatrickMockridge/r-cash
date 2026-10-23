@@ -36,9 +36,9 @@ new
 in {
   rl!(`__ORACLE_URI__`, *oracleCh) |
   for (OracleHub <- oracleCh) {
-    // @@INLINE:lib/Guard.inc@@
-    // @@INLINE:lib/Terms.inc@@
-    // @@INLINE:listing/ListingRegistry.inc@@
+    // @@INLINE:lib/Guard.rho@@
+    // @@INLINE:lib/Terms.rho@@
+    // @@INLINE:listing/ListingRegistry.rho@@
 
     listingState!({
       "currencies": {},

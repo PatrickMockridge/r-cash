@@ -45,7 +45,7 @@ new
   oracleRestartTrialAdmin,
   oracleAdminApplyV2
 in {
-// ---- begin lib/Guard.inc ----
+// ---- begin lib/Guard.rho ----
 // Guard: M-of-N admin signature verification over a canonical payload.
 //
 // Off-chain canonical string (tools/sign_payload.py):
@@ -134,8 +134,8 @@ contract verifyAdmin(@component, @nonce, @action, @args, @sigs, @keys, @threshol
     }
   }
 } |
-// ---- end lib/Guard.inc ----
-// ---- begin lib/Terms.inc ----
+// ---- end lib/Guard.rho ----
+// ---- begin lib/Terms.rho ----
 // Canonical string helpers for market terms, feed policy and parameter hashes.
 //
 // The canonical form is `schema|value0|value1|...`; the hash is BLAKE2b-256 of its UTF-8
@@ -170,8 +170,8 @@ contract termsHash(@hashCh, @schema, @items, ret) = {
     }
   }
 } |
-// ---- end lib/Terms.inc ----
-// ---- begin oracle/OracleHubV2.inc ----
+// ---- end lib/Terms.rho ----
+// ---- begin oracle/OracleHubV2.rho ----
 // OracleHub v0.2: a global reporter allowlist and one feed state per currency.
 //
 // Hub state: {allowlist: [pubKeyBytes], keyUse: Map(hex -> Int),
@@ -909,7 +909,7 @@ contract OracleHubV2(@"admin", @nonce, @action, @args, @sigs, ret) = {
     }
   }
 } |
-// ---- end oracle/OracleHubV2.inc ----
+// ---- end oracle/OracleHubV2.rho ----
   oracleState!({
     "allowlist": __REPORTER_KEYS__,
     "keyUse": {},

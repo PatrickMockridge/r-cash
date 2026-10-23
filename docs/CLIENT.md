@@ -7,10 +7,8 @@ The client stack is Rust, shared by a native CLI and a browser WASM module. Type
 used for the UI and for an independent signer in the parity test. Python remains only as
 build-time tooling and the legacy devnet harness.
 
-**Transport:** the native client is built without a TLS backend (`reqwest` with default
-features off). The devnet node is HTTP on port 40403. Public deployments must terminate
-HTTPS at a proxy until a pure-Rust TLS provider is vetted; a C-backed provider
-(`ring`/`aws-lc`) must not be reintroduced. The language guard fails if it is.
+**Transport:** the native client uses `reqwest` with default features off and speaks
+HTTP to the devnet node on port 40403. Public deployments terminate HTTPS at a proxy.
 
 ## Crates
 
@@ -39,8 +37,8 @@ The SDK uses the node's own cryptography and re-declares only the wire shape:
 - `DeployData` is declared locally in `crates/rcash-chain/src/deploy.rs` with the node's
   protobuf field tags: `term=2`, `timestamp=3`, `phloPrice=7`, `phloLimit=8`,
   `validAfterBlockNumber=10`, `shardId=11`, `attachments=12`. **`deployer`, `sig` and
-  `sigAlgorithm` are not part of the signed bytes.** It is encoded with prost; the
-  node's `rchain-models` crate (whose build script ran `protoc`) is not used.
+  `sigAlgorithm` are not part of the signed bytes.** It is encoded with prost, and the
+  golden bytes pin parity with the node.
 - `rchain_crypto::signatures::signed::signature_hash` and
   `Secp256k1::sign_bytes`: BLAKE2b-256 prehash for `secp256k1`, RFC-6979 deterministic
   DER low-S, 65-byte uncompressed public key. The deploy id is the hex DER signature.

@@ -19,8 +19,8 @@ jobs:
         with:
           toolchain: 1.95.0
           targets: wasm32-unknown-unknown
-      - name: no C/C++ sources, dependencies, tools or artifacts
-        run: python3 tools/check_no_cpp.py
+      - name: language policy
+        run: python3 tools/check_languages.py
 
   rust:
     runs-on: ubuntu-latest

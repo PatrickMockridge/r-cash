@@ -20,7 +20,7 @@ in {
   for (Directory <- dirCh; ListingRegistry <- regCh) {
     factoryState!({}) |
 
-    // @@INLINE:core/AccountFactoryV2.inc@@
+    // @@INLINE:core/AccountFactoryV2.rho@@
 
     rs!(bundle+{*AccountFactory}, *uriCh) |
     for (@uri <- uriCh) { deployId!(uri) }

@@ -13,7 +13,7 @@ new
 in {
   state!({"names": {}, "assets": {}, "locked": false, "admins": [], "threshold": 2, "govNonce": 0}) |
   componentsState!({"locked": false}) |
-// ---- begin core/Directory.inc ----
+// ---- begin core/Directory.rho ----
 // Directory: names -> component URIs, assetId -> {kind, controllerKey, decimals}.
 // State is seeded by the bootstrap term (which holds the private `state` channel):
 //   {names: Map, assets: Map, locked: Bool, admins: List, threshold: Int, govNonce: Int}
@@ -106,8 +106,8 @@ contract Directory(@"names", ret) = {
 contract Directory(@"admin", @nonce, @action, @args, @sigs, ret) = {
   ret!((false, "admin actions are phase 2"))
 } |
-// ---- end core/Directory.inc ----
-// ---- begin core/ComponentRegistry.inc ----
+// ---- end core/Directory.rho ----
+// ---- begin core/ComponentRegistry.rho ----
 // ComponentRegistry: name -> live contract channel. A large contract cannot always be wrapped in
 // a bundle on this node (the bundle free-variable check rejects some nested captures), so the
 // bootstrap holds the live name here instead of installing a bundle. The registry is a simple
@@ -164,7 +164,7 @@ contract Components(@"has", @key, ret) = {
     }
   }
 } |
-// ---- end core/ComponentRegistry.inc ----
+// ---- end core/ComponentRegistry.rho ----
   rs!(bundle+{*Directory}, *uriDirCh) |
   rs!(bundle+{*Components}, *uriCompCh) |
   for (@dirUri <- uriDirCh; @compUri <- uriCompCh) {

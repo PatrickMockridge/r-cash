@@ -14,8 +14,8 @@ in {
   state!({"names": {}, "assets": {}, "locked": false, "admins": [], "threshold": 2, "govNonce": 0}) |
   componentsState!({"locked": false}) |
 
-  // @@INLINE:core/Directory.inc@@
-  // @@INLINE:core/ComponentRegistry.inc@@
+  // @@INLINE:core/Directory.rho@@
+  // @@INLINE:core/ComponentRegistry.rho@@
 
   rs!(bundle+{*Directory}, *uriDirCh) |
   rs!(bundle+{*Components}, *uriCompCh) |
