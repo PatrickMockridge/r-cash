@@ -80,7 +80,7 @@ by a block boundary before the next.
 | 10 | `AssetResolver` | `component:asset-resolver` |
 | 10b | `TransferBook` | `component:transfer-book` |
 | 10c | `PoolTemplate` | `component:pool-template` |
-| 10d | `MarketTerms`, `MarketIndex`, `MarketDirectory`, `MarketFactory` | `component:market-*` |
+| 10d | `MarketTerms`, `MarketIndex`, `MarketDirectory`, `MarketFactory`, `TradabilityGate`, `ListingViews` | `component:market-*`, `component:tradability-gate`, `component:listing-views` |
 | 11 | `AccountFactory` (creates `Account`, `PurseStore`, `AccountGate` per owner) | `component:account-factory` |
 | 12 | per currency: deploy `31_stablecoin` with signed params, then `CurrencyRegistry.register` with the sponsor signature | `currency:<CODE>` |
 | 12 | per currency: `OracleFeed`, then `OracleRegistry.registerFeed` | `feed:<CODE>` |

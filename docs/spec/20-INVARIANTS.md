@@ -11,7 +11,7 @@ means a devnet scenario, `TLA+` names the model in `spec/tla`.
 | I1 | Quiescent linearity: one `Full` in every cell | every stateful component | every consumed path re-posts; P1/P6 | TLA+ `CellLinearity`, unit |
 | I2 | Currency code unique; stablecoin URI, params hash and sponsor match the live attestation; the directory is written only after that check | `CurrencyRegistry`, `StablecoinDirectory` | one registry consume at commit; the registry holds the directory's only write capability | unit, scenario |
 | I3 | One active market per pair; version strictly increases | `MarketIndex` | `stage`/`activate` consume one cell; `byPair` in the same cell | TLA+ `PoolConservation` peer, scenario |
-| I4 | Legal market transitions: `draft → active → paused/active → delisted`, `draft → cancelled`; terminal states do not revive | `MarketIndex` | transition table in the arm | unit, scenario |
+| I4 | Legal market transitions: `draft → active → paused/active → delisted`; a delisted version may be replaced only by a higher version | `MarketIndex` | governor-gated `setStatus`; `stage` checks pair status and version | unit, scenario |
 | I5 | Terms integrity: `termsHash = H(schema, values)`; no mutation | `MarketTerms` | content-addressed `put` recomputes the hash | unit, vectors |
 | I6 | Market URI slots are factory-created, sponsor-authorized and sealed before activation | `MarketDirectory` | `bind`/`seal` in one cell; only `MarketFactory` | unit, scenario |
 | I7 | Feed freshness: quorum signed prices, median > 0, age, band, spread | `OracleFeed` | one cell per feed; P1 commit after signature verification | TLA+ `CapabilityProvenance` sibling, unit |

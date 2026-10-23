@@ -206,6 +206,8 @@ def main(argv: list[str] | None = None) -> int:
     state["market_directory_uri"] = market["uris"][1]
     state["market_index_uri"] = market["uris"][2]
     state["market_factory_uri"] = market["uris"][3]
+    state["tradability_gate_uri"] = market["uris"][4]
+    state["listing_views_uri"] = market["uris"][5]
     save(state)
 
     identity = step("09_identity", "identity", {

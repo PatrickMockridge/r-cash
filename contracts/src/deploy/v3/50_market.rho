@@ -7,14 +7,15 @@ new
   MarketTerms, termsState,
   MarketIndex, indexState,
   MarketDirectory, directoryState,
-  MarketFactory,
+  MarketFactory, TradabilityGate, ListingViews,
   marketNow, marketVerifier, marketOracle, stageMarket, activatePool,
   marketAuth,
   rl(`rho:registry:lookup`),
   rs(`rho:registry:insertArbitrary`),
   deployerId(`rho:rchain:deployerId`),
   deployId(`rho:rchain:deployId`),
-  ertpCh, rootCh, Root, uTerms, uIndex, uDirectory, uFactory, ack
+  ertpCh, rootCh, Root, uTerms, uIndex, uDirectory, uFactory,
+  uGate, uViews, ack
 in {
 
   contract marketNow(ret) = {
@@ -362,6 +363,107 @@ in {
     }
   } |
 
+  contract TradabilityGate(@"admit", @status, @fresh, @inputValue, @poolValue,
+                           @terms, ret) = {
+    if (status != "active") { ret!((false, "not active")) }
+    else {
+      if (fresh == false) { ret!((false, "stale")) }
+      else {
+        if (inputValue < terms.get("minTicketQuote")) { ret!((false, "min ticket")) }
+        else {
+          if (inputValue * 10000 > poolValue * terms.get("maxTradeBps")) {
+            ret!((false, "max trade"))
+          } else { ret!((true, Nil)) }
+        }
+      }
+    }
+  } |
+
+  contract ListingViews(@"marketFor", @base, @quote, ret) = {
+    new rCh, iCh in {
+      rl!(`__ROOT_URI__`, *rCh) |
+      for (Root <- rCh) {
+        Root!("resolve", "component:market-index", 1, *iCh) |
+        for (@(true, indexUri, _) <- iCh) {
+          new ic in {
+            rl!(indexUri, *ic) |
+            for (MarketIndex <- ic) {
+              MarketIndex!("marketFor", base, quote, *ret)
+            }
+          }
+        }
+      }
+    }
+  } |
+
+  contract ListingViews(@"market", @marketId, ret) = {
+    new rCh, iCh in {
+      rl!(`__ROOT_URI__`, *rCh) |
+      for (Root <- rCh) {
+        Root!("resolve", "component:market-index", 1, *iCh) |
+        for (@(true, indexUri, _) <- iCh) {
+          new ic in {
+            rl!(indexUri, *ic) |
+            for (MarketIndex <- ic) { MarketIndex!("market", marketId, *ret) }
+          }
+        }
+      }
+    }
+  } |
+
+  contract ListingViews(@"isActive", @marketId, ret) = {
+    new rCh, iCh, mCh in {
+      rl!(`__ROOT_URI__`, *rCh) |
+      for (Root <- rCh) {
+        Root!("resolve", "component:market-index", 1, *iCh) |
+        for (@(true, indexUri, _) <- iCh) {
+          new ic in {
+            rl!(indexUri, *ic) |
+            for (MarketIndex <- ic) {
+              MarketIndex!("market", marketId, *mCh) |
+              for (@m <- mCh) {
+                match m {
+                  (true, record) => { ret!((true, record.get("status") == "active")) }
+                  _ => { ret!((false, "no market")) }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  } |
+
+  contract ListingViews(@"terms", @termsHash, ret) = {
+    new rCh, iCh in {
+      rl!(`__ROOT_URI__`, *rCh) |
+      for (Root <- rCh) {
+        Root!("resolve", "component:market-terms", 1, *iCh) |
+        for (@(true, termsUri, _) <- iCh) {
+          new tc in {
+            rl!(termsUri, *tc) |
+            for (MarketTerms <- tc) { MarketTerms!("get", termsHash, *ret) }
+          }
+        }
+      }
+    }
+  } |
+
+  contract ListingViews(@"currency", @code, ret) = {
+    new rCh, iCh in {
+      rl!(`__ROOT_URI__`, *rCh) |
+      for (Root <- rCh) {
+        Root!("resolve", "component:currency-registry", 1, *iCh) |
+        for (@(true, regUri, _) <- iCh) {
+          new rc in {
+            rl!(regUri, *rc) |
+            for (CurrencyRegistry <- rc) { CurrencyRegistry!("currency", code, *ret) }
+          }
+        }
+      }
+    }
+  } |
+
   contract MarketFactory(@"createMarket", @terms, @values, @sponsorHex, @sig, ret) = {
     new vCh, hCh, regCh, oCh, bpCh, qpCh, lpCh, dataCh in {
       marketVerifier!(*vCh) |
@@ -492,8 +594,11 @@ in {
     rs!(bundle+{*MarketDirectory}, *uDirectory) |
     rs!(bundle+{*MarketIndex}, *uIndex) |
     rs!(bundle+{*MarketFactory}, *uFactory) |
+    rs!(bundle+{*TradabilityGate}, *uGate) |
+    rs!(bundle+{*ListingViews}, *uViews) |
     for (@termsUri <- uTerms; @dirUri <- uDirectory;
-         @indexUri <- uIndex; @factoryUri <- uFactory) {
+         @indexUri <- uIndex; @factoryUri <- uFactory;
+         @gateUri <- uGate; @viewsUri <- uViews) {
       rl!(`__ROOT_URI__`, *rootCh) |
       for (Root <- rootCh) {
         Root!("register", "component:market-terms", termsUri, 1, "registry", *deployerId, *ack) |
@@ -504,7 +609,13 @@ in {
             for (@r3 <- ack) {
               Root!("register", "component:market-factory", factoryUri, 1, "registry", *deployerId, *ack) |
               for (@r4 <- ack) {
-                deployId!([termsUri, dirUri, indexUri, factoryUri])
+                Root!("register", "component:tradability-gate", gateUri, 1, "view", *deployerId, *ack) |
+                for (@r5 <- ack) {
+                  Root!("register", "component:listing-views", viewsUri, 1, "view", *deployerId, *ack) |
+                  for (@r6 <- ack) {
+                    deployId!([termsUri, dirUri, indexUri, factoryUri, gateUri, viewsUri])
+                  }
+                }
               }
             }
           }

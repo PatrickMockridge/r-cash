@@ -101,7 +101,7 @@ def main() -> int:
 
     fields = [
         ("marketId", MARKET_ID), ("slug", "rev-v4t"), ("base", BASE), ("quote", QUOTE),
-        ("version", "1"), ("sponsorPubKey", sponsor["public"]),
+        ("version", 1), ("sponsorPubKey", sponsor["public"]),
         ("sponsorOwnerId", sponsor["address"]),
         ("baseFeedPolicyHash", rev_entry.get("policyHash")),
         ("quoteFeedPolicyHash", v4t_entry.get("policyHash")),
@@ -255,6 +255,95 @@ def main() -> int:
     )
     check("second release refused",
           one(closed_term, keys["deployer"]["secret"]), (False, "closed"))
+
+    # --- listing views, tradability gate, pause/delist and a second version ---
+    views = state["listing_views_uri"]
+    gate = state["tradability_gate_uri"]
+    check("view isActive",
+          one(call(views, "ListingViews",
+                   'ListingViews!("isActive", "REV/V4T:v1", *r) | '
+                   "for (@x <- r) { deployId!(x) }"), keys["deployer"]["secret"]),
+          (True, True))
+    view_record = one(call(views, "ListingViews",
+                           'ListingViews!("marketFor", "REV", "V4T", *r) | '
+                           "for (@x <- r) { deployId!(x) }"), keys["deployer"]["secret"])[1]
+    check("view market status", view_record.get("status"), "active")
+    terms_view = one(call(views, "ListingViews",
+                          f'ListingViews!("terms", "{terms_hash}", *r) | '
+                          "for (@x <- r) { deployId!(x) }"), keys["deployer"]["secret"])[1]
+    check("view terms base", terms_view.get("terms").get("base"), "REV")
+    currency_view = one(call(views, "ListingViews",
+                             'ListingViews!("currency", "V4T", *r) | '
+                             "for (@x <- r) { deployId!(x) }"), keys["deployer"]["secret"])[1]
+    check("view currency", currency_view.get("status"), "active")
+
+    gate_terms = '{"minTicketQuote": 1000000, "maxTradeBps": 2000}'
+    def admit(status: str, fresh: bool, value: int, pool: int) -> list:
+        body = (f'TradabilityGate!("admit", "{status}", {str(fresh).lower()}, '
+                f"{value}, {pool}, {gate_terms}, *r) | "
+                "for (@x <- r) { deployId!(x) }")
+        return one(call(gate, "TradabilityGate", body), keys["deployer"]["secret"])
+
+    check("gate admits", admit("active", True, 1_000_000_000, 30_000_000_000)[0], True)
+    check("gate refuses inactive", admit("paused", True, 1_000_000_000, 30_000_000_000),
+          (False, "not active"))
+    check("gate refuses stale", admit("active", False, 1_000_000_000, 30_000_000_000),
+          (False, "stale"))
+    check("gate refuses min ticket", admit("active", True, 100, 30_000_000_000),
+          (False, "min ticket"))
+    check("gate refuses max trade", admit("active", True, 10_000_000_000, 30_000_000_000),
+          (False, "max trade"))
+
+    def set_status(status: str, nonce: int) -> list:
+        args = f"REV/V4T:v1|{status}"
+        payload = f"rcash:admin:v1|market-index|{nonce}|setStatus|{args}"
+        sigs = ", ".join(
+            f'"{sign_payload.sign_payload(keys[n]["secret"], payload.encode())["signature"]}".hexToBytes()'
+            for n in ("admin1", "admin2"))
+        body = (f'MarketIndex!("setStatus", "REV/V4T:v1", "{status}", {nonce}, '
+                f"[{sigs}], *r) | for (@x <- r) {{ deployId!(x) }}")
+        return one(call(index, "MarketIndex", body), keys["deployer"]["secret"])
+
+    status_nonce = node.height()
+    check("market paused", set_status("paused", status_nonce), (True, "paused"))
+    check("paused view", one(call(views, "ListingViews",
+                                  'ListingViews!("isActive", "REV/V4T:v1", *r) | '
+                                  "for (@x <- r) { deployId!(x) }"),
+                             keys["deployer"]["secret"]), (True, False))
+    check("market resumed", set_status("active", status_nonce + 1), (True, "active"))
+    check("market delisted", set_status("delisted", status_nonce + 2), (True, "delisted"))
+
+    fields2 = [(key, "REV/V4T:v2" if key == "marketId"
+                else 2 if key == "version" else value) for key, value in fields]
+    values2 = [str(v) for _, v in fields2]
+    hash2 = canonical("rcash:market-terms:v4", values2)
+    literal2 = "{" + ", ".join(
+        f'"{key}": {rholang_value(value)}' for key, value in fields2) + "}"
+    values2_literal = "[" + ", ".join(f'"{v}"' for v in values2) + "]"
+    payload2 = f"rcash:market-create:v1|REV/V4T:v2|{hash2}|{sponsor['public']}"
+    sig2 = sign_payload.sign_payload(sponsor["secret"], payload2.encode())["signature"]
+    create2 = (
+        "new rl(`rho:registry:lookup`), ch, r, deployId(`rho:rchain:deployId`) in {\n"
+        f"  rl!(`{factory}`, *ch) |\n"
+        "  for (MarketFactory <- ch) {\n"
+        f'    MarketFactory!("createMarket", {literal2}, {values2_literal}, '
+        f'"{sponsor["public"]}", "{sig2}".hexToBytes(), *r) |\n'
+        "    for (@x <- r) {\n"
+        "      match x {\n"
+        '        (true, mid, poolUri, lockUri, hash) => deployId!([mid, poolUri, lockUri, hash])\n'
+        "        _ => deployId!(x)\n"
+        "      }\n"
+        "    }\n"
+        "  }\n"
+        "}"
+    )
+    created2 = one(create2, keys["deployer"]["secret"])
+    check("version 2 staged", created2[0], "REV/V4T:v2")
+    v2_record = one(call(index, "MarketIndex",
+                         'MarketIndex!("market", "REV/V4T:v2", *r) | '
+                         "for (@x <- r) { deployId!(x) }"), keys["deployer"]["secret"])[1]
+    check("version 2 draft", v2_record.get("status"), "draft")
+    check("version 2 version", v2_record.get("version"), 2)
 
     print(json.dumps({"market": MARKET_ID, "pool": pool_uri,
                       "termsHash": terms_hash, "shares": shares,

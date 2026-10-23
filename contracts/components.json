@@ -33,7 +33,7 @@
       "contracts/build/deploy/v3/50_market.rho": {
         "bytes": 24576,
         "depth": 96,
-        "contracts": 18
+        "contracts": 26
       },
       "contracts/build/deploy/v3/51_pool.rho": {
         "bytes": 16384,
@@ -566,28 +566,23 @@
       "stateful": false,
       "state_cell": null,
       "arms": [
-        "currency",
-        "asset",
-        "assets",
-        "markets",
-        "marketView",
         "marketFor",
+        "market",
+        "isActive",
         "terms",
-        "isActive"
+        "currency"
       ],
       "dependencies": [
         "Root",
-        "CurrencyRegistry",
         "MarketIndex",
         "MarketTerms",
-        "MarketDirectory",
-        "OracleHub"
+        "CurrencyRegistry"
       ],
       "creates": [],
       "system": [],
-      "deploy": "contracts/src/deploy/v3/16_views.rho",
+      "deploy": "contracts/src/deploy/v3/50_market.rho",
       "instance_key": null,
-      "status": "planned",
+      "status": "implemented",
       "budget": {
         "bytes": 16384,
         "depth": 48,
@@ -726,9 +721,9 @@
       "dependencies": [],
       "creates": [],
       "system": [],
-      "deploy": "contracts/src/deploy/v3/40_pool.rho",
+      "deploy": "contracts/src/deploy/v3/50_market.rho",
       "instance_key": null,
-      "status": "planned",
+      "status": "implemented",
       "budget": {
         "bytes": 4096,
         "depth": 32,

@@ -70,14 +70,14 @@ factory in v0.4, because the creation path is already signature- and bounds-gate
 | `PoolTemplate` | none | `create` | Resolves the base/quote issuers, creates the purses and LP kit, assembles the `FxPool` and returns its URI; the factory owns the directory/index writes. |
 | `TransferBook` | `bookState` | `send` | Allocates transfer ids and creates a registered `TransferContract` per transfer. It never holds escrow; the per-transfer cell does. |
 | `TransferContract` (transfer, R) | `transferState` | `claim`, `refund`, `info` | Authoritative transfer object: payment in closure, status in one cell. Claim and refund consume the cell and re-post a terminal `claimed`/`refunded` status, so later calls reply `closed` rather than stalling. Claim requires the secret preimage; refund requires expiry and the sender's `deployerId`. |
-| `TradabilityGate` | none | `admit(status, fresh, value, inputValue, terms)` | Pure policy verdict; receives all inputs and never calls back into the pool. |
+| `TradabilityGate` | none | `admit(status, fresh, inputValue, poolValue, terms)` | Pure policy verdict: active, fresh, min ticket, max trade; receives all inputs and never calls back into the pool. |
 | `AccountFactory` | `factoryState` | `getOrCreate`, `verify`, `accountOf` | One account per owner. `getOrCreate` creates the `Account`, `PurseStore` and `AccountGate`; the vault proof is created inside the account contract and never returned or passed through a message. |
 | `Account` (owner, R) | none; `PurseStore` and proof in closure | `vaultOpen`, `deposit`, `withdraw`, `balance`, `depositFacet`; transfer arms next | Owner-authenticated thin payment router. Every arm takes the caller's `deployerId`, checks it in `AccountGate`, then routes to `PurseStore`; no vault state. |
 | `PurseStore` (owner, R) | `purseState` | `ensure`, `deposit`, `withdraw`, `balance`, `facet` | One ERTP purse per asset, created through `AssetResolver`; `balance` reads the purse's `getCurrentAmount`. |
 | `AccountGate` (owner, R) | none | `verify` | Derives the caller's REV address from `deployerId` and compares it with the owner; no state. |
 | `TransferClient` | none | `send`, `claim`, `refund`, `info` | Account-side transfer orchestration; resolves the book and market. |
 | `AssetResolver` | none | `issuer(assetId)`, `kind(assetId)` | `REV` resolves through ERTP; every other id resolves through `CurrencyRegistry` and the live `Stablecoin`. Resolution happens at arm entry; no registry capability is cached. |
-| `ListingViews` | none | `currency`, `asset`, `assets`, `markets`, `marketView`, `marketFor`, `terms`, `isActive` | Read-only projection of the registries, markets and feeds. |
+| `ListingViews` | none | `marketFor`, `market`, `isActive`, `terms`, `currency` | Read-only projection over the market index, terms store and currency registry; resolves each component by Root at arm entry. |
 
 ## 5. Atomic clusters
 

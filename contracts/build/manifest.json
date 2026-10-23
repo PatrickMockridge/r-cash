@@ -155,12 +155,12 @@
     },
     "contracts/build/deploy/v3/50_market.rho": {
       "brace_depth": 39,
-      "contracts": 17,
+      "contracts": 23,
       "grammar_depth": 63,
-      "minified_bytes": 11380,
+      "minified_bytes": 13979,
       "operator_run": 4,
-      "sha256": "4a47c2380fbc882d0436db9975c19f3f3d6711b9530d126343ac88ed59db4bca",
-      "source_bytes": 21718
+      "sha256": "135b2c49cd3f5a34920be9e5d629480b4fda60b1b3ff6b8a1520d55f8a219d52",
+      "source_bytes": 25203
     },
     "contracts/build/deploy/v3/51_pool.rho": {
       "brace_depth": 37,
