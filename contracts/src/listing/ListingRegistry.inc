@@ -228,7 +228,7 @@ contract ListingRegistry(@"stageMarket", @marketId, @version, @stageNonce, @base
                             listingNow!(*nowCh2) |
                             for (@(true, pbase, pquote) <- pPairCh;
                                  @(true, pterms) <- pTermsCh;
-                                 @(true, rb, rq, ts, rate, fresh, paused) <- pResCh;
+                                 @(true, rb, rq, ts, rate, fresh, paused, pv, below, floor, ticket) <- pResCh;
                                  @(true, bbase, bquote) <- bPairCh;
                                  @(true, bterms) <- bTermsCh;
                                  @(true, linfo) <- lInfoCh;
@@ -442,7 +442,7 @@ contract ListingRegistry(@"activateMarket", @marketId, @stageNonce, @termsHashHe
                       @poolCap!("reserves", *resCh) |
                       for (@bc <- baseCurCh; @qc <- quoteCurCh; @pf <- pairFeedCh;
                            @bf <- bfCh; @qf <- qfCh;
-                           @(true, rb, rq, ts, rate, fresh, paused) <- resCh) {
+                           @(true, rb, rq, ts, rate, fresh, paused, pv, below, floor, ticket) <- resCh) {
                         if (bc == (false, "unknown currency") || qc == (false, "unknown currency")) {
                           ret!((false, "currency"))
                         } else {
