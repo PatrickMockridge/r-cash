@@ -1,0 +1,16 @@
+// v0.2 listing call: submit one reporter price to a feed.
+// Placeholders: __ORACLE_URI__, __CODE__, __PRICE__, __HEIGHT__, __INDEX__,
+//               __PUBKEY__, __SIG__.
+new
+  rl(`rho:registry:lookup`),
+  oracleCh,
+  ret,
+  deployId(`rho:rchain:deployId`)
+in {
+  rl!(`__ORACLE_URI__`, *oracleCh) |
+  for (OracleHub <- oracleCh) {
+    OracleHub!("submit", "__CODE__", __PRICE__, __HEIGHT__, __INDEX__,
+               "__PUBKEY__", "__SIG__".hexToBytes(), *ret) |
+    for (@r <- ret) { deployId!(r) }
+  }
+}

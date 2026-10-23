@@ -34,6 +34,7 @@ DEPLOYER_ADDR = "11112VYAt8rUGNRRZX3eJdgagaAhtWTK8Js7F7X5iqddMVqyDTtYau"
 DEFAULT_NAMES = [
     "reporter1", "reporter2", "reporter3",
     "admin1", "admin2", "admin3",
+    "sponsor",
     "sender", "business", "recipient", "ramp",
 ]
 

@@ -1,18 +1,18 @@
 // v0.2 install step 3: ListingRegistry.
-// Placeholders: __ORACLE_URI__, __ADMIN_KEYS__.
-// Returns the registry URI on deployId.
+// Placeholders: __ORACLE_URI__, __COMPONENTS_URI__, __ADMIN_KEYS__.
+// The registry is stored as a live capability in the ComponentRegistry. The contract
+// definitions stay at the top level of the deploy scope; only the registration call
+// runs inside the lookup receive.
 new
   ListingRegistry,
   listingState,
   rl(`rho:registry:lookup`),
+  compCh,
   revAddress(`rho:rev:address`),
-  OracleHub,
-  oracleCh,
   bd(`rho:block:data`),
   hash(`rho:crypto:blake2b256Hash`),
   verify(`rho:crypto:secp256k1Verify`),
-  uriCh,
-  rs(`rho:registry:insertArbitrary`),
+  ack,
   deployId(`rho:rchain:deployId`),
   termsJoin,
   termsCanonical,
@@ -23,6 +23,11 @@ new
   guardCount,
   verifyAdmin,
   listingNow,
+  listingOraclePair,
+  listingOracleStatus,
+  listingCurrencyLookup,
+  listingPinnedOk,
+  listingRegisterCurrency,
   listingPairKey,
   listingZoneOk,
   listingZoneParamsHash,
@@ -34,26 +39,29 @@ new
   listingActivate,
   listingAdminApply
 in {
-  rl!(`__ORACLE_URI__`, *oracleCh) |
-  for (OracleHub <- oracleCh) {
-    // @@INLINE:lib/Guard.rho@@
-    // @@INLINE:lib/Terms.rho@@
-    // @@INLINE:listing/ListingRegistry.rho@@
+  // @@INLINE:lib/Guard.rho@@
+  // @@INLINE:lib/Terms.rho@@
+  // @@INLINE:listing/ListingRegistry.rho@@
 
-    listingState!({
-      "currencies": {},
-      "assets": {"REV": {"kind": "rev", "controller": {"type": "rev"}, "decimals": 8}},
-      "markets": {},
-      "marketViews": {},
-      "byPair": {},
-      "byPairVersion": {},
-      "bounds": {},
-      "admins": __ADMIN_KEYS__,
-      "threshold": 2,
-      "govNonce": 0
-    }) |
+  listingState!({
+    "oracleUri": "__ORACLE_URI__",
+    "pinned": __PINNED_CURRENCIES__,
+    "currencies": {},
+    "assets": {"REV": {"kind": "rev", "controller": {"type": "rev"}, "decimals": 8}},
+    "markets": {},
+    "marketViews": {},
+    "marketCaps": {},
+    "byPair": {},
+    "byPairVersion": {},
+    "bounds": {},
+    "admins": __ADMIN_KEYS__,
+    "threshold": 2,
+    "govNonce": 0
+  }) |
 
-    rs!(bundle+{*ListingRegistry}, *uriCh) |
-    for (@uri <- uriCh) { deployId!(uri) }
+  rl!(`__COMPONENTS_URI__`, *compCh) |
+  for (Components <- compCh) {
+    Components!("set", "component:listings", *ListingRegistry, *ack) |
+    for (@r <- ack) { deployId!(r) }
   }
 }

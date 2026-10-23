@@ -1,12 +1,14 @@
 // v0.2 install step 4: AccountFactory with the registry-aware Account body.
-// Placeholders: __DIRECTORY_URI__, __REGISTRY_URI__.
-// Returns the AccountFactory URI on deployId.
+// Placeholders: __DIRECTORY_URI__, __COMPONENTS_URI__.
+// The ListingRegistry capability is read from ComponentRegistry at install time.
 new
   AccountFactory,
   factoryState,
   Directory,
+  Components,
   ListingRegistry,
   dirCh,
+  compCh,
   regCh,
   rl(`rho:registry:lookup`),
   revAddress(`rho:rev:address`),
@@ -16,9 +18,11 @@ new
   deployId(`rho:rchain:deployId`)
 in {
   rl!(`__DIRECTORY_URI__`, *dirCh) |
-  rl!(`__REGISTRY_URI__`, *regCh) |
-  for (Directory <- dirCh; ListingRegistry <- regCh) {
-    factoryState!({}) |
+  rl!(`__COMPONENTS_URI__`, *compCh) |
+  for (Directory <- dirCh; Components <- compCh) {
+    Components!("get", "component:listings", *regCh) |
+    for (@(true, ListingRegistry) <- regCh) {
+      factoryState!({}) |
 // ---- begin core/AccountFactoryV2.rho ----
 // AccountFactory: ownerId -> {account: bundle, proof: unforgeable}.
 // Captured: factoryState, revAddress, Directory, deployerIdOps.
@@ -52,7 +56,7 @@ contract AccountFactory(@"getOrCreate", @pubKeyBytes, ret) = {
 // Resolve asset metadata: the listing registry first, Directory as the v0.1 fallback.
 contract accountAssetMeta(@assetId, ret) = {
   new regCh in {
-    ListingRegistry!("asset", assetId, *regCh) |
+    @ListingRegistry!("asset", assetId, *regCh) |
     for (@r <- regCh) {
       match r {
         (true, meta) => ret!((true, meta))
@@ -84,7 +88,7 @@ contract accountControllerUri(@meta, ret) = {
 // Resolve a book by market id (works after pause/delist).
 contract accountBookById(@marketId, ret) = {
   new capsCh in {
-    ListingRegistry!("marketCapsById", marketId, *capsCh) |
+    @ListingRegistry!("marketCapsById", marketId, *capsCh) |
     for (@r <- capsCh) {
       match r {
         (true, caps) => {
@@ -99,7 +103,7 @@ contract accountBookById(@marketId, ret) = {
 // Resolve the active book for a pair, falling back to the v0.1 corridor book.
 contract accountBookFor(@source, @dest, ret) = {
   new mCh in {
-    ListingRegistry!("marketFor", source, dest, *mCh) |
+    @ListingRegistry!("marketFor", source, dest, *mCh) |
     for (@r <- mCh) {
       match r {
         (true, marketId) => accountBookById!(marketId, *ret)
@@ -174,7 +178,7 @@ contract accountInternalPurse(@assetId, @meta, ret) = {
           }
           marketId => {
             new capsCh, poolCh, assetCh, purseCh in {
-              ListingRegistry!("marketCapsById", marketId, *capsCh) |
+              @ListingRegistry!("marketCapsById", marketId, *capsCh) |
               for (@r <- capsCh) {
                 match r {
                   (true, caps) => {
@@ -221,7 +225,7 @@ contract accountLookupPurse(@assetId, ret) = {
 
 contract accountZone(@currency, ret) = {
   new regCh in {
-    ListingRegistry!("currency", currency, *regCh) |
+    @ListingRegistry!("currency", currency, *regCh) |
     for (@rr <- regCh) {
       match rr {
         (true, record) => {
@@ -1037,7 +1041,8 @@ contract AccountFactory(@"accountOf", @ownerId, ret) = {
   }
 } |
 // ---- end core/AccountFactoryV2.rho ----
-    rs!(bundle+{*AccountFactory}, *uriCh) |
-    for (@uri <- uriCh) { deployId!(uri) }
+      rs!(bundle+{*AccountFactory}, *uriCh) |
+      for (@uri <- uriCh) { deployId!(uri) }
+    }
   }
 }

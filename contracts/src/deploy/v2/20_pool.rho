@@ -1,0 +1,92 @@
+// v0.2 install step 7a: create the pool, then publish it.
+// The pool is empty; seeding and activation are separate steps. The registry's
+// pause/delist gate is the emergency stop (the pool has no separate admin arm).
+new
+  rl(`rho:registry:lookup`),
+  oracleCh, OracleHub,
+  compCh, regCh,
+  baseZoneCh,
+  quoteZoneCh,
+  ertpCh, basePurseCh, quotePurseCh, lpKitCh,
+  makeZonePurse, makeLpKit,
+  pool, poolState, poolRate, poolValue, poolWeight, poolFee, poolOut, poolUpdate,
+  poolInputValue, poolGate, poolQuoteInner, poolSwapInner,
+  ltCh, capCh,
+  baseCh, quoteCh, marketIdCh,
+  deployId(`rho:rchain:deployId`)
+in {
+  // Create a zone's brand, issuer and a purse in one scope so the main setup
+  // stays shallow enough for the node's parser depth limit.
+  contract makeZonePurse(@zone, ret) = {
+    new brandCh, issuerCh, purseCh in {
+      @zone!("brand", *brandCh) | @zone!("issuer", *issuerCh) |
+      for (@(true, brand) <- brandCh; @(true, issuer) <- issuerCh) {
+        @issuer!("makeEmptyPurse", *purseCh) |
+        for (@(true, purse) <- purseCh) { ret!((brand, issuer, purse)) }
+      }
+    }
+  } |
+
+  contract makeLpKit(@ERTP, ret) = {
+    new kitCh, purseCh, facetCh in {
+      @ERTP!("makeIssuerKit", *kitCh) |
+      for (@(lpBrand, lpMint, lpIssuer) <- kitCh) {
+        @lpIssuer!("makeEmptyPurse", *purseCh) |
+        for (@(true, lpPurse) <- purseCh) {
+          @lpPurse!("getDepositFacet", *facetCh) |
+          for (@(true, lpBurnFacet) <- facetCh) {
+            ret!((lpBrand, lpMint, lpIssuer, lpPurse, lpBurnFacet))
+          }
+        }
+      }
+    }
+  } |
+
+  baseCh!("__BASE__") |
+  quoteCh!("__QUOTE__") |
+  marketIdCh!("__MARKET_ID__") |
+  for (@base <- baseCh; @quote <- quoteCh; @marketId <- marketIdCh) {
+    rl!(`__ORACLE_URI__`, *oracleCh) |
+    rl!(`__COMPONENTS_URI__`, *compCh) |
+    rl!(`__BASE_ZONE_URI__`, *baseZoneCh) |
+    rl!(`__QUOTE_ZONE_URI__`, *quoteZoneCh) |
+    rl!(`rho:rchain:ertp`, *ertpCh) |
+    for (OracleHub <- oracleCh; Components <- compCh;
+         baseZone <- baseZoneCh; quoteZone <- quoteZoneCh;
+         @(_, ERTP) <- ertpCh) {
+      Components!("get", "component:listings", *regCh) |
+      makeZonePurse!(*baseZone, *basePurseCh) |
+      makeZonePurse!(*quoteZone, *quotePurseCh) |
+      makeLpKit!(ERTP, *lpKitCh) |
+      for (@(true, ListingRegistry) <- regCh;
+           @(baseBrand, baseIssuer, basePurse) <- basePurseCh;
+           @(quoteBrand, quoteIssuer, quotePurse) <- quotePurseCh;
+           @(lpBrand, lpMint, lpIssuer, lpPurse, lpBurnFacet) <- lpKitCh) {
+        poolState!({
+          "marketId": marketId,
+          "base": base,
+          "quote": quote,
+          "reserveBase": 0,
+          "reserveQuote": 0,
+          "totalShares": 0,
+          "params": __POOL_PARAMS__,
+          "termsHash": Nil,
+          "paramsHash": "00".hexToBytes(),
+          "termsLocked": false,
+          "paused": false,
+          "admins": __ADMIN_KEYS__,
+          "threshold": 2,
+          "govNonce": 0
+        }) |
+
+        // @@INLINE:dex/FxPoolV2.rho@@
+
+        pool!("lockTerms", "__TERMS_HASH__".hexToBytes(), *ltCh) |
+        for (@_ <- ltCh) {
+          @ListingRegistry!("registerMarketCap", marketId, "pool", *pool, *capCh) |
+          for (@capResult <- capCh) { deployId!(capResult) }
+        }
+      }
+    }
+  }
+}

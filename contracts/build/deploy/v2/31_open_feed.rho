@@ -1,0 +1,16 @@
+// v0.2 listing call: open a per-currency OracleHubV2 feed.
+// Placeholders: __ORACLE_URI__, __CODE__, __K0__, __K1__, __K2__, __SPONSOR_PUB__, __SIG__.
+new
+  rl(`rho:registry:lookup`),
+  oracleCh,
+  ret,
+  deployId(`rho:rchain:deployId`)
+in {
+  rl!(`__ORACLE_URI__`, *oracleCh) |
+  for (OracleHub <- oracleCh) {
+    OracleHub!("openFeed", "__CODE__", "__K0__", "__K1__", "__K2__",
+               "__SPONSOR_PUB__", "__SIG__".hexToBytes(),
+               2, 50, 200, 1, 1000000000000, 10, 4, *ret) |
+    for (@r <- ret) { deployId!(r) }
+  }
+}

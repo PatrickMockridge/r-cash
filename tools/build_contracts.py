@@ -19,7 +19,44 @@ OUT = ROOT / "contracts" / "build"
 MARKER = re.compile(r"^\s*//\s*@@INLINE:([^@]+)@@\s*$", re.MULTILINE)
 
 
-def build_one(path: Path) -> Path:
+def check_braces(text: str, label: str) -> None:
+    """Reject a fragment whose brace depth goes negative or does not return to zero.
+
+    A globally balanced file can still hide a per-contract scope error (the v0.2
+    ListingRegistry had an extra `}` and a missing `}` that cancelled). Negative depth
+    catches the extra close; a nonzero final depth catches the missing one.
+    """
+    depth = 0
+    in_string = False
+    escaped = False
+    for number, line in enumerate(text.splitlines(), start=1):
+        index = 0
+        while index < len(line):
+            char = line[index]
+            if not in_string and char == "/" and index + 1 < len(line) and line[index + 1] == "/":
+                break
+            if in_string:
+                if escaped:
+                    escaped = False
+                elif char == "\\":
+                    escaped = True
+                elif char == '"':
+                    in_string = False
+            else:
+                if char == '"':
+                    in_string = True
+                elif char == "{":
+                    depth += 1
+                elif char == "}":
+                    depth -= 1
+                    if depth < 0:
+                        raise SystemExit(f"{label}:{number}: brace depth went negative")
+            index += 1
+    if depth != 0:
+        raise SystemExit(f"{label}: unclosed braces (depth {depth})")
+
+
+def render(path: Path) -> tuple[Path, str]:
     text = path.read_text()
 
     def replace(match: re.Match[str]) -> str:
@@ -27,6 +64,7 @@ def build_one(path: Path) -> Path:
         if not lib.is_file():
             raise SystemExit(f"{path}: missing inline library {lib}")
         body = lib.read_text().rstrip("\n")
+        check_braces(body, str(lib.relative_to(ROOT)))
         return f"// ---- begin {match.group(1).strip()} ----\n{body}\n// ---- end {match.group(1).strip()} ----"
 
     built = text
@@ -38,8 +76,16 @@ def build_one(path: Path) -> Path:
         built = nxt
     if "@@INLINE:" in built:
         raise SystemExit(f"{path}: unresolved inline marker remains")
-    rel = path.relative_to(SRC)
-    dest = OUT / rel
+    check_braces(built, str(path.relative_to(ROOT)))
+    return OUT / path.relative_to(SRC), built
+
+
+def build_one(path: Path, check: bool = False) -> Path:
+    dest, built = render(path)
+    if check:
+        if not dest.is_file() or dest.read_text() != built:
+            raise SystemExit(f"drift: {dest.relative_to(ROOT)} is stale")
+        return dest
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_text(built)
     return dest
@@ -58,9 +104,27 @@ def main(argv: list[str] | None = None) -> int:
     if not sources:
         print("no contract sources found", file=sys.stderr)
         return 1
+    expected: set[Path] = set()
     for src in sources:
-        dest = build_one(src)
-        print(f"built {dest.relative_to(ROOT)}")
+        dest = build_one(src, check=args.check)
+        expected.add(dest.resolve())
+        if args.check:
+            print(f"ok {dest.relative_to(ROOT)}")
+        else:
+            print(f"built {dest.relative_to(ROOT)}")
+
+    # A removed/renamed source must not leave a stale deploy term behind.
+    stale = [
+        path for path in OUT.rglob("*.rho") if path.resolve() not in expected
+    ]
+    if stale:
+        if args.check:
+            for path in stale:
+                print(f"stale {path.relative_to(ROOT)}", file=sys.stderr)
+            return 1
+        for path in stale:
+            path.unlink()
+            print(f"removed stale {path.relative_to(ROOT)}")
     return 0
 
 

@@ -1,0 +1,21 @@
+// v0.2 listing call: register one currency in the ListingRegistry.
+// Placeholders: __COMPONENTS_URI__, __CODE__, __ZONE_URI__, __PARAMS_HASH__,
+//               __SPONSOR_PUB__, __SPONSOR_SIG__.
+new
+  rl(`rho:registry:lookup`),
+  compCh,
+  regCh,
+  ret,
+  deployId(`rho:rchain:deployId`)
+in {
+  rl!(`__COMPONENTS_URI__`, *compCh) |
+  for (Components <- compCh) {
+    Components!("get", "component:listings", *regCh) |
+    for (@(true, ListingRegistry) <- regCh) {
+      @ListingRegistry!("registerCurrency", "__CODE__", "__ZONE_URI__",
+                        "__PARAMS_HASH__", "__SPONSOR_PUB__",
+                        "__SPONSOR_SIG__".hexToBytes(), *ret) |
+      for (@r <- ret) { deployId!(r) }
+    }
+  }
+}

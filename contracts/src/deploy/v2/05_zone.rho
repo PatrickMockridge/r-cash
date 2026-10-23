@@ -1,5 +1,5 @@
 // v0.2 install step 6: one CurrencyZone for a new currency.
-// Placeholders: __CURRENCY__, __ZONE_PARAMS__, __ADMIN_KEYS__, __ORACLE_URI__,
+// Placeholders: __CURRENCY__, the __ZONE_*__ values, __ADMIN_KEYS__, __ORACLE_URI__,
 //               __ACCOUNTS_URI__.
 // Returns (zoneUri, brand, issuer) on deployId.
 new

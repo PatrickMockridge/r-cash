@@ -107,58 +107,6 @@ contract poolUpdate(@s, @rb, @rq, @ts, @paused, @nonce, ret) = {
   }
 } |
 
-contract poolAdminApply(@action, @args, @nonce, ret) = {
-  for (@s <- poolState) {
-    if (nonce <= s.get("govNonce")) {
-      poolState!(s) | ret!((false, "replay"))
-    } else {
-      if (action == "setParams") {
-        if (s.get("termsLocked")) { poolState!(s) | ret!((false, "terms locked")) }
-        else {
-        match args.nth(0) {
-          baseFee => {
-            match args.nth(1) {
-              skewFee => {
-                match args.nth(2) {
-                  maxTrade => {
-                    match s.set("params", {
-                      "baseSpreadBps": baseFee, "skewSpreadBps": skewFee,
-                      "maxTradeBps": maxTrade, "minLiquidity": 100000000
-                    }) {
-                      s1 => {
-                        match s1.set("govNonce", nonce) {
-                          s2 => { poolState!(s2) | ret!((true, Nil)) }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-        }
-      } else {
-        if (action == "setPaused") {
-          match args.nth(0) {
-            p => {
-              match s.set("paused", p == 1) {
-                s1 => {
-                  match s1.set("govNonce", nonce) {
-                    s2 => { poolState!(s2) | ret!((true, Nil)) }
-                  }
-                }
-              }
-            }
-          }
-        } else {
-          poolState!(s) | ret!((false, "unknown action"))
-        }
-      }
-    }
-  }
-} |
-
 // Input value in quote base units.
 contract poolInputValue(@assetIn, @amountIn, @rate, ret) = {
   if (assetIn == base) { ret!(((amountIn * rate) / 100000000).toInt()) }
@@ -168,7 +116,7 @@ contract poolInputValue(@assetIn, @amountIn, @rate, ret) = {
 // Gate for a listed market: active, fresh, not paused, above the depth floor and ticket.
 contract poolGate(@assetIn, @amountIn, ret) = {
   new activeCh, rateCh in {
-    ListingRegistry!("isActive", marketId, *activeCh) |
+    @ListingRegistry!("isActive", marketId, *activeCh) |
     poolRate!(*rateCh) |
     for (@a <- activeCh; @(rate, fresh) <- rateCh) {
       match a {
@@ -695,34 +643,5 @@ contract pool(@"lockTerms", @hashBytes, ret) = {
   for (@s <- poolState) {
     if (s.get("termsLocked")) { poolState!(s) | ret!((false, "terms locked")) }
     else { poolState!(s.set("termsHash", hashBytes).set("termsLocked", true)) | ret!((true, Nil)) }
-  }
-} |
-
-contract pool(@"admin", @nonce, @action, @args, @sigs, ret) = {
-  for (@s <<- poolState) {
-    match s.get("admins") {
-      Nil => ret!((false, "no admins"))
-      admins => {
-        match s.get("threshold") {
-          threshold => {
-            match s.get("govNonce") {
-              lastNonce => {
-                if (nonce <= lastNonce) { ret!((false, "replay")) }
-                else {
-                  new okCh in {
-                    verifyAdmin!("pool:" ++ base ++ "/" ++ quote ++ ":fpmm",
-                                 nonce, action, args, sigs, admins, threshold, *okCh) |
-                    for (@ok <- okCh) {
-                      if (ok) { poolAdminApply!(action, args, nonce, *ret) }
-                      else { ret!((false, "signatures")) }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
   }
 } |

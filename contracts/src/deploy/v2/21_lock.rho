@@ -1,0 +1,63 @@
+// v0.2 install step 7b: create the liquidity lock for one market.
+// The pool capability is read from the registry; the lock creates its own LP purse.
+new
+  rl(`rho:registry:lookup`),
+  compCh, regCh,
+  poolCh,
+  lpCh,
+  lpPurseCh,
+  LiquidityLock, lockState, lockNow, lockAdminApply,
+  capOutCh,
+  bd(`rho:block:data`),
+  deployerIdOps(`rho:rchain:deployerId:ops`),
+  verify(`rho:crypto:secp256k1Verify`),
+  hash(`rho:crypto:blake2b256Hash`),
+  guardArgsToString, guardArgsAppend, guardAnySig, guardCount, verifyAdmin,
+  baseCh, quoteCh, marketIdCh,
+  deployId(`rho:rchain:deployId`)
+in {
+  baseCh!("__BASE__") |
+  quoteCh!("__QUOTE__") |
+  marketIdCh!("__MARKET_ID__") |
+  for (@base <- baseCh; @quote <- quoteCh; @marketId <- marketIdCh) {
+    rl!(`__COMPONENTS_URI__`, *compCh) |
+    for (Components <- compCh) {
+      Components!("get", "component:listings", *regCh) |
+      for (@(true, ListingRegistry) <- regCh) {
+      @ListingRegistry!("marketCap", marketId, "pool", *poolCh) |
+      for (@(true, pool) <- poolCh) {
+        @pool!("lpAsset", *lpCh) |
+        for (@(true, lpBrand, lpIssuer) <- lpCh) {
+          @lpIssuer!("makeEmptyPurse", *lpPurseCh) |
+          for (@(true, lpPurse) <- lpPurseCh) {
+            lockState!({
+              "marketId": marketId,
+              "termsHash": "__TERMS_HASH__".hexToBytes(),
+              "beneficiaryPubKey": "__SPONSOR_PUB__".hexToBytes(),
+              "beneficiaryOwnerId": "__SPONSOR_OWNER__",
+              "lpBrand": lpBrand,
+              "lpIssuer": lpIssuer,
+              "minShares": __INITIAL_SHARES__,
+              "untilHeight": __LOCK_UNTIL__,
+              "shares": 0,
+              "funded": false,
+              "released": false,
+              "cancelled": false,
+              "fundedAt": 0,
+              "admins": __ADMIN_KEYS__,
+              "threshold": 2,
+              "govNonce": 0
+            }) |
+
+            // @@INLINE:lib/Guard.rho@@
+            // @@INLINE:lock/LiquidityLock.rho@@
+
+            @ListingRegistry!("registerMarketCap", marketId, "lock", *LiquidityLock, *capOutCh) |
+            for (@capOut <- capOutCh) { deployId!(capOut) }
+          }
+        }
+      }
+      }
+    }
+  }
+}
