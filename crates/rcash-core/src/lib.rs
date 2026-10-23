@@ -7,6 +7,7 @@
 pub mod assets;
 pub mod error;
 pub mod manifest;
+pub mod market;
 pub mod math;
 pub mod rho;
 pub mod units;
