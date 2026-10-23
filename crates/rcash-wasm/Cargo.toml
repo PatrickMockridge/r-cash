@@ -10,6 +10,11 @@ repository.workspace = true
 [lib]
 crate-type = ["cdylib", "rlib"]
 
+# Binaryen's wasm-opt is a C++ binary. The language policy forbids C/C++ build
+# steps, so wasm-pack must not run it for release builds either.
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false
+
 [dependencies]
 rcash-core.workspace = true
 rcash-chain = { path = "../rcash-chain", default-features = false, features = ["wasm"] }
@@ -26,5 +31,5 @@ aes = "0.9"
 ctr = "0.10"
 sha3.workspace = true
 
-[dev-dependencies]
-wasm-bindgen-test = "0.3"
+# No wasm-bindgen-test: it pulls minicov, whose build script compiles C. The wasm
+# boundary is covered by web/tests/wasm-smoke.mjs; pure logic is tested on the host.

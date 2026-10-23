@@ -36,7 +36,7 @@ pub trait Transport {
     async fn send(&self, request: HttpRequest) -> Result<HttpResponse, ChainError>;
 }
 
-/// Native transport over `reqwest` (rustls).
+/// Native transport over `reqwest` (no TLS backend; devnet is HTTP).
 #[cfg(not(target_arch = "wasm32"))]
 pub struct NativeTransport {
     client: reqwest::Client,

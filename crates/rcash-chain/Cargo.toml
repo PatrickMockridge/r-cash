@@ -24,8 +24,8 @@ zeroize.workspace = true
 getrandom.workspace = true
 async-trait.workspace = true
 rchain-crypto.workspace = true
-rchain-models.workspace = true
 rchain-shared.workspace = true
+prost.workspace = true
 
 reqwest = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true }

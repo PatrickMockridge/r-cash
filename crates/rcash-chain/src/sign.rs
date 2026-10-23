@@ -1,17 +1,16 @@
 //! secp256k1 keys and deploy signing.
 //!
-//! Uses `rchain_crypto::signatures::Signed::new`, which is the node's own signing path:
-//! prost-encode, hash per algorithm (BLAKE2b-256 for `secp256k1`), RFC-6979 DER low-S,
-//! 65-byte uncompressed public key. A deploy id is the hex DER signature.
+//! Uses `rchain_crypto`'s hash and secp256k1 functions: prost-encode, BLAKE2b-256
+//! prehash, RFC-6979 DER low-S, 65-byte uncompressed public key. A deploy id is the hex
+//! DER signature.
 
 use rchain_crypto::private_key::PrivateKey;
 use rchain_crypto::signatures::signatures_alg::from_algorithm;
-use rchain_crypto::signatures::signed::Signed;
-use rchain_models::casper::protocol::casper_message::DeployData;
 use rchain_shared::base16;
 use zeroize::Zeroize;
 
 use crate::address::rev_address_from_public_key;
+use crate::deploy::DeployData;
 use crate::error::ChainError;
 
 /// A secp256k1 key pair held in memory. The secret is zeroized on drop.
@@ -97,15 +96,21 @@ impl KeyPair {
     /// Sign a deploy, producing the wire form.
     pub fn sign_deploy(&self, data: DeployData) -> Result<SignedDeploy, ChainError> {
         let alg = algorithm()?;
-        let signed = Signed::new(data, alg, &PrivateKey::new(self.secret.clone()))
+        let serialized =
+            <DeployData as rchain_shared::serialize::Serialize<DeployData>>::encode(&data);
+        let hash = rchain_crypto::signatures::signed::signature_hash("secp256k1", &serialized);
+        let sig = rchain_crypto::signatures::secp256k1::Secp256k1::sign_bytes(&hash, &self.secret)
             .map_err(|e| ChainError::Crypto(e.to_string()))?;
-        let signature_hex = base16::encode(&signed.sig);
+        let pk = alg
+            .to_public(&PrivateKey::new(self.secret.clone()))
+            .map_err(|e| ChainError::Crypto(e.to_string()))?;
+        let signature_hex = base16::encode(&sig);
         Ok(SignedDeploy {
-            data: signed.data,
-            deployer_hex: base16::encode(signed.pk.bytes()),
+            data,
+            deployer_hex: base16::encode(pk.bytes()),
             deploy_id: signature_hex.clone(),
             signature_hex,
-            sig_algorithm: signed.sig_algorithm.name().to_string(),
+            sig_algorithm: alg.name().to_string(),
         })
     }
 

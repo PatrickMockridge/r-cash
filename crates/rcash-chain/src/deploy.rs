@@ -1,13 +1,77 @@
 //! Deploy data construction.
 //!
-//! `DeployData` is the node's own type; encoding it here would be a second implementation
-//! of the signed bytes. The only work this module does is validate the inputs and fill
-//! the fields.
+//! `DeployData` is declared here with the node's protobuf field tags. Using `rchain-models`
+//! would invoke `protoc` (a C++ tool) at build time; the wire contract is the field tags,
+//! and the parity tests pin the encoded bytes.
 
+use prost::Message;
 use rcash_core::rho::check_term_size;
-use rchain_models::casper::protocol::casper_message::DeployData;
+use rchain_shared::serialize::Serialize as RhoSerialize;
+use serde::{Deserialize, Serialize};
 
 use crate::error::ChainError;
+
+/// The fields of a deploy that are signed and submitted.
+///
+/// This is the node's `DeployDataProto` shape, re-declared locally so the client build
+/// does not need `rchain-models` and therefore does not invoke `protoc` (a C++ tool).
+/// The field tags are the wire contract; `deployer`, `sig` and `sigAlgorithm` are
+/// deliberately absent.
+#[derive(Clone, PartialEq, Eq, Message, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeployData {
+    #[prost(string, tag = "2")]
+    pub term: String,
+    #[prost(int64, tag = "3")]
+    pub timestamp: i64,
+    #[prost(int64, tag = "7")]
+    pub phlo_price: i64,
+    #[prost(int64, tag = "8")]
+    pub phlo_limit: i64,
+    #[prost(int64, tag = "10")]
+    pub valid_after_block_number: i64,
+    #[prost(string, tag = "11")]
+    pub shard_id: String,
+    #[prost(bytes = "vec", repeated, tag = "12")]
+    #[serde(
+        default,
+        skip_serializing_if = "Vec::is_empty",
+        with = "hex_attachments"
+    )]
+    pub attachments: Vec<Vec<u8>>,
+}
+
+impl RhoSerialize<DeployData> for DeployData {
+    fn encode(a: &DeployData) -> Vec<u8> {
+        a.encode_to_vec()
+    }
+
+    fn decode(bytes: &[u8]) -> Result<DeployData, String> {
+        <DeployData as Message>::decode(bytes).map_err(|e| e.to_string())
+    }
+}
+
+mod hex_attachments {
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    pub fn serialize<S: Serializer>(value: &[Vec<u8>], s: S) -> Result<S::Ok, S::Error> {
+        let hex: Vec<String> = value
+            .iter()
+            .map(|bytes| rchain_shared::base16::encode(bytes))
+            .collect();
+        s.collect_seq(hex)
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<Vec<u8>>, D::Error> {
+        let hex = Vec::<String>::deserialize(d)?;
+        hex.into_iter()
+            .map(|h| {
+                rchain_shared::base16::decode(&h)
+                    .ok_or_else(|| serde::de::Error::custom("attachment is not valid hex"))
+            })
+            .collect()
+    }
+}
 
 /// The node's maximum deploy term size, inclusive.
 pub const MAX_DEPLOY_TERM_BYTES: usize = 64 * 1024;

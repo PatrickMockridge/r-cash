@@ -493,10 +493,9 @@ fn parse_amount(value: &str) -> Result<i64, JsValue> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use wasm_bindgen_test::wasm_bindgen_test;
 
-    #[wasm_bindgen_test]
-    fn wasm_signs_the_r0a_fixture_identically() {
+    #[test]
+    fn signs_the_r0a_fixture_identically() {
         let result = parity_sign(&"01".repeat(32), "Nil").expect("sign");
         assert!(
             result.contains("3044022059126613d09aad982947545c814ee8f4bc44ced6441f70cd8d29840c2d90f78c02206b2e2b145457fd54329096b246e005b64bdaa76ffd94563ec00613bea38d6287"),

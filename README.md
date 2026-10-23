@@ -35,8 +35,8 @@ secp256k1 vectors, DeployData golden bytes, an independent TypeScript signer, an
 all produce identical bytes. See [`docs/CLIENT.md`](docs/CLIENT.md).
 
 **Language policy:** Rust, Rholang, Python and TypeScript only. The repository contains
-no C/C++ sources, and `make check-languages` plus CI reject them. See
-[`docs/LANGUAGES.md`](docs/LANGUAGES.md).
+no C/C++ sources and no C/C++-compiling crates or build tools; `make check-no-cpp` plus
+CI reject both. See [`docs/LANGUAGES.md`](docs/LANGUAGES.md).
 
 ```sh
 cargo build --workspace

@@ -1,9 +1,8 @@
 //! Chain integration: deploy data, signing, REV addresses and the rnode HTTP API.
 //!
 //! The signing path deliberately calls the node's own crates
-//! (`rchain_models::casper::protocol::casper_message::DeployData` and
-//! `rchain_crypto::signatures::Signed`) rather than reimplementing the protobuf or the
-//! hash. R0a's parity tests pin the result.
+//! (the `DeployData` protobuf shape and `rchain_crypto`'s hash/signature functions)
+//! rather than reimplementing the cryptography. R0a's parity tests pin the result.
 
 pub mod address;
 pub mod claim;
@@ -19,7 +18,7 @@ pub mod node;
 pub use address::{
     eth_address_from_public_key, rev_address_from_eth_address, rev_address_from_public_key,
 };
-pub use deploy::{DeployOptions, MAX_DEPLOY_TERM_BYTES};
+pub use deploy::{DeployData, DeployOptions, MAX_DEPLOY_TERM_BYTES};
 pub use error::ChainError;
 pub use sign::{KeyPair, SignedDeploy};
 

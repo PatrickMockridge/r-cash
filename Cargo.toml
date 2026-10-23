@@ -38,10 +38,11 @@ async-trait = "0.1"
 # Keep the wasm-safe feature set here. `rt-multi-thread` is native-only and is enabled
 # by the CLI crate, the only place that needs it.
 tokio = { version = "1", features = ["macros", "time"] }
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["json"] }
 clap = { version = "4", features = ["derive", "env"] }
 k256 = { version = "0.14", features = ["ecdsa", "arithmetic"] }
 sha3 = "0.12"
+prost = "0.14"
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
 serde-wasm-bindgen = "0.6"
@@ -52,5 +53,4 @@ getrandom = { version = "0.4", features = ["wasm_js"] }
 # local hacking against ../RNodeRust uses the documented `--config patch` invocation in
 # docs/CLIENT.md rather than a path in this file.
 rchain-crypto = { git = "https://github.com/rchain-community/rchain-rust", rev = "e2d073dcd02f1e560ccb84749937138a1e184b0b", default-features = false }
-rchain-models = { git = "https://github.com/rchain-community/rchain-rust", rev = "e2d073dcd02f1e560ccb84749937138a1e184b0b", default-features = false }
 rchain-shared = { git = "https://github.com/rchain-community/rchain-rust", rev = "e2d073dcd02f1e560ccb84749937138a1e184b0b", default-features = false }

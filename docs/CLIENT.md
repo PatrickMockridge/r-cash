@@ -7,6 +7,11 @@ The client stack is Rust, shared by a native CLI and a browser WASM module. Type
 used for the UI and for an independent signer in the parity test. Python remains only as
 build-time tooling and the legacy devnet harness.
 
+**Transport:** the native client is built without a TLS backend (`reqwest` with default
+features off). The devnet node is HTTP on port 40403. Public deployments must terminate
+HTTPS at a proxy until a pure-Rust TLS provider is vetted; a C-backed provider
+(`ring`/`aws-lc`) must not be reintroduced. The language guard fails if it is.
+
 ## Crates
 
 | Crate | Responsibility |
@@ -23,22 +28,23 @@ checkout without changing the manifest:
 
 ```sh
 cargo --config 'patch."https://github.com/rchain-community/rchain-rust".rchain-crypto.path="../RNodeRust/crypto"' \
-      --config 'patch."https://github.com/rchain-community/rchain-rust".rchain-models.path="../RNodeRust/models"' \
       --config 'patch."https://github.com/rchain-community/rchain-rust".rchain-shared.path="../RNodeRust/shared"' \
       build
 ```
 
 ## What is signed
 
-The SDK calls the node's own code rather than reimplementing it:
+The SDK uses the node's own cryptography and re-declares only the wire shape:
 
-- `rchain_models::casper::protocol::casper_message::DeployData`, encoded by its
-  `Serialize` impl. Fields `term=2`, `timestamp=3`, `phloPrice=7`, `phloLimit=8`,
+- `DeployData` is declared locally in `crates/rcash-chain/src/deploy.rs` with the node's
+  protobuf field tags: `term=2`, `timestamp=3`, `phloPrice=7`, `phloLimit=8`,
   `validAfterBlockNumber=10`, `shardId=11`, `attachments=12`. **`deployer`, `sig` and
-  `sigAlgorithm` are not part of the signed bytes.**
-- `rchain_crypto::signatures::Signed::new`: BLAKE2b-256 prehash for `secp256k1`, RFC-6979
-  deterministic DER low-S, 65-byte uncompressed public key. The deploy id is the hex DER
-  signature.
+  `sigAlgorithm` are not part of the signed bytes.** It is encoded with prost; the
+  node's `rchain-models` crate (whose build script ran `protoc`) is not used.
+- `rchain_crypto::signatures::signed::signature_hash` and
+  `Secp256k1::sign_bytes`: BLAKE2b-256 prehash for `secp256k1`, RFC-6979 deterministic
+  DER low-S, 65-byte uncompressed public key. The deploy id is the hex DER signature.
+  The golden-byte and known-answer tests pin parity with the node.
 - `rchain_crypto` also exposes `secp256k1:eth` (raw 64-byte `R||S` over an EIP-191
   keccak hash). That is the only plausible MetaMask route; see `SPIKE-METAMASK.md`.
 

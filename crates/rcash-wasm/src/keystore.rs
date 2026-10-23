@@ -164,11 +164,8 @@ pub fn decrypt(document: &str, password: &str) -> Result<[u8; 32], String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[cfg(target_arch = "wasm32")]
-    use wasm_bindgen_test::wasm_bindgen_test;
 
-    #[cfg_attr(not(target_arch = "wasm32"), test)]
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[test]
     fn round_trips_and_rejects_the_wrong_password() {
         let secret = [7u8; 32];
         let document = encrypt(
@@ -185,8 +182,7 @@ mod tests {
         assert!(decrypt(&document, "wrong").is_err());
     }
 
-    #[cfg_attr(not(target_arch = "wasm32"), test)]
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[test]
     fn refuses_a_tampered_mac() {
         let document =
             encrypt(&[1u8; 32], "00112233445566778899aabbccddeeff00112233", "pw").unwrap();

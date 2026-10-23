@@ -228,8 +228,7 @@ impl BookParams {
         if !(10..=1_296_000).contains(&self.default_expiry_blocks) {
             out.push("defaultExpiryBlocks must be 10..1296000".into());
         }
-        if self.max_expiry_blocks < self.default_expiry_blocks
-            || self.max_expiry_blocks > 1_296_000
+        if self.max_expiry_blocks < self.default_expiry_blocks || self.max_expiry_blocks > 1_296_000
         {
             out.push("maxExpiryBlocks must be >= default and <= 1296000".into());
         }
@@ -305,7 +304,11 @@ impl MarketTerms {
             self.book_default_expiry_blocks.to_string(),
             self.book_max_expiry_blocks.to_string(),
             self.protocol_fee_bps.to_string(),
-            if self.auto_pause { "1".into() } else { "0".into() },
+            if self.auto_pause {
+                "1".into()
+            } else {
+                "0".into()
+            },
         ]
     }
 
@@ -380,7 +383,9 @@ impl MarketTerms {
     /// Convert a USD×1e8 amount to quote base units at `price_quote`.
     pub fn quote_units_for_usd(usd_e8: i64, price_quote: i64) -> Result<i64, CoreError> {
         if price_quote <= 0 {
-            return Err(CoreError::BadManifest("quote price must be positive".into()));
+            return Err(CoreError::BadManifest(
+                "quote price must be positive".into(),
+            ));
         }
         let value = (usd_e8 as i128 * 100_000_000i128) / price_quote as i128;
         i64::try_from(value).map_err(|_| CoreError::AmountOutOfRange("USD conversion".into()))
@@ -487,7 +492,10 @@ mod tests {
             min_debt: 1_000_000,
             max_debt: 10_000_000_000_000,
         };
-        assert_eq!(zone.canonical(), vectors["zone"]["canonical"].as_str().unwrap());
+        assert_eq!(
+            zone.canonical(),
+            vectors["zone"]["canonical"].as_str().unwrap()
+        );
         let feed = FeedPolicy {
             quorum: 2,
             max_age_blocks: 50,
@@ -497,7 +505,10 @@ mod tests {
             trial_blocks: 10,
             trial_min_submits: 4,
         };
-        assert_eq!(feed.canonical(), vectors["feed"]["canonical"].as_str().unwrap());
+        assert_eq!(
+            feed.canonical(),
+            vectors["feed"]["canonical"].as_str().unwrap()
+        );
         let pool = PoolParams {
             base_spread_bps: 20,
             skew_spread_bps: 80,
@@ -507,12 +518,18 @@ mod tests {
             depth_floor_quote: 130_000_000_000,
             min_ticket_quote: 1_300_000_000,
         };
-        assert_eq!(pool.canonical(), vectors["pool"]["canonical"].as_str().unwrap());
+        assert_eq!(
+            pool.canonical(),
+            vectors["pool"]["canonical"].as_str().unwrap()
+        );
         let book = BookParams {
             default_expiry_blocks: 720,
             max_expiry_blocks: 129_600,
         };
-        assert_eq!(book.canonical(), vectors["book"]["canonical"].as_str().unwrap());
+        assert_eq!(
+            book.canonical(),
+            vectors["book"]["canonical"].as_str().unwrap()
+        );
         assert_eq!(
             terms().canonical(),
             vectors["terms"]["canonical"].as_str().unwrap()
