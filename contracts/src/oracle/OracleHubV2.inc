@@ -282,55 +282,40 @@ contract oracleStoreV2(@currency, @index, @price, @height, ret) = {
 // on the global allowlist, distinct, and at most one may be the sponsor.
 contract OracleHubV2(@"openFeed", @currency, @k0Hex, @k1Hex, @k2Hex, @sponsorHex, @sig,
                       @quorum, @age, @spread, @minP, @maxP, @tb, @tms, ret) = {
-  new k0Ch, k1Ch, k2Ch, spCh, curCh, payloadCh, digCh, okCh in {
+  new k0Ch, k1Ch, k2Ch, spCh, payloadCh in {
     match k0Hex.hexToBytes() { k0 => k0Ch!(k0) } |
     match k1Hex.hexToBytes() { k1 => k1Ch!(k1) } |
     match k2Hex.hexToBytes() { k2 => k2Ch!(k2) } |
     match sponsorHex.hexToBytes() { sp => spCh!(sp) } |
-    ListingRegistry!("currency", currency, *curCh) |
     oracleFeedPayload!(currency, k0Hex, k1Hex, k2Hex, sponsorHex, quorum, age, spread,
                        minP, maxP, tb, tms, *payloadCh) |
-    for (@k0 <- k0Ch; @k1 <- k1Ch; @k2 <- k2Ch; @sp <- spCh; @cur <- curCh;
-         @payload <- payloadCh) {
-      match cur {
-        (true, record) => {
-          if (record.get("status") != "active") { ret!((false, "currency not active")) }
+    for (@k0 <- k0Ch; @k1 <- k1Ch; @k2 <- k2Ch; @sp <- spCh; @payload <- payloadCh) {
+      if (quorum != 2) { ret!((false, "quorum")) }
+      else {
+        if (age < 5 || age > 1000) { ret!((false, "max age")) }
+        else {
+          if (spread < 50 || spread > 1000) { ret!((false, "spread")) }
           else {
-            if (quorum != 2) { ret!((false, "quorum")) }
+            if (minP < 1 || maxP > 1000000000000 || minP >= maxP) { ret!((false, "band")) }
             else {
-              if (age < 5 || age > 1000) { ret!((false, "max age")) }
+              if (tb < 10 || tb > 43200 || tms < 4 || tms > 10000) { ret!((false, "trial")) }
               else {
-                if (spread < 50 || spread > 1000) { ret!((false, "spread")) }
+                if (k0 == k1 || k0 == k2 || k1 == k2) { ret!((false, "reporters")) }
                 else {
-                  if (minP < 1 || maxP > 1000000000000 || minP >= maxP) { ret!((false, "band")) }
-                  else {
-                    if (tb < 10 || tb > 43200 || tms < 4 || tms > 10000) { ret!((false, "trial")) }
-                    else {
-                      if (k0 == k1 || k0 == k2 || k1 == k2) { ret!((false, "reporters")) }
-                      else {
-                        if (k0Hex == sponsorHex || k1Hex == sponsorHex || k2Hex == sponsorHex) {
-                          // at most one sponsor key is allowed; two or three is a conflict
-                          if ((k0Hex == sponsorHex && k1Hex == sponsorHex)
-                              || (k0Hex == sponsorHex && k2Hex == sponsorHex)
-                              || (k1Hex == sponsorHex && k2Hex == sponsorHex)) {
-                            ret!((false, "sponsor conflict"))
-                          } else { oracleOpenFeedStore!(currency, k0, k1, k2, k0Hex, k1Hex, k2Hex, sp, sponsorHex,
-                                                        quorum, age, spread, minP, maxP, tb, tms,
-                                                        payload, sig, *ret) }
-                        } else {
-                          oracleOpenFeedStore!(currency, k0, k1, k2, k0Hex, k1Hex, k2Hex, sp, sponsorHex,
-                                               quorum, age, spread, minP, maxP, tb, tms,
-                                               payload, sig, *ret)
-                        }
-                      }
-                    }
+                  if ((k0Hex == sponsorHex && k1Hex == sponsorHex)
+                      || (k0Hex == sponsorHex && k2Hex == sponsorHex)
+                      || (k1Hex == sponsorHex && k2Hex == sponsorHex)) {
+                    ret!((false, "sponsor conflict"))
+                  } else {
+                    oracleOpenFeedStore!(currency, k0, k1, k2, k0Hex, k1Hex, k2Hex, sp,
+                                         sponsorHex, quorum, age, spread, minP, maxP, tb, tms,
+                                         payload, sig, *ret)
                   }
                 }
               }
             }
           }
         }
-        _ => ret!((false, "unknown currency"))
       }
     }
   }
