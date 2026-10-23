@@ -418,6 +418,7 @@ async fn run(cli: Cli) -> Result<ExitCode> {
                         "blockHash": outcome.block_hash(),
                         "finalized": outcome.finalized,
                         "error": outcome.status.deploy_error(),
+                        "result": outcome.status.deploy_result(),
                     })
                 );
             } else {

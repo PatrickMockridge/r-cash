@@ -33,6 +33,28 @@ interest, liquidation and bad debt, with separate contracts per authority. Bridg
 BTC/ETH collateral is a separate future workstream. There is no borrower-facing
 lending UI, yield product or credit market.
 
+## Public testnet (rhobot)
+
+The v0.4 platform terms were deployed to `testnet.rhobot.net` from a dedicated key funded
+by the node faucet. Installed: Root, kernel, Bounds, Governor, the pure maths, oracle
+registry and hub, currency registry and stablecoin directory, asset resolver, transfer
+book, pool template, the market layer and the account factory. The generated manifest is
+`deployments/testnet-v4.json`; the procedure and the network's measured limits are in
+[`TESTNET.md`](TESTNET.md).
+
+Two platform behaviours were found and are handled by the installer:
+
+- an `explore-deploy` read can lag a finalised write; registrations and balances must be
+  re-read rather than trusted on the first response;
+- a deploy that registers several Root keys can report success for a write that is later
+  absent. The installer verifies every component with `Root.resolve`; missing keys were
+  re-registered one at a time and now resolve.
+
+Feed listing and the TUSD stablecoin were not completed: during setup the validator HTTP
+APIs stopped responding and the health snapshot reported `ok: false`, `nodes: 0`,
+`mem_available_mb: 16` on 1 GB hosts. No further deploys were attempted; the hosts need
+operator recovery before the testnet work resumes.
+
 ## Legacy v0.1 results
 
 The v0.1 payment scenarios (accounts, oracle, pool, transfer/claim/refund) remain as

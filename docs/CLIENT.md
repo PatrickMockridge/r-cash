@@ -25,8 +25,8 @@ The node crates are pinned by git revision in `Cargo.toml`
 checkout without changing the manifest:
 
 ```sh
-cargo --config 'patch."https://github.com/rchain-community/rchain-rust".rchain-crypto.path="../RNodeRust/crypto"' \
-      --config 'patch."https://github.com/rchain-community/rchain-rust".rchain-shared.path="../RNodeRust/shared"' \
+cargo --config 'patch."https://github.com/rhovision-org/rholo".rchain-crypto.path="../RNodeRust/crypto"' \
+      --config 'patch."https://github.com/rhovision-org/rholo".rchain-shared.path="../RNodeRust/shared"' \
       build
 ```
 

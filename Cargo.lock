@@ -1389,7 +1389,7 @@ dependencies = [
 [[package]]
 name = "rchain-crypto"
 version = "0.1.0"
-source = "git+https://github.com/rchain-community/rchain-rust?rev=e2d073dcd02f1e560ccb84749937138a1e184b0b#e2d073dcd02f1e560ccb84749937138a1e184b0b"
+source = "git+https://github.com/rhovision-org/rholo?rev=e2d073dcd02f1e560ccb84749937138a1e184b0b#e2d073dcd02f1e560ccb84749937138a1e184b0b"
 dependencies = [
  "blake2",
  "crypto_box",
@@ -1413,7 +1413,7 @@ dependencies = [
 [[package]]
 name = "rchain-shared"
 version = "0.1.0"
-source = "git+https://github.com/rchain-community/rchain-rust?rev=e2d073dcd02f1e560ccb84749937138a1e184b0b#e2d073dcd02f1e560ccb84749937138a1e184b0b"
+source = "git+https://github.com/rhovision-org/rholo?rev=e2d073dcd02f1e560ccb84749937138a1e184b0b#e2d073dcd02f1e560ccb84749937138a1e184b0b"
 dependencies = [
  "async-trait",
  "lz4_flex",

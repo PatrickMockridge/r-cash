@@ -64,6 +64,14 @@ impl DeployStatus {
         !matches!(self, DeployStatus::NotProcessed { .. })
     }
 
+    /// The decoded deploy result on success.
+    pub fn deploy_result(&self) -> Option<&[serde_json::Value]> {
+        match self {
+            DeployStatus::ProcessedWithSuccess { deploy_result, .. } => Some(deploy_result),
+            _ => None,
+        }
+    }
+
     pub fn block(&self) -> Option<&BlockInfo> {
         match self {
             DeployStatus::ProcessedWithSuccess { block, .. }

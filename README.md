@@ -1,24 +1,27 @@
 # R-Cash
 
 A permissionless multi-currency account and cross-border payments network on
-[rchain-rust](https://github.com/rchain-community/rchain-rust).
+[rchain-rust](https://github.com/rhovision-org/rholo).
 
 R-Cash is the on-chain payments core of a Wise-shaped product: hold local-currency balances,
 receive as if local, convert directly between currencies, pay anyone with a wallet or claim link,
 and get paid — while liquidity providers earn the FX spread.
 
-## What works today (devnet)
+## What works today (v0.4)
 
 | Area | Result |
 |---|---|
-| Capability gates | 12/12: persistence, rollback of tuple space and native ERTP/REV, ERTP across blocks, deployerId containment, signatures, claim hashing |
-| Accounts + Directory | 7/7: non-custodial per-key Account, owner-only withdrawal, two keys, locked Directory |
-| Oracle | 19/19: signed reporters, median, freshness/spread, cross rate, 2-of-3 admin |
-| CDP / local stablecoins | 19/19: rNGN and rKES, REV collateral, borrow/repay, MCR, interest, liquidation (17/17) |
-| rNGN/rKES FxPool (FPMM) | 14/14: add/remove liquidity, LP tokens, swaps both ways, oracle spread + skew |
-| Transfer/claim/refund | 7/7: send with a claim hash, claim with the secret, refund after expiry |
+| Kernel and oracle | Root, Clock, Verifier, Codec, Bounds, Governor, per-currency feeds, hub cross-rates |
+| Stablecoin issuer | REV-collateralised per-currency stablecoins: signed params, mint/repay, interest, liquidation, bad-debt write-off, sponsor-signed listing |
+| Accounts and purses | One account per owner, owner-gated purses, deposit facets, asset resolution through the registry |
+| Transfers | Claimable per-transfer cells: secret claim, expiry, sender refund, exactly one terminal state |
+| Markets | Signed terms, factory-built pools, seed lock, activation, swaps, liquidity, views, tradability gate, governor-gated pause/delist |
+| Clients | Rust SDK and CLI, WASM facade and React screens; a Playwright journey covers send → claim |
+| Verification | Eight fresh-chain harness suites, Rust unit tests, wasm smoke, web typecheck/build and the browser journey |
 
-**Devnet only.** The node is pre-testnet (rchain-rust #242); no real funds, no fiat custody.
+**Networks.** The local devnet (`make devnet`) is the harness target. The rhobot public
+testnet is documented in [`docs/TESTNET.md`](docs/TESTNET.md). No fiat custody and no real
+value; the chain is pre-mainnet.
 
 ## Client stack
 

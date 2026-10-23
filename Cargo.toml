@@ -52,5 +52,5 @@ getrandom = { version = "0.4", features = ["wasm_js"] }
 # AGPL-3.0-only; see THIRD_PARTY_NOTICES.md. Path dependencies cannot read an env var, so
 # local hacking against ../RNodeRust uses the documented `--config patch` invocation in
 # docs/CLIENT.md rather than a path in this file.
-rchain-crypto = { git = "https://github.com/rchain-community/rchain-rust", rev = "e2d073dcd02f1e560ccb84749937138a1e184b0b", default-features = false }
-rchain-shared = { git = "https://github.com/rchain-community/rchain-rust", rev = "e2d073dcd02f1e560ccb84749937138a1e184b0b", default-features = false }
+rchain-crypto = { git = "https://github.com/rhovision-org/rholo", rev = "e2d073dcd02f1e560ccb84749937138a1e184b0b", default-features = false }
+rchain-shared = { git = "https://github.com/rhovision-org/rholo", rev = "e2d073dcd02f1e560ccb84749937138a1e184b0b", default-features = false }
