@@ -155,21 +155,21 @@
     },
     "contracts/build/deploy/v3/50_market.rho": {
       "brace_depth": 39,
-      "contracts": 16,
+      "contracts": 17,
       "grammar_depth": 63,
-      "minified_bytes": 10804,
+      "minified_bytes": 11380,
       "operator_run": 4,
-      "sha256": "e11325126ca1b62521bd8ef59bc5bbb9e4866ee06ad4d61d900ad88ecdd06883",
-      "source_bytes": 20391
+      "sha256": "4a47c2380fbc882d0436db9975c19f3f3d6711b9530d126343ac88ed59db4bca",
+      "source_bytes": 21718
     },
     "contracts/build/deploy/v3/51_pool.rho": {
       "brace_depth": 37,
-      "contracts": 12,
+      "contracts": 19,
       "grammar_depth": 62,
-      "minified_bytes": 10199,
+      "minified_bytes": 13731,
       "operator_run": 3,
-      "sha256": "d14b2942a0fb5c6f3f1ab4cc41a525c2a00da98267bfd4d3a3b8acd7563dcba7",
-      "source_bytes": 19281
+      "sha256": "31234e1cb7f02b753d7600bbad63d117ee69b91216eb99bb7694d6e867264f11",
+      "source_bytes": 24899
     }
   },
   "schema": "rcash:contract-metrics:v1"

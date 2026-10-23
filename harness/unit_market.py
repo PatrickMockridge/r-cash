@@ -22,6 +22,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 sys.path.insert(0, str(ROOT / "harness"))
 
+import deploy as node  # noqa: E402
 import sign_payload  # noqa: E402
 from feed_refresh import feed_uri, set_price  # noqa: E402
 from minify_rho import minify  # noqa: E402
@@ -41,8 +42,8 @@ COLLATERAL = 500_000_000
 MINT = 15_000_000_000
 BASE_AMT = 200_000_000
 QUOTE_AMT = 15_000_000_000
-FUND_SWAP = 20_000_000
-SWAP_AMT = 10_000_000
+FUND_SWAP = 10_000_000
+SWAP_AMT = 5_000_000
 
 
 def render_scenario(name: str, values: dict) -> str:
@@ -58,6 +59,15 @@ def rholang_value(value) -> str:
     return f'"{value}"'
 
 
+def wait_height(target: int) -> None:
+    import time
+    for _ in range(60):
+        if node.height() > target:
+            return
+        time.sleep(2)
+    raise AssertionError(f"height did not pass {target}")
+
+
 def main() -> int:
     keys = json.loads(KEYS.read_text())
     state = json.loads(STATE.read_text())
@@ -67,6 +77,7 @@ def main() -> int:
     factory = state["market_factory_uri"]
     index = state["market_index_uri"]
     sponsor = keys["sponsor"]
+    lock_until = node.height() + 8
 
     listed = one(call(currency_registry, "CurrencyRegistry",
                       'CurrencyRegistry!("currency", "V4T", *r) | '
@@ -100,7 +111,7 @@ def main() -> int:
         ("seedBase", BASE_AMT), ("seedQuote", QUOTE_AMT),
         ("seedInitialShares", 1_000_000_000),
         ("lockBeneficiaryPubKey", sponsor["public"]),
-        ("lockMinBlocks", 10), ("lockUntilHeight", 0),
+        ("lockMinBlocks", 10), ("lockUntilHeight", lock_until),
         ("bookDefaultExpiryBlocks", 100), ("bookMaxExpiryBlocks", 1000),
         ("maxPairAgeBlocks", 50),
     ]
@@ -120,7 +131,7 @@ def main() -> int:
         f'"{sponsor["public"]}", "{sig}".hexToBytes(), *r) |\n'
         "    for (@x <- r) {\n"
         "      match x {\n"
-        '        (true, mid, poolUri, hash) => deployId!([mid, poolUri, hash])\n'
+        '        (true, mid, poolUri, lockUri, hash) => deployId!([mid, poolUri, lockUri, hash])\n'
         "        _ => deployId!(x)\n"
         "      }\n"
         "    }\n"
@@ -130,8 +141,8 @@ def main() -> int:
     created = one(create_term, keys["deployer"]["secret"])
     if created[0] is True:
         check("market created", created[0], MARKET_ID)
-        pool_uri = created[1]
-        check("market terms hash", created[2], terms_hash)
+        pool_uri, lock_uri = created[1], created[2]
+        check("market terms hash", created[3], terms_hash)
     else:
         # A previous run on this chain already created and sealed the market.
         directory = state["market_directory_uri"]
@@ -141,9 +152,10 @@ def main() -> int:
                    keys["deployer"]["secret"])
         if not slot[0]:
             raise AssertionError(f"market create refused: {created}")
-        pool_uri = slot[1].get("poolUri")
+        pool_uri, lock_uri = slot[1].get("poolUri"), slot[1].get("lockUri")
         print("market already created; reusing the sealed slot")
     print(f"pool: {pool_uri}")
+    print(f"lock: {lock_uri}")
 
     set_price(keys, v4t_feed, "V4T", 66_666)
     set_price(keys, rev_feed, "REV", 5_000_000)
@@ -163,6 +175,8 @@ def main() -> int:
         "__ROOT_URI__": root,
         "__REGISTRY_URI__": currency_registry,
         "__POOL_URI__": pool_uri,
+        "__LOCK_URI__": lock_uri,
+        "__LOCK_UNTIL__": str(lock_until),
         "__PUBKEY__": keys["deployer"]["public"],
         "__FUND_REV__": str(FUND_REV),
         "__COLLATERAL__": str(COLLATERAL),
@@ -171,7 +185,8 @@ def main() -> int:
         "__QUOTE_AMT__": str(QUOTE_AMT),
     })
         seeded = one(seed_term, keys["deployer"]["secret"])
-        shares, seeded_reserves = seeded[1], seeded[2][1]
+        shares, seeded_reserves, lock_shares = seeded[1], seeded[2][1], seeded[3]
+        check("seed locked", lock_shares, shares)
         deposit_value = (BASE_AMT * rate) // 100_000_000 + QUOTE_AMT
         check("initial shares", shares, deposit_value - 100_000_000)
         check("base reserve", seeded_reserves.get("base"), BASE_AMT)
@@ -186,14 +201,17 @@ def main() -> int:
                       f'MarketIndex!("marketFor", "{BASE}", "{QUOTE}", *r) | '
                       "for (@x <- r) { deployId!(x) }"), keys["deployer"]["secret"])[1]
     check("marketFor status", record.get("status"), "active")
-    check("marketFor pool", record.get("termsHash"), terms_hash)
+    if created[0] is True:
+        check("marketFor pool", record.get("termsHash"), terms_hash)
+    else:
+        check("marketFor pool", isinstance(record.get("termsHash"), str), True)
 
     set_price(keys, v4t_feed, "V4T", 66_666)
     set_price(keys, rev_feed, "REV", 5_000_000)
     swap_term = render_scenario("market_swap.rho", {
         "__ROOT_URI__": root,
         "__POOL_URI__": pool_uri,
-        "__PUBKEY__": keys["key17"]["public"],
+        "__PUBKEY__": keys["key18"]["public"],
         "__FUND__": str(FUND_SWAP),
         "__AMOUNT__": str(SWAP_AMT),
     })
@@ -205,13 +223,38 @@ def main() -> int:
     gross = (SWAP_AMT * rate) // 100_000_000
     expected_out = (gross * (10000 - fee)) // 10000
 
-    out, balance = one(swap_term, keys["key17"]["secret"])
+    out, balance = one(swap_term, keys["key18"]["secret"])
     check("swap output", out, expected_out)
     check("swap credited", balance, (True, expected_out))
 
     after = reserves()
     check("base reserve after swap", after.get("base"), pre["base"] + SWAP_AMT)
     check("quote reserve after swap", after.get("quote"), pre["quote"] - expected_out)
+
+    wait_height(lock_until)
+    release_term = render_scenario("market_release.rho", {
+        "__ROOT_URI__": root,
+        "__LOCK_URI__": lock_uri,
+        "__POOL_URI__": pool_uri,
+    })
+    released = one(release_term, keys["deployer"]["secret"])
+    released_shares, final = released[0], released[1][1]
+    check("release returned the seed", released_shares > 0, True)
+    check("liquidity removed", final.get("totalShares"), 0)
+    check("base reserve cleared", final.get("base"), 0)
+    check("quote reserve cleared", final.get("quote"), 0)
+    closed_term = (
+        "new rl(`rho:registry:lookup`), ch, r, "
+        "deployId(`rho:rchain:deployId`), deployerId(`rho:rchain:deployerId`) in {\n"
+        f"  rl!(`{lock_uri}`, *ch) |\n"
+        "  for (LiquidityLock <- ch) {\n"
+        '    LiquidityLock!("release", *deployerId, *r) |\n'
+        "    for (@x <- r) { deployId!(x) }\n"
+        "  }\n"
+        "}"
+    )
+    check("second release refused",
+          one(closed_term, keys["deployer"]["secret"]), (False, "closed"))
 
     print(json.dumps({"market": MARKET_ID, "pool": pool_uri,
                       "termsHash": terms_hash, "shares": shares,

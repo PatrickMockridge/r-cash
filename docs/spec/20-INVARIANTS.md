@@ -20,7 +20,7 @@ means a devnet scenario, `TLA+` names the model in `spec/tla`.
 | I10 | Pool reserves equal native custody | `FxPool` | reserves change only with native deposit/withdraw; `attest` reads the purses | TLA+ `PoolConservation`, unit |
 | I11 | `totalShares = lpMinted − lpBurned` | `FxPool` | share update and LP mint/burn in one transition | TLA+ `PoolConservation`, unit |
 | I12 | Depth floor, min ticket, max trade and first-deposit tolerance | `FxPool` | gate inside the consumed-state critical section; tolerance from params | unit, scenario |
-| I13 | Lock is one-shot; release only to beneficiary after height; cancel only by admin | `LiquidityLock` | one cell; consume-first funding; P4 | unit, scenario |
+| I13 | The seed lock is one-shot; only the beneficiary may release after the height; a released or cancelled lock refuses with `closed`; cancel is governor-gated | `LiquidityLock` | one cell consumed by fund and release/cancel; the terminal flags are re-posted | unit, scenario |
 | I14 | Transfer status changes at most once; `open → claimed` xor `open → refunded`; a terminal transfer keeps a quiescent cell and refuses with `closed` | `TransferContract` | one per-transfer cell consume; the terminal state is re-posted after the deposit | TLA+ `TransferExclusivity`, unit |
 | I15 | No payment is stranded on a refusal | `TransferBook`, `TransferContract`, `FxPool` | P3/P6: `fail()` after value movement; no `(false, …)` after a write | unit, fault injection |
 | I19 | Admin threshold and monotone nonce | `Governor` | `authorize` checks threshold and per-domain nonce | TLA+ `AdminNonce`, unit |
@@ -84,9 +84,9 @@ store is keyed by the Codec canonical string of these values, and the sponsor si
 | 16 | seedBase | listing intent; activation checks live reserves |
 | 17 | seedQuote | listing intent; activation checks live reserves |
 | 18 | seedInitialShares | listing intent |
-| 19 | lockBeneficiaryPubKey | `LiquidityLock` (next) |
-| 20 | lockMinBlocks | `LiquidityLock` (next) |
-| 21 | lockUntilHeight | `LiquidityLock` (next) |
+| 19 | lockBeneficiaryPubKey | `LiquidityLock` fund (beneficiary recorded) |
+| 20 | lockMinBlocks | listing intent; `untilHeight` is funded explicitly |
+| 21 | lockUntilHeight | `MarketIndex.activate` compares against `LiquidityLock.info` |
 | 22 | bookDefaultExpiryBlocks | `TransferBook` client default |
 | 23 | bookMaxExpiryBlocks | `TransferBook` client maximum |
 | 24 | maxPairAgeBlocks | `FxPool` bound passed to `OracleHub.getPair` |

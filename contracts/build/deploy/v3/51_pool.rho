@@ -3,8 +3,10 @@
 // the pool arms. The factory calls the template and binds the returned URI.
 // Placeholders: __ROOT_URI__, __ASSET_RESOLVER_URI__.
 new
-  PoolTemplate, assemblePool, poolAmmMath, poolRate,
+  PoolTemplate, assemblePool, poolAmmMath, poolRate, poolNow, poolGovernor,
   rl(`rho:registry:lookup`),
+  revAddress(`rho:rev:address`),
+  deployerIdOps(`rho:rchain:deployerId:ops`),
   rs(`rho:registry:insertArbitrary`),
   deployerId(`rho:rchain:deployerId`),
   deployId(`rho:rchain:deployId`),
@@ -28,6 +30,36 @@ in {
                 }
               }
             }
+          }
+        }
+      }
+    }
+  } |
+
+  contract poolNow(ret) = {
+    new rCh, cCh in {
+      rl!(`__ROOT_URI__`, *rCh) |
+      for (Root <- rCh) {
+        Root!("resolve", "component:clock", 1, *cCh) |
+        for (@(true, clockUri, _) <- cCh) {
+          new cc in {
+            rl!(clockUri, *cc) |
+            for (Clock <- cc) { Clock!("now", *ret) }
+          }
+        }
+      }
+    }
+  } |
+
+  contract poolGovernor(ret) = {
+    new rCh, gCh in {
+      rl!(`__ROOT_URI__`, *rCh) |
+      for (Root <- rCh) {
+        Root!("resolve", "component:governor", 1, *gCh) |
+        for (@(true, govUri, _) <- gCh) {
+          new gc in {
+            rl!(govUri, *gc) |
+            for (Governor <- gc) { ret!(*Governor) }
           }
         }
       }
@@ -144,6 +176,14 @@ in {
                       "seeded": s.get("seeded")}))
       }
     } |
+    contract FxPool(@"balances", ret2) = {
+      new b1, b2 in {
+        @basePurse!("getCurrentAmount", *b1) |
+        @quotePurse!("getCurrentAmount", *b2) |
+        for (@x <- b1; @y <- b2) { ret2!((true, x, y)) }
+      }
+    } |
+
     contract FxPool(@"attest", ret2) = {
       for (@s <<- poolState) {
         ret2!((true, {
@@ -339,8 +379,8 @@ in {
                   poolState!(s) | ret2!((false, "shares"))
                 } else {
                   new bOut, qOut in {
-                    bOut!((s.get("rb") * shares) / s.get("totalShares")) |
-                    qOut!((s.get("rq") * shares) / s.get("totalShares")) |
+                    bOut!(((s.get("rb") * shares) / s.get("totalShares")).toInt()) |
+                    qOut!(((s.get("rq") * shares) / s.get("totalShares")).toInt()) |
                     for (@baseOut <- bOut; @quoteOut <- qOut) {
                       if (baseOut < minBase || quoteOut < minQuote) {
                         poolState!(s) | ret2!((false, "minimum"))
@@ -379,8 +419,123 @@ in {
     } |
     poolState!({"rb": 0, "rq": 0, "totalShares": 0,
                 "seeded": false, "paused": false, "rev": 0}) |
-    rs!(bundle+{*FxPool}, *uPool) |
-    for (@poolUri <- uPool) { ret!((true, poolUri)) }
+    new LiquidityLock, lockState, uLock in {
+      contract LiquidityLock(@"fund", dId, lpPayment, @beneficiaryId,
+                             @untilHeight, ret2) = {
+        for (@s <- lockState) {
+          if (s.get("funded")) { lockState!(s) | ret2!((false, "funded")) }
+          else {
+            if (untilHeight <= 0) { lockState!(s) | ret2!((false, "height")) }
+            else {
+              new pkCh, aCh, amtCh in {
+                deployerIdOps!("pubKeyBytes", *dId, *pkCh) |
+                for (@pk <- pkCh) {
+                  revAddress!("fromPublicKey", pk, *aCh) |
+                  for (@funder <- aCh) {
+                    @lpIssuer!("getAmountOf", *lpPayment, *amtCh) |
+                    for (@amt <- amtCh) {
+                      match amt {
+                        (true, shares) => {
+                          lockState!(s.set("funded", true).set("untilHeight", untilHeight)
+                                       .set("beneficiary", beneficiaryId)
+                                       .set("funder", funder).set("shares", shares)
+                                       .set("payment", *lpPayment)) |
+                          ret2!((true, shares))
+                        }
+                        _ => { lockState!(s) | ret2!((false, "not LP")) }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      } |
+
+      contract LiquidityLock(@"release", dId, ret2) = {
+        for (@s <- lockState) {
+          if (s.get("funded") == false) { lockState!(s) | ret2!((false, "unfunded")) }
+          else {
+            if (s.get("released") || s.get("cancelled")) {
+              lockState!(s) | ret2!((false, "closed"))
+            } else {
+              new nowCh, pkCh, aCh in {
+                poolNow!(*nowCh) |
+                for (@now <- nowCh) {
+                  if (now < s.get("untilHeight")) { lockState!(s) | ret2!((false, "locked")) }
+                  else {
+                    deployerIdOps!("pubKeyBytes", *dId, *pkCh) |
+                    for (@pk <- pkCh) {
+                      revAddress!("fromPublicKey", pk, *aCh) |
+                      for (@addr <- aCh) {
+                        if (addr != s.get("beneficiary")) {
+                          lockState!(s) | ret2!((false, "not beneficiary"))
+                        } else {
+                          match s.get("payment") { p => {
+                            lockState!(s.set("released", true)) |
+                            ret2!((true, p, s.get("shares")))
+                          } }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      } |
+
+      contract LiquidityLock(@"cancel", @nonce, @sigs, ret2) = {
+        new gCh, vCh in {
+          poolGovernor!(*gCh) |
+          for (Governor <- gCh) {
+            Governor!("authorize", "liquidity-lock", nonce, "cancel",
+                      terms.get("marketId"), sigs, *vCh) |
+            for (@v <- vCh) {
+              match v {
+                (true, Nil) => {
+                  for (@s <- lockState) {
+                    if (s.get("funded") == false || s.get("released") || s.get("cancelled")) {
+                      lockState!(s) | ret2!((false, "closed"))
+                    } else {
+                      match s.get("payment") { p => {
+                        lockState!(s.set("cancelled", true)) |
+                        ret2!((true, p, s.get("shares")))
+                      } }
+                    }
+                  }
+                }
+                _ => { ret2!(v) }
+              }
+            }
+          }
+        }
+      } |
+
+      contract LiquidityLock(@"info", ret2) = {
+        for (@s <<- lockState) {
+          ret2!((true, {"marketId": terms.get("marketId"),
+                        "funded": s.get("funded"),
+                        "released": s.get("released"),
+                        "cancelled": s.get("cancelled"),
+                        "untilHeight": s.get("untilHeight"),
+                        "beneficiary": s.get("beneficiary"),
+                        "funder": s.get("funder"),
+                        "shares": s.get("shares")}))
+        }
+      } |
+
+      lockState!({"funded": false, "released": false, "cancelled": false,
+                  "untilHeight": 0, "beneficiary": "", "funder": "", "shares": 0}) |
+      rs!(bundle+{*FxPool}, *uPool) |
+      for (@poolUri <- uPool) {
+        rs!(bundle+{*LiquidityLock}, *uLock) |
+        for (@lockUri <- uLock) { ret!((true, poolUri, lockUri)) }
+      }
+    }
+
   }
     }
   } |

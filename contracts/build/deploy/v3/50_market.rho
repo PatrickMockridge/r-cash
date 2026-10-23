@@ -8,7 +8,7 @@ new
   MarketIndex, indexState,
   MarketDirectory, directoryState,
   MarketFactory,
-  marketNow, marketVerifier, marketOracle, stageMarket,
+  marketNow, marketVerifier, marketOracle, stageMarket, activatePool,
   marketAuth,
   rl(`rho:registry:lookup`),
   rs(`rho:registry:insertArbitrary`),
@@ -179,6 +179,44 @@ in {
   } |
 
 
+  contract activatePool(@slot, @record, @entry, @marketId, ret) = {
+    new pCh, aCh in {
+                          rl!(slot.get("poolUri"), *pCh) |
+                          for (FxPool <- pCh) {
+                            FxPool!("attest", *aCh) |
+                            for (@a <- aCh) {
+                              match a {
+                                (true, att) => {
+                                  if (att.get("seeded") == false) { ret!((false, "not seeded")) }
+                                  else {
+                                    if (att.get("termsHash") != record.get("termsHash")) {
+                                      ret!((false, "terms mismatch"))
+                                    } else {
+                                      if (att.get("rq") < entry.get("terms").get("depthFloorQuote")) {
+                                        ret!((false, "depth"))
+                                      } else {
+                                        for (@s2 <- indexState) {
+                                          match s2.get("markets").get(marketId) {
+                                            r2 => {
+                                              indexState!(s2.set("markets",
+                                                s2.get("markets").set(marketId,
+                                                  r2.set("status", "active")))
+                                                .set("rev", s2.get("rev") + 1)) |
+                                              ret!((true, "active"))
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                                _ => { ret!((false, "no attestation")) }
+                              }
+                            }
+                          }
+                        }
+  } |
+
   contract MarketIndex(@"stage", @record, @auth, ret) = {
     if (auth != *marketAuth) { ret!((false, "bad index authority")) }
     else {
@@ -220,7 +258,7 @@ in {
         record => {
           if (record.get("status") != "draft") { ret!((false, "not draft")) }
           else {
-            new dCh, tCh, pCh, aCh in {
+            new dCh, tCh, pCh, aCh, lCh, iCh in {
               MarketDirectory!("byId", marketId, *dCh) |
               MarketTerms!("get", record.get("termsHash"), *tCh) |
               for (@d <- dCh; @t <- tCh) {
@@ -230,36 +268,23 @@ in {
                       (true, entry) => {
                         if (slot.get("sealed") == false) { ret!((false, "not sealed")) }
                         else {
-                          rl!(slot.get("poolUri"), *pCh) |
-                          for (FxPool <- pCh) {
-                            FxPool!("attest", *aCh) |
-                            for (@a <- aCh) {
-                              match a {
-                                (true, att) => {
-                                  if (att.get("seeded") == false) { ret!((false, "not seeded")) }
-                                  else {
-                                    if (att.get("termsHash") != record.get("termsHash")) {
-                                      ret!((false, "terms mismatch"))
+                          rl!(slot.get("lockUri"), *lCh) |
+                          for (LiquidityLock <- lCh) {
+                            LiquidityLock!("info", *iCh) |
+                            for (@i <- iCh) {
+                              match i {
+                                (true, info) => {
+                                  if (info.get("funded") == false) {
+                                    ret!((false, "lock unfunded"))
+                                  } else {
+                                    if (info.get("untilHeight") < entry.get("terms").get("lockUntilHeight")) {
+                                      ret!((false, "lock height"))
                                     } else {
-                                      if (att.get("rq") < entry.get("terms").get("depthFloorQuote")) {
-                                        ret!((false, "depth"))
-                                      } else {
-                                        for (@s2 <- indexState) {
-                                          match s2.get("markets").get(marketId) {
-                                            r2 => {
-                                              indexState!(s2.set("markets",
-                                                s2.get("markets").set(marketId,
-                                                  r2.set("status", "active")))
-                                                .set("rev", s2.get("rev") + 1)) |
-                                              ret!((true, "active"))
-                                            }
-                                          }
-                                        }
-                                      }
+                                      activatePool!(slot, record, entry, marketId, *ret)
                                     }
                                   }
                                 }
-                                _ => { ret!((false, "no attestation")) }
+                                _ => { ret!((false, "no lock")) }
                               }
                             }
                           }
@@ -385,10 +410,10 @@ in {
                                                 PoolTemplate!("create", terms, termsHash, *pcCh) |
                                                 for (@pc <- pcCh) {
                                                   match pc {
-                                                    (true, poolUri) => {
+                                                    (true, poolUri, lockUri) => {
                                                       MarketDirectory!("bind", terms.get("marketId"),
-                                                        {"poolUri": poolUri, "termsHash": termsHash,
-                                                         "sealed": false},
+                                                        {"poolUri": poolUri, "lockUri": lockUri,
+                                                         "termsHash": termsHash, "sealed": false},
                                                         *marketAuth, *bindCh) |
                                                       for (@bound <- bindCh) {
                                                         match bound {
@@ -412,7 +437,8 @@ in {
                                                                     match staged {
                                                                       (true, _) => {
                                                                         ret!((true, terms.get("marketId"),
-                                                                              poolUri, termsHash))
+                                                                              poolUri, lockUri,
+                                                                              termsHash))
                                                                       }
                                                                       _ => { ret!(staged) }
                                                                     }

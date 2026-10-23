@@ -38,7 +38,7 @@
       "contracts/build/deploy/v3/51_pool.rho": {
         "bytes": 16384,
         "depth": 96,
-        "contracts": 14
+        "contracts": 20
       }
     }
   },
@@ -633,30 +633,28 @@
       "stateful": true,
       "state_cell": "lockState",
       "arms": [
-        "lock",
+        "fund",
         "release",
-        "info",
-        "attest",
-        "admin"
+        "cancel",
+        "info"
       ],
       "dependencies": [
         "Root",
         "Clock",
-        "Verifier",
         "Governor"
       ],
       "creates": [],
       "system": [
-        "rho:rchain:ertp",
+        "rho:rev:address",
         "rho:rchain:deployerId:ops"
       ],
-      "deploy": "contracts/src/deploy/v3/41_lock.rho",
+      "deploy": "contracts/src/deploy/v3/51_pool.rho",
       "instance_key": "market",
-      "status": "planned",
+      "status": "implemented",
       "budget": {
-        "bytes": 12288,
-        "depth": 48,
-        "contracts": 1
+        "bytes": 16384,
+        "depth": 96,
+        "contracts": 20
       }
     },
     {

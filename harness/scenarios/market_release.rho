@@ -1,0 +1,33 @@
+// Release the seed LP after the lock height and remove it from the pool.
+// Returns [lockedShares, reservesAfterRemoval].
+// Placeholders: __ROOT_URI__, __LOCK_URI__, __POOL_URI__.
+new
+  rl(`rho:registry:lookup`),
+  rootCh, lockCh, poolCh, rCh, rrCh, resCh,
+  deployId(`rho:rchain:deployId`),
+  deployerId(`rho:rchain:deployerId`)
+in {
+  rl!(`__ROOT_URI__`, *rootCh) |
+  rl!(`__LOCK_URI__`, *lockCh) |
+  rl!(`__POOL_URI__`, *poolCh) |
+  for (Root <- rootCh; LiquidityLock <- lockCh; FxPool <- poolCh) {
+    LiquidityLock!("release", *deployerId, *rCh) |
+    for (@r <- rCh) {
+      match r {
+        (true, lpPayment, shares) => {
+          FxPool!("removeLiquidity", lpPayment, 0, 0, *rrCh) |
+          for (@rr <- rrCh) {
+            match rr {
+              (true, basePayment, quotePayment) => {
+                FxPool!("reserves", *resCh) |
+                for (@res <- resCh) { deployId!([shares, res]) }
+              }
+              _ => { deployId!(rr) }
+            }
+          }
+        }
+        _ => { deployId!(r) }
+      }
+    }
+  }
+}

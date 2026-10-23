@@ -149,7 +149,7 @@ evidence-first:
    maxPairAgeBlocks)` must report fresh per feed and within the term's age bound.
 4. `CurrencyRegistry`/`OracleRegistry` policy hashes must match the terms.
 5. `FxPool.attest` returns the immutable `{marketId, termsHash, seedBase, seedQuote,
-   initialShares, seeded}`; `LiquidityLock.attest` returns `{funded, released, cancelled,
+   initialShares, seeded}`; `LiquidityLock.info` returns `{funded, released, cancelled,
    shares, untilHeight}`; `TransferBook.attest` returns `{marketId, termsHash, active}`.
    The seed must equal the terms, the lock must be funded and unreleased, and shares must
    equal `initialShares`.

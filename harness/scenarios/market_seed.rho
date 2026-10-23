@@ -1,23 +1,25 @@
 // Seed a REV/V4T pool from the provider's account: fund REV, mint V4T against
 // a vault, deposit both assets, then add liquidity. Returns
 // [ownerId, shares, reserves].
-// Placeholders: __ROOT_URI__, __REGISTRY_URI__, __POOL_URI__, __PUBKEY__,
-//               __FUND_REV__, __COLLATERAL__, __MINT__, __BASE_AMT__, __QUOTE_AMT__.
+// Placeholders: __ROOT_URI__, __REGISTRY_URI__, __POOL_URI__, __LOCK_URI__,
+//               __PUBKEY__, __FUND_REV__, __COLLATERAL__, __MINT__, __BASE_AMT__,
+//               __QUOTE_AMT__, __LOCK_UNTIL__.
 new
   rl(`rho:registry:lookup`),
-  rootCh, poolCh, regCh, afCh, ac, oCh, fRevCh,
+  rootCh, poolCh, lockCh, regCh, afCh, ac, oCh, fRevCh,
   ertpCh, revIssuerCh, revPurseCh, fundCh, wdCh, depCh,
   eCh, zCh, wColCh, vcCh, depVCh, mintCh, dStableCh,
-  wBaseCh, wQuoteCh, lpCh, resCh,
+  wBaseCh, wQuoteCh, lpCh, resCh, lockFundCh,
   deployId(`rho:rchain:deployId`),
   deployerId(`rho:rchain:deployerId`)
 in {
   rl!(`__ROOT_URI__`, *rootCh) |
   rl!(`__REGISTRY_URI__`, *regCh) |
   rl!(`__POOL_URI__`, *poolCh) |
+  rl!(`__LOCK_URI__`, *lockCh) |
   rl!(`rho:rchain:ertp`, *ertpCh) |
   for (Root <- rootCh; CurrencyRegistry <- regCh; FxPool <- poolCh;
-       @(_, ERTP) <- ertpCh) {
+       LiquidityLock <- lockCh; @(_, ERTP) <- ertpCh) {
     Root!("resolve", "component:account-factory", 1, *afCh) |
     for (@(true, afUri, _) <- afCh) {
       rl!(afUri, *ac) |
@@ -80,9 +82,19 @@ in {
                                                                       for (@lp <- lpCh) {
                                                                         match lp {
                                                                           (true, lpPayment, shares) => {
-                                                                            FxPool!("reserves", *resCh) |
-                                                                            for (@res <- resCh) {
-                                                                              deployId!([ownerId, shares, res])
+                                                                            LiquidityLock!("fund", *deployerId,
+                                                                                           lpPayment, ownerId,
+                                                                                           __LOCK_UNTIL__, *lockFundCh) |
+                                                                            for (@lf <- lockFundCh) {
+                                                                              match lf {
+                                                                                (true, lockShares) => {
+                                                                                  FxPool!("reserves", *resCh) |
+                                                                                  for (@res <- resCh) {
+                                                                                    deployId!([ownerId, shares, res, lockShares])
+                                                                                  }
+                                                                                }
+                                                                                _ => { deployId!(lf) }
+                                                                              }
                                                                             }
                                                                           }
                                                                           _ => { deployId!(lp) }

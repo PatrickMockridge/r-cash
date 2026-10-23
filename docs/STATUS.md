@@ -22,9 +22,9 @@ the next build.
 | Issuer checks | system deploy, attestations, supply, params, custody, open → deposit REV → mint → repay → withdraw; partial liquidation, underwater write-off, the debt/bad-debt conservation invariant and the liquidation-capability refusal all pass on the devnet |
 | Account checks | key-signed deposit via deposit facet, balance, withdraw, empty stablecoin purse through the registry, and a foreign deployer refused by `AccountGate` |
 | Transfers | `TransferBook` allocates ids and creates a per-transfer `TransferContract`; claim by secret preimage, refund after expiry by the sender, wrong-secret and foreign-refund refusals, and closed-terminal refusals all pass |
-| Markets | `MarketTerms` + `MarketIndex` + `MarketDirectory` + `MarketFactory` (`50_market`) with `PoolTemplate`/`assemblePool` (`51_pool`); a REV/V4T market is created from sponsor-signed terms, seeded from a vault-backed account, activated and swapped at the oracle rate minus the spread |
+| Markets | `MarketTerms` + `MarketIndex` + `MarketDirectory` + `MarketFactory` (`50_market`) with `PoolTemplate`/`assemblePool`/`LiquidityLock` (`51_pool`); a REV/V4T market is created from sponsor-signed terms, seeded from a vault-backed account, the seed LP locked, the market activated and swapped at the oracle rate minus the spread; after the lock height the beneficiary releases the seed and removes the liquidity |
 | Gates | build, measure, architecture, capture, language and TLA gates pass; the old capture finding is gone |
-| Next | liquidity-remove and seed lock, market pause/delist tests, v0.4 install manifest and client surfaces |
+| Next | market pause/delist tests, TradabilityGate/ListingViews, v0.4 install manifest and client surfaces (SDK/CLI/WASM/web) |
 
 The stablecoin design is DAI-like: REV-only collateral, per-currency systems, MCR,
 interest, liquidation and bad debt, with separate contracts per authority. Bridged
