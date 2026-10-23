@@ -1,0 +1,25 @@
+// v0.2 install step 5: register the component names and REV, then lock the Directory.
+// Placeholders: __DIRECTORY_URI__, __ACCOUNTS_URI__, __ORACLE_URI__, __REGISTRY_URI__,
+//               __COMPONENTS_URI__.
+new
+  rl(`rho:registry:lookup`),
+  dirCh,
+  Directory,
+  a1, a2, a3, a4, a5, a6,
+  lockCh,
+  deployId(`rho:rchain:deployId`)
+in {
+  rl!(`__DIRECTORY_URI__`, *dirCh) |
+  for (Directory <- dirCh) {
+    Directory!("register", "component:accounts", "__ACCOUNTS_URI__", *a1) |
+    Directory!("register", "component:oracle", "__ORACLE_URI__", *a2) |
+    Directory!("register", "component:listings", "__REGISTRY_URI__", *a3) |
+    Directory!("register", "component:markets", "__REGISTRY_URI__", *a4) |
+    Directory!("register", "component:pools", "__COMPONENTS_URI__", *a5) |
+    Directory!("registerAsset", "REV", "rev", "system:ertp", 8, *a6) |
+    for (@r1 <- a1; @r2 <- a2; @r3 <- a3; @r4 <- a4; @r5 <- a5; @r6 <- a6) {
+      Directory!("lock", *lockCh) |
+      for (@l <- lockCh) { deployId!((r1, r2, r3, r4, r5, r6, l)) }
+    }
+  }
+}
