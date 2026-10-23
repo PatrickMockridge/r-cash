@@ -8,8 +8,10 @@ shard `/root`.
 > **Hardware note.** The rholo node's advised memory is **8–16 GB**; these validators run
 > on 1 GB each. The stalls, read lag, lost registrations and height divergence observed
 > while deploying r-cash are consistent with resource exhaustion on hosts below the
-> minimum advisory. They are **not** evidence about the protocol. Re-run the deploy on
-> adequately provisioned nodes before drawing conclusions about node reliability.
+> minimum advisory. They are **not** evidence about the protocol. **Restarting the units
+> does not remedy this**: on 1 GB the same collapse returns under any real deploy load.
+> The hosts must be resized to at least 8 GB (16 GB+ to be comfortable) before the
+> network is usable for a production-shaped workload.
 
 | | |
 |---|---|
@@ -110,6 +112,7 @@ Observed on 2026-10-23 while the validators were memory-starved:
   with `peers: 1`.
 
 That is consistent with the validator side of the fringe handler having nothing to
-answer with while the chain's finality is degraded. **Restart the validator units first**;
-then the observer's retry loop restores the approved fringe, and `127.0.0.1:42403`
-becomes a healthy API for the deploy tooling.
+answer with while the chain's finality is degraded. **The fix is a host resize to the
+advised 8–16 GB, not a restart**: a 1 GB validator returns to the same state under load.
+After the resize and restart, the observer's retry loop restores the approved fringe, and
+`127.0.0.1:42403` becomes a healthy API for the deploy tooling.

@@ -51,8 +51,8 @@ verifies every component with `Root.resolve` and re-registers missing keys as a 
 measure.
 
 Feed listing and the TUSD stablecoin were not completed before the hosts became
-unusable. The correct next experiment is the same deploy on nodes with the advised
-8–16 GB.
+unusable. Restarting the units does not fix the condition; the hosts need resizing to at
+least 8 GB (16 GB+ ideally), and the same deploy should then be re-run there.
 
 ## Legacy v0.1 results
 
