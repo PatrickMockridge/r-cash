@@ -217,6 +217,34 @@ def main(argv: list[str] | None = None) -> int:
     state["account_factory_uri"] = identity["uris"][0]
     save(state)
 
+    manifest = {
+        "root_uri": state["root_uri"],
+        "clock_uri": state["clock_uri"],
+        "verifier_uri": state["verifier_uri"],
+        "codec_uri": state["codec_uri"],
+        "bounds_uri": state["bounds_uri"],
+        "admin_guard_uri": state["admin_guard_uri"],
+        "governor_uri": state["governor_uri"],
+        "amm_math_uri": state["05_amm_math_uri"],
+        "oracle_registry_uri": state["oracle_registry_uri"],
+        "oracle_hub_uri": state["oracle_hub_uri"],
+        "currency_registry_uri": state["currency_registry_uri"],
+        "stablecoin_directory_uri": state["stablecoin_directory_uri"],
+        "asset_resolver_uri": state["asset_resolver_uri"],
+        "transfer_book_uri": state["transfer_book_uri"],
+        "pool_template_uri": state["pool_template_uri"],
+        "market_terms_uri": state["market_terms_uri"],
+        "market_directory_uri": state["market_directory_uri"],
+        "market_index_uri": state["market_index_uri"],
+        "market_factory_uri": state["market_factory_uri"],
+        "tradability_gate_uri": state["tradability_gate_uri"],
+        "listing_views_uri": state["listing_views_uri"],
+        "account_factory_uri": state["account_factory_uri"],
+    }
+    out = ROOT / "deployments" / "devnet-v4.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(manifest, indent=2) + "\n")
+    print(f"manifest: {out.relative_to(ROOT)}")
     print(json.dumps(state, indent=2))
     return 0
 

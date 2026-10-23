@@ -170,3 +170,45 @@ The supported signing path is a locally held encrypted key. MetaMask is a read-o
 identity until the R0b spike proves otherwise: r-wallet's MetaMask wallet carries only
 `ethAddr`/`revAddr`, and every signing path in it rejects MetaMask. See
 `SPIKE-METAMASK.md`.
+
+## v0.4 client surface
+
+The installer writes `deployments/devnet-v4.json` with the installed component URIs.
+The SDK attaches it with `Client::with_v4_manifest`; the CLI reads it from
+`--v4-manifest` (default `deployments/devnet-v4.json`). Currencies and markets are
+discovered through the contracts, not the manifest.
+
+Reads (`rcash v4 ...`):
+
+| Command | Contract path |
+|---|---|
+| `currency CODE` | `ListingViews.currency` → live stablecoin and vault URIs |
+| `market BASE QUOTE` | `ListingViews.marketFor` |
+| `active MARKET_ID` | `ListingViews.isActive` |
+| `slot MARKET_ID` | `MarketDirectory.byId` → pool and lock URIs |
+| `reserves POOL` | `FxPool.reserves` |
+| `supply STABLECOIN` | `Stablecoin.supply` |
+| `transfer-info TRANSFER` | `TransferContract.info` |
+| `balance ASSET` | the caller's `Account.balance` (signed; owner-gated) |
+
+Writes (signed by `--key`):
+
+| Command | Flow |
+|---|---|
+| `fund-rev AMOUNT` | native REV purse → `Account.depositFacet` |
+| `send TO_PUB ASSET AMOUNT HASH EXPIRY` | recipient facet lookup → `Account.sendTransfer` |
+| `claim TRANSFER SECRET` | `Account.claimTransfer` (secret preimage) |
+| `refund TRANSFER` | `Account.refundTransfer` after expiry |
+| `swap POOL DIR ASSET_IN ASSET_OUT AMOUNT` | account withdraw → `FxPool.swap` → account deposit |
+| `release-lp LOCK POOL BASE QUOTE` | lock release after its height → `FxPool.removeLiquidity` → account deposits |
+| `vault-mint VAULT CURRENCY COLLATERAL MINT` | vault deposit → mint → stablecoin into the account |
+| `vault-repay VAULT CURRENCY AMOUNT` | account withdraw → `VaultBook.repay` |
+| `vault-withdraw VAULT AMOUNT` | `VaultBook.withdraw` → REV into the account |
+
+Live-tested on a fresh devnet through the CLI: `balance` 0 → `fund-rev 0.05` →
+5,000,000 base units; `send` → `claim` credited 2,000,000 units and `transfer-info`
+reported `claimed`; a second transfer was refunded after expiry and a later `claim`
+was refused `closed`.
+
+Amounts accept decimals (`0.05` = 5,000,000 base units) or integers in base units where
+the command says `AMOUNT`; `parse_amount` is the one parser.

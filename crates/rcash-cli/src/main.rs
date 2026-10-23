@@ -31,6 +31,9 @@ struct Cli {
     /// Deployment manifest (public component URIs; no keys).
     #[arg(long, global = true, default_value = "deployments/devnet.json")]
     manifest: PathBuf,
+    /// v0.4 deployment manifest.
+    #[arg(long, global = true, default_value = "deployments/devnet-v4.json")]
+    v4_manifest: PathBuf,
     /// Machine-readable output.
     #[arg(long, global = true)]
     json: bool,
@@ -88,6 +91,11 @@ enum Command {
     },
     /// Write a deterministic signing fixture for the TypeScript parity test.
     ParityFixture { out: PathBuf },
+    /// v0.4 reads and writes: accounts, transfers, stablecoins and markets.
+    V4 {
+        #[command(subcommand)]
+        cmd: V4Cmd,
+    },
     /// Account reads.
     Account {
         #[command(subcommand)]
@@ -516,6 +524,238 @@ async fn run(cli: Cli) -> Result<ExitCode> {
             println!("{}", out.display());
             Ok(ExitCode::SUCCESS)
         }
+        Command::V4 { ref cmd } => {
+            match cmd {
+                V4Cmd::Currency { code } => {
+                    let currency = v4_reader(&cli)?.v4_currency(code).await?;
+                    print_json_or(
+                        &cli.json,
+                        &serde_json::json!({
+                            "code": currency.code,
+                            "stablecoinUri": currency.stablecoin_uri,
+                            "vaultUri": currency.vault_uri,
+                            "paramsHash": currency.params_hash,
+                            "status": currency.status,
+                        }),
+                    );
+                }
+                V4Cmd::Market { base, quote } => {
+                    let market = v4_reader(&cli)?.v4_market(base, quote).await?;
+                    print_json_or(
+                        &cli.json,
+                        &serde_json::json!({
+                            "base": base,
+                            "quote": quote,
+                            "marketId": market.as_ref().map(|m| &m.market_id),
+                            "version": market.as_ref().map(|m| m.version),
+                            "status": market.as_ref().map(|m| &m.status),
+                            "termsHash": market.as_ref().map(|m| &m.terms_hash),
+                        }),
+                    );
+                }
+                V4Cmd::Active { market } => {
+                    let active = v4_reader(&cli)?.v4_is_active(market).await?;
+                    print_json_or(
+                        &cli.json,
+                        &serde_json::json!({
+                            "market": market, "active": active,
+                        }),
+                    );
+                }
+                V4Cmd::Slot { market } => {
+                    let slot = v4_reader(&cli)?.v4_slot(market).await?;
+                    print_json_or(
+                        &cli.json,
+                        &serde_json::json!({
+                            "market": market, "pool": slot.pool_uri, "lock": slot.lock_uri,
+                        }),
+                    );
+                }
+                V4Cmd::Reserves { pool } => {
+                    let r = v4_reader(&cli)?.v4_reserves(pool).await?;
+                    print_json_or(
+                        &cli.json,
+                        &serde_json::json!({
+                            "base": r.base, "quote": r.quote,
+                            "totalShares": r.total_shares, "seeded": r.seeded,
+                        }),
+                    );
+                }
+                V4Cmd::Supply { stablecoin } => {
+                    let supply = v4_reader(&cli)?.v4_supply(stablecoin).await?;
+                    print_json_or(
+                        &cli.json,
+                        &serde_json::json!({
+                            "stablecoin": stablecoin, "supply": supply,
+                        }),
+                    );
+                }
+                V4Cmd::TransferInfo { transfer } => {
+                    let t = v4_reader(&cli)?.v4_transfer(transfer).await?;
+                    print_json_or(
+                        &cli.json,
+                        &serde_json::json!({
+                            "sender": t.sender, "asset": t.asset, "amount": t.amount,
+                            "expiry": t.expiry, "status": t.status,
+                        }),
+                    );
+                }
+                V4Cmd::Balance { asset } => {
+                    let balance = v4_signing_client(&cli)?.v4_balance(asset).await?;
+                    print_json_or(
+                        &cli.json,
+                        &serde_json::json!({
+                            "asset": asset, "baseUnits": balance,
+                        }),
+                    );
+                }
+                V4Cmd::FundRev { amount } => {
+                    let balance = v4_signing_client(&cli)?
+                        .v4_fund_rev(parse_amount(amount)?)
+                        .await?;
+                    print_json_or(
+                        &cli.json,
+                        &serde_json::json!({
+                            "asset": "REV", "baseUnits": balance,
+                        }),
+                    );
+                }
+                V4Cmd::Send {
+                    to_pub,
+                    asset,
+                    amount,
+                    secret_hash,
+                    expiry,
+                } => {
+                    let sent = v4_signing_client(&cli)?
+                        .v4_send_transfer(
+                            to_pub,
+                            asset,
+                            parse_amount(amount)?,
+                            secret_hash,
+                            *expiry,
+                        )
+                        .await?;
+                    print_json_or(
+                        &cli.json,
+                        &serde_json::json!({
+                            "id": sent.id, "transfer": sent.uri,
+                        }),
+                    );
+                }
+                V4Cmd::Claim { transfer, secret } => {
+                    let balance = v4_signing_client(&cli)?
+                        .v4_claim_transfer(transfer, secret)
+                        .await?;
+                    print_json_or(
+                        &cli.json,
+                        &serde_json::json!({
+                            "transfer": transfer, "baseUnits": balance,
+                        }),
+                    );
+                }
+                V4Cmd::Refund { transfer } => {
+                    let balance = v4_signing_client(&cli)?
+                        .v4_refund_transfer(transfer)
+                        .await?;
+                    print_json_or(
+                        &cli.json,
+                        &serde_json::json!({
+                            "transfer": transfer, "baseUnits": balance,
+                        }),
+                    );
+                }
+                V4Cmd::Swap {
+                    pool,
+                    direction,
+                    asset_in,
+                    asset_out,
+                    amount,
+                    min_out,
+                } => {
+                    let out = v4_signing_client(&cli)?
+                        .v4_swap(
+                            pool,
+                            direction,
+                            asset_in,
+                            asset_out,
+                            parse_amount(amount)?,
+                            parse_amount(min_out)?,
+                        )
+                        .await?;
+                    print_json_or(
+                        &cli.json,
+                        &serde_json::json!({
+                            "pool": pool, "amountOut": out,
+                        }),
+                    );
+                }
+                V4Cmd::ReleaseLp {
+                    lock,
+                    pool,
+                    base,
+                    quote,
+                } => {
+                    let shares = v4_signing_client(&cli)?
+                        .v4_release_lp(lock, pool, base, quote)
+                        .await?;
+                    print_json_or(
+                        &cli.json,
+                        &serde_json::json!({
+                            "lock": lock, "shares": shares,
+                        }),
+                    );
+                }
+                V4Cmd::VaultMint {
+                    vault,
+                    currency,
+                    collateral,
+                    mint,
+                } => {
+                    let debt = v4_signing_client(&cli)?
+                        .v4_vault_mint(
+                            vault,
+                            currency,
+                            parse_amount(collateral)?,
+                            parse_amount(mint)?,
+                        )
+                        .await?;
+                    print_json_or(
+                        &cli.json,
+                        &serde_json::json!({
+                            "vault": vault, "debt": debt,
+                        }),
+                    );
+                }
+                V4Cmd::VaultRepay {
+                    vault,
+                    currency,
+                    amount,
+                } => {
+                    let debt = v4_signing_client(&cli)?
+                        .v4_vault_repay(vault, currency, parse_amount(amount)?)
+                        .await?;
+                    print_json_or(
+                        &cli.json,
+                        &serde_json::json!({
+                            "vault": vault, "debt": debt,
+                        }),
+                    );
+                }
+                V4Cmd::VaultWithdraw { vault, amount } => {
+                    let withdrawn = v4_signing_client(&cli)?
+                        .v4_vault_withdraw(vault, parse_amount(amount)?)
+                        .await?;
+                    print_json_or(
+                        &cli.json,
+                        &serde_json::json!({
+                            "vault": vault, "baseUnits": withdrawn,
+                        }),
+                    );
+                }
+            }
+            Ok(ExitCode::SUCCESS)
+        }
         Command::Account { ref cmd } => match cmd {
             AccountCmd::Balances { assets } => {
                 if assets.is_empty() {
@@ -922,6 +1162,72 @@ async fn run(cli: Cli) -> Result<ExitCode> {
     }
 }
 
+#[derive(Subcommand, Debug)]
+enum V4Cmd {
+    /// A listed currency's stablecoin and vault URIs.
+    Currency { code: String },
+    /// The market record for a direct pair.
+    Market { base: String, quote: String },
+    /// Whether a market is active.
+    Active { market: String },
+    /// A market's pool and lock URIs.
+    Slot { market: String },
+    /// A pool's reserves.
+    Reserves { pool: String },
+    /// A stablecoin's total supply.
+    Supply { stablecoin: String },
+    /// A transfer's public record.
+    TransferInfo { transfer: String },
+    /// The caller's balance of one asset.
+    Balance { asset: String },
+    /// Fund the caller's account with REV.
+    FundRev { amount: String },
+    /// Send a claimable transfer to a recipient public key.
+    Send {
+        to_pub: String,
+        asset: String,
+        amount: String,
+        secret_hash: String,
+        expiry: i64,
+    },
+    /// Claim a transfer with its secret.
+    Claim { transfer: String, secret: String },
+    /// Refund an expired transfer.
+    Refund { transfer: String },
+    /// Swap through a pool and deposit the output.
+    Swap {
+        pool: String,
+        direction: String,
+        asset_in: String,
+        asset_out: String,
+        amount: String,
+        #[arg(long, default_value = "0")]
+        min_out: String,
+    },
+    /// Release the seed LP after the lock height and remove it.
+    ReleaseLp {
+        lock: String,
+        pool: String,
+        base: String,
+        quote: String,
+    },
+    /// Mint a stablecoin against REV into the account.
+    VaultMint {
+        vault: String,
+        currency: String,
+        collateral: String,
+        mint: String,
+    },
+    /// Repay vault debt.
+    VaultRepay {
+        vault: String,
+        currency: String,
+        amount: String,
+    },
+    /// Withdraw REV collateral into the account.
+    VaultWithdraw { vault: String, amount: String },
+}
+
 fn load_key(cli: &Cli) -> Result<rcash_chain::KeyPair> {
     load_key_from(&cli.keys, cli.key.as_deref())
 }
@@ -944,6 +1250,21 @@ fn load_manifest(path: &std::path::Path) -> Result<rcash_core::manifest::Manifes
     let text = std::fs::read_to_string(path)
         .map_err(|e| CliError::Usage(format!("{}: {e}", path.display())))?;
     rcash_core::manifest::Manifest::from_json(&text).map_err(|e| CliError::Usage(e.to_string()))
+}
+
+fn load_v4_manifest(path: &std::path::Path) -> Result<rcash_core::manifest::V4Manifest> {
+    let text = std::fs::read_to_string(path)
+        .map_err(|e| CliError::Usage(format!("{}: {e}", path.display())))?;
+    rcash_core::manifest::V4Manifest::from_json(&text).map_err(|e| CliError::Usage(e.to_string()))
+}
+
+fn v4_reader(cli: &Cli) -> Result<Client> {
+    Ok(Client::reader(cli.node.clone())?.with_v4_manifest(load_v4_manifest(&cli.v4_manifest)?))
+}
+
+fn v4_signing_client(cli: &Cli) -> Result<Client> {
+    let key = load_key_from(&cli.keys, cli.key.as_deref())?;
+    Ok(Client::new(cli.node.clone(), key)?.with_v4_manifest(load_v4_manifest(&cli.v4_manifest)?))
 }
 
 fn reader_client(cli: &Cli) -> Result<Client> {

@@ -24,7 +24,7 @@ the next build.
 | Transfers | `TransferBook` allocates ids and creates a per-transfer `TransferContract`; claim by secret preimage, refund after expiry by the sender, wrong-secret and foreign-refund refusals, and closed-terminal refusals all pass |
 | Markets | `MarketTerms` + `MarketIndex` + `MarketDirectory` + `MarketFactory` (`50_market`) with `PoolTemplate`/`assemblePool`/`LiquidityLock` (`51_pool`); a REV/V4T market is created from sponsor-signed terms, seeded from a vault-backed account, the seed LP locked, the market activated and swapped at the oracle rate minus the spread; after the lock height the beneficiary releases the seed and removes the liquidity; listings expose read-only views (`ListingViews`), a pure `TradabilityGate`, governor-gated pause/resume/delist, and a v2 draft staged after delist |
 | Gates | build, measure, architecture, capture, language and TLA gates pass; the old capture finding is gone |
-| Next | v0.4 install manifest and client surfaces (SDK/CLI/WASM/web) for accounts, transfers, swaps and liquidity |
+| Next | WASM exports and the React screens for the v0.4 surface; a CLI market swap against a freshly seeded pool |
 
 The stablecoin design is DAI-like: REV-only collateral, per-currency systems, MCR,
 interest, liquidation and bad debt, with separate contracts per authority. Bridged
@@ -80,6 +80,8 @@ browser journey will be rebuilt for the v0.4 payment flow.
 
 Secrets never reach the DOM: the key stays in wasm, the keystore is encrypted into
 IndexedDB, and a claim secret lives only in the URL fragment.
+
+**v0.4 SDK and CLI are in place.** `deployments/devnet-v4.json` names the installed components; the CLI `v4` group covers currency/market/slot/reserves/supply reads and account funding, send/claim/refund, swap, LP release and vault mint/repay/withdraw. The send/claim/refund journey was driven end to end through the CLI on a fresh devnet.
 
 **R4 (CI and docs) is in place.** GitHub Actions runs the Rust format/clippy/tests, wasm
 build and tests, the web typecheck/unit/build, and a contracts-drift check without Docker.

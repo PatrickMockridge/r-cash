@@ -13,10 +13,12 @@ use rcash_core::CoreError;
 
 mod reads;
 mod terms;
+mod v4;
 mod writes;
 
 pub use rcash_chain::rho_expr::{Reply as ProtocolReply, RhoValue as ProtocolValue};
 pub use reads::{Balances, FxRate, PriceFeed, Quote, QuoteAdd, Reserves, TransferInfo};
+pub use v4::{V4Currency, V4Market, V4Reserves, V4Sent, V4Slot, V4Transfer};
 pub use writes::{SwapResult, TxResult};
 
 pub use rcash_chain;
@@ -30,6 +32,7 @@ pub struct Client {
     phlo_limit: i64,
     poll: PollPolicy,
     manifest: Option<Manifest>,
+    v4_manifest: Option<rcash_core::manifest::V4Manifest>,
 }
 
 impl std::fmt::Debug for Client {
@@ -73,6 +76,7 @@ impl Client {
             phlo_limit: 1_000_000,
             poll: PollPolicy::default(),
             manifest: None,
+            v4_manifest: None,
         })
     }
 
@@ -86,6 +90,7 @@ impl Client {
             phlo_limit: 1_000_000,
             poll: PollPolicy::default(),
             manifest: None,
+            v4_manifest: None,
         })
     }
 
