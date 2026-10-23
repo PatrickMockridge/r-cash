@@ -11,7 +11,8 @@ shard `/root`.
 > minimum advisory. They are **not** evidence about the protocol. **Restarting the units
 > does not remedy this**: on 1 GB the same collapse returns under any real deploy load.
 > The hosts must be resized to at least 8 GB (16 GB+ to be comfortable) before the
-> network is usable for a production-shaped workload.
+> network is usable for a production-shaped workload. The chain-level failure mode is
+> raised upstream: [rhovision-org/rholo#420](https://github.com/rhovision-org/rholo/issues/420).
 
 | | |
 |---|---|

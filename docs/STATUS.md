@@ -52,7 +52,9 @@ measure.
 
 Feed listing and the TUSD stablecoin were not completed before the hosts became
 unusable. Restarting the units does not fix the condition; the hosts need resizing to at
-least 8 GB (16 GB+ ideally), and the same deploy should then be re-run there.
+least 8 GB (16 GB+ ideally), and the same deploy should then be re-run there. The
+failure mode is tracked upstream in
+[rhovision-org/rholo#420](https://github.com/rhovision-org/rholo/issues/420).
 
 ## Legacy v0.1 results
 
