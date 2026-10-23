@@ -1,0 +1,1242 @@
+{
+  "schema": "rcash:components:v1",
+  "version": 1,
+  "budgets": {
+    "bytes_target": 24576,
+    "bytes_warn": 49152,
+    "bytes_fail": 57344,
+    "depth_target": 48,
+    "depth_fail": 96,
+    "contracts_target": 8,
+    "contracts_fail": 12
+  },
+  "components": [
+    {
+      "name": "Root",
+      "kind": "kernel",
+      "stateful": true,
+      "state_cell": "rootState",
+      "arms": [
+        "resolve",
+        "get",
+        "keys",
+        "register",
+        "rotate",
+        "deprecate",
+        "freeze",
+        "admin"
+      ],
+      "dependencies": [
+        "Clock",
+        "Verifier",
+        "AdminGuard",
+        "Governor"
+      ],
+      "creates": [],
+      "system": [
+        "rho:block:data",
+        "rho:crypto:blake2b256Hash",
+        "rho:crypto:secp256k1Verify",
+        "rho:rchain:deployerId:ops"
+      ],
+      "deploy": "contracts/src/deploy/v3/00_root.rho",
+      "instance_key": null,
+      "status": "implemented",
+      "budget": {
+        "bytes": 8192,
+        "depth": 48,
+        "contracts": 9
+      }
+    },
+    {
+      "name": "Clock",
+      "kind": "kernel",
+      "stateful": false,
+      "state_cell": null,
+      "arms": [
+        "now"
+      ],
+      "dependencies": [],
+      "creates": [],
+      "system": [
+        "rho:block:data"
+      ],
+      "deploy": "contracts/src/deploy/v3/01_kernel.rho",
+      "instance_key": null,
+      "status": "implemented",
+      "budget": {
+        "bytes": 4096,
+        "depth": 16,
+        "contracts": 1
+      }
+    },
+    {
+      "name": "Verifier",
+      "kind": "kernel",
+      "stateful": false,
+      "state_cell": null,
+      "arms": [
+        "hash",
+        "sigOk",
+        "claimHash"
+      ],
+      "dependencies": [],
+      "creates": [],
+      "system": [
+        "rho:crypto:blake2b256Hash",
+        "rho:crypto:secp256k1Verify"
+      ],
+      "deploy": "contracts/src/deploy/v3/01_kernel.rho",
+      "instance_key": null,
+      "status": "implemented",
+      "budget": {
+        "bytes": 4096,
+        "depth": 16,
+        "contracts": 3
+      }
+    },
+    {
+      "name": "Codec",
+      "kind": "kernel",
+      "stateful": false,
+      "state_cell": null,
+      "arms": [
+        "canonical",
+        "hash"
+      ],
+      "dependencies": [
+        "Verifier"
+      ],
+      "creates": [],
+      "system": [],
+      "deploy": "contracts/src/deploy/v3/01_kernel.rho",
+      "instance_key": null,
+      "status": "implemented",
+      "budget": {
+        "bytes": 4096,
+        "depth": 32,
+        "contracts": 2
+      }
+    },
+    {
+      "name": "Bounds",
+      "kind": "kernel",
+      "stateful": false,
+      "state_cell": null,
+      "arms": [
+        "checkZone",
+        "checkFeed",
+        "checkPool",
+        "checkBook",
+        "checkTerms"
+      ],
+      "dependencies": [],
+      "creates": [],
+      "system": [],
+      "deploy": "contracts/src/deploy/v3/02_bounds.rho",
+      "instance_key": null,
+      "status": "implemented",
+      "budget": {
+        "bytes": 8192,
+        "depth": 48,
+        "contracts": 7
+      }
+    },
+    {
+      "name": "AdminGuard",
+      "kind": "kernel",
+      "stateful": false,
+      "state_cell": null,
+      "arms": [
+        "verify"
+      ],
+      "dependencies": [
+        "Verifier",
+        "Codec"
+      ],
+      "creates": [],
+      "system": [
+        "rho:crypto:secp256k1Verify"
+      ],
+      "deploy": "contracts/src/deploy/v3/03_admin_guard.rho",
+      "instance_key": null,
+      "status": "implemented",
+      "budget": {
+        "bytes": 4096,
+        "depth": 48,
+        "contracts": 3
+      }
+    },
+    {
+      "name": "AmmMath",
+      "kind": "kernel",
+      "stateful": false,
+      "state_cell": null,
+      "arms": [
+        "value",
+        "weight",
+        "fee",
+        "out",
+        "shares"
+      ],
+      "dependencies": [],
+      "creates": [],
+      "system": [],
+      "deploy": "contracts/src/deploy/v3/05_amm_math.rho",
+      "instance_key": null,
+      "status": "implemented",
+      "budget": {
+        "bytes": 8192,
+        "depth": 32,
+        "contracts": 6
+      }
+    },
+    {
+      "name": "RiskMath",
+      "kind": "kernel",
+      "stateful": false,
+      "state_cell": null,
+      "arms": [
+        "accrue",
+        "health",
+        "payout",
+        "seize"
+      ],
+      "dependencies": [],
+      "creates": [],
+      "system": [],
+      "deploy": "contracts/src/deploy/v3/06_risk_math.rho",
+      "instance_key": null,
+      "status": "implemented",
+      "budget": {
+        "bytes": 8192,
+        "depth": 32,
+        "contracts": 4
+      }
+    },
+    {
+      "name": "OracleMath",
+      "kind": "kernel",
+      "stateful": false,
+      "state_cell": null,
+      "arms": [
+        "median3",
+        "fresh",
+        "rate"
+      ],
+      "dependencies": [],
+      "creates": [],
+      "system": [],
+      "deploy": "contracts/src/deploy/v3/07_oracle_math.rho",
+      "instance_key": null,
+      "status": "implemented",
+      "budget": {
+        "bytes": 8192,
+        "depth": 32,
+        "contracts": 8
+      }
+    },
+    {
+      "name": "ClaimCode",
+      "kind": "kernel",
+      "stateful": false,
+      "state_cell": null,
+      "arms": [
+        "hash"
+      ],
+      "dependencies": [
+        "Verifier"
+      ],
+      "creates": [],
+      "system": [],
+      "deploy": "contracts/src/deploy/v3/08_claim_code.rho",
+      "instance_key": null,
+      "status": "implemented",
+      "budget": {
+        "bytes": 2048,
+        "depth": 16,
+        "contracts": 1
+      }
+    },
+    {
+      "name": "Governor",
+      "kind": "authority",
+      "stateful": true,
+      "state_cell": "governorState",
+      "arms": [
+        "authorize",
+        "admins",
+        "admin"
+      ],
+      "dependencies": [
+        "AdminGuard",
+        "Codec"
+      ],
+      "creates": [],
+      "system": [],
+      "deploy": "contracts/src/deploy/v3/04_governor.rho",
+      "instance_key": null,
+      "status": "implemented",
+      "budget": {
+        "bytes": 8192,
+        "depth": 48,
+        "contracts": 5
+      }
+    },
+    {
+      "name": "ZoneDirectory",
+      "kind": "registry",
+      "stateful": true,
+      "state_cell": "zoneDirectoryState",
+      "arms": [
+        "register",
+        "lookup",
+        "entries"
+      ],
+      "dependencies": [
+        "Root",
+        "Verifier",
+        "Codec"
+      ],
+      "creates": [],
+      "system": [],
+      "deploy": "contracts/src/deploy/v3/10_zone_factory.rho",
+      "instance_key": null,
+      "status": "planned",
+      "budget": {
+        "bytes": 8192,
+        "depth": 32,
+        "contracts": 2
+      }
+    },
+    {
+      "name": "ZoneFactory",
+      "kind": "factory",
+      "stateful": false,
+      "state_cell": null,
+      "arms": [
+        "create"
+      ],
+      "dependencies": [
+        "Root",
+        "ZoneDirectory",
+        "Bounds",
+        "Codec",
+        "Verifier",
+        "Clock"
+      ],
+      "creates": [
+        "CurrencyZone"
+      ],
+      "system": [
+        "rho:block:data"
+      ],
+      "deploy": "contracts/src/deploy/v3/10_zone_factory.rho",
+      "instance_key": null,
+      "status": "planned",
+      "budget": {
+        "bytes": 16384,
+        "depth": 48,
+        "contracts": 2
+      }
+    },
+    {
+      "name": "CurrencyRegistry",
+      "kind": "registry",
+      "stateful": true,
+      "state_cell": "currencyState",
+      "arms": [
+        "register",
+        "currency",
+        "currencies",
+        "setPaused",
+        "admin"
+      ],
+      "dependencies": [
+        "Root",
+        "ZoneDirectory",
+        "Bounds",
+        "Codec",
+        "Verifier",
+        "Clock",
+        "Governor"
+      ],
+      "creates": [],
+      "system": [],
+      "deploy": "contracts/src/deploy/v3/11_currency_registry.rho",
+      "instance_key": null,
+      "status": "planned",
+      "budget": {
+        "bytes": 24576,
+        "depth": 48,
+        "contracts": 1
+      }
+    },
+    {
+      "name": "OracleRegistry",
+      "kind": "registry",
+      "stateful": true,
+      "state_cell": "oracleRegState",
+      "arms": [
+        "registerFeed",
+        "feedEntry",
+        "reporters",
+        "allowlist",
+        "admin"
+      ],
+      "dependencies": [
+        "Root",
+        "Verifier",
+        "Codec",
+        "Bounds",
+        "Governor",
+        "Clock"
+      ],
+      "creates": [],
+      "system": [
+        "rho:rchain:deployerId:ops"
+      ],
+      "deploy": "contracts/src/deploy/v3/12_feed_factory.rho",
+      "instance_key": null,
+      "status": "planned",
+      "budget": {
+        "bytes": 16384,
+        "depth": 48,
+        "contracts": 2
+      }
+    },
+    {
+      "name": "FeedFactory",
+      "kind": "factory",
+      "stateful": false,
+      "state_cell": null,
+      "arms": [
+        "create"
+      ],
+      "dependencies": [
+        "Root",
+        "OracleRegistry",
+        "Bounds",
+        "Codec",
+        "Verifier",
+        "Clock"
+      ],
+      "creates": [
+        "OracleFeed"
+      ],
+      "system": [
+        "rho:block:data"
+      ],
+      "deploy": "contracts/src/deploy/v3/12_feed_factory.rho",
+      "instance_key": null,
+      "status": "planned",
+      "budget": {
+        "bytes": 16384,
+        "depth": 48,
+        "contracts": 2
+      }
+    },
+    {
+      "name": "OracleFeed",
+      "kind": "domain",
+      "stateful": true,
+      "state_cell": "feedState",
+      "arms": [
+        "submit",
+        "get",
+        "feedStatus",
+        "activate",
+        "setPaused",
+        "restartTrial",
+        "attest",
+        "admin"
+      ],
+      "dependencies": [
+        "Root",
+        "Clock",
+        "Verifier",
+        "OracleMath",
+        "Governor"
+      ],
+      "creates": [],
+      "system": [
+        "rho:block:data",
+        "rho:crypto:blake2b256Hash",
+        "rho:crypto:secp256k1Verify"
+      ],
+      "deploy": "contracts/src/deploy/v3/31_feed.rho",
+      "instance_key": "currency",
+      "status": "planned",
+      "budget": {
+        "bytes": 24576,
+        "depth": 48,
+        "contracts": 1
+      }
+    },
+    {
+      "name": "OracleHub",
+      "kind": "domain",
+      "stateful": false,
+      "state_cell": null,
+      "arms": [
+        "get",
+        "feedStatus",
+        "getPair",
+        "reporters"
+      ],
+      "dependencies": [
+        "Root",
+        "OracleRegistry",
+        "OracleMath",
+        "Clock"
+      ],
+      "creates": [],
+      "system": [],
+      "deploy": "contracts/src/deploy/v3/13_oracle_hub.rho",
+      "instance_key": null,
+      "status": "planned",
+      "budget": {
+        "bytes": 8192,
+        "depth": 48,
+        "contracts": 1
+      }
+    },
+    {
+      "name": "MarketTerms",
+      "kind": "registry",
+      "stateful": true,
+      "state_cell": "termsState",
+      "arms": [
+        "put",
+        "get",
+        "boundsOk"
+      ],
+      "dependencies": [
+        "Root",
+        "Codec",
+        "Bounds"
+      ],
+      "creates": [],
+      "system": [],
+      "deploy": "contracts/src/deploy/v3/14_market_factory.rho",
+      "instance_key": null,
+      "status": "planned",
+      "budget": {
+        "bytes": 8192,
+        "depth": 32,
+        "contracts": 2
+      }
+    },
+    {
+      "name": "MarketDirectory",
+      "kind": "registry",
+      "stateful": true,
+      "state_cell": "directoryState",
+      "arms": [
+        "bind",
+        "seal",
+        "unseal",
+        "byId",
+        "slot"
+      ],
+      "dependencies": [
+        "Root",
+        "Verifier",
+        "Codec",
+        "Bounds"
+      ],
+      "creates": [],
+      "system": [
+        "rho:crypto:secp256k1Verify"
+      ],
+      "deploy": "contracts/src/deploy/v3/14_market_factory.rho",
+      "instance_key": null,
+      "status": "planned",
+      "budget": {
+        "bytes": 8192,
+        "depth": 32,
+        "contracts": 2
+      }
+    },
+    {
+      "name": "MarketFactory",
+      "kind": "factory",
+      "stateful": false,
+      "state_cell": null,
+      "arms": [
+        "createMarket"
+      ],
+      "dependencies": [
+        "Root",
+        "MarketTerms",
+        "MarketIndex",
+        "MarketDirectory",
+        "CurrencyRegistry",
+        "OracleRegistry",
+        "Bounds",
+        "Codec",
+        "Verifier",
+        "Clock"
+      ],
+      "creates": [
+        "FxPool",
+        "LiquidityLock",
+        "TransferBook"
+      ],
+      "system": [
+        "rho:block:data"
+      ],
+      "deploy": "contracts/src/deploy/v3/14_market_factory.rho",
+      "instance_key": null,
+      "status": "planned",
+      "budget": {
+        "bytes": 24576,
+        "depth": 48,
+        "contracts": 4
+      }
+    },
+    {
+      "name": "MarketIndex",
+      "kind": "registry",
+      "stateful": true,
+      "state_cell": "marketState",
+      "arms": [
+        "stage",
+        "activate",
+        "pause",
+        "delist",
+        "cancel",
+        "market",
+        "marketFor",
+        "status",
+        "isActive",
+        "admin"
+      ],
+      "dependencies": [
+        "Root",
+        "CurrencyRegistry",
+        "MarketTerms",
+        "MarketDirectory",
+        "OracleHub",
+        "Governor",
+        "Verifier",
+        "Clock"
+      ],
+      "creates": [],
+      "system": [],
+      "deploy": "contracts/src/deploy/v3/15_market_index.rho",
+      "instance_key": null,
+      "status": "planned",
+      "budget": {
+        "bytes": 24576,
+        "depth": 48,
+        "contracts": 1
+      }
+    },
+    {
+      "name": "AssetResolver",
+      "kind": "view",
+      "stateful": false,
+      "state_cell": null,
+      "arms": [
+        "meta",
+        "issuer",
+        "makePurse",
+        "makeFacet"
+      ],
+      "dependencies": [
+        "Root",
+        "CurrencyRegistry",
+        "MarketIndex",
+        "MarketDirectory",
+        "OracleRegistry"
+      ],
+      "creates": [],
+      "system": [
+        "rho:rchain:ertp"
+      ],
+      "deploy": "contracts/src/deploy/v3/16_views.rho",
+      "instance_key": null,
+      "status": "planned",
+      "budget": {
+        "bytes": 16384,
+        "depth": 48,
+        "contracts": 2
+      }
+    },
+    {
+      "name": "ListingViews",
+      "kind": "view",
+      "stateful": false,
+      "state_cell": null,
+      "arms": [
+        "currency",
+        "asset",
+        "assets",
+        "markets",
+        "marketView",
+        "marketFor",
+        "terms",
+        "isActive"
+      ],
+      "dependencies": [
+        "Root",
+        "CurrencyRegistry",
+        "MarketIndex",
+        "MarketTerms",
+        "MarketDirectory",
+        "OracleHub"
+      ],
+      "creates": [],
+      "system": [],
+      "deploy": "contracts/src/deploy/v3/16_views.rho",
+      "instance_key": null,
+      "status": "planned",
+      "budget": {
+        "bytes": 16384,
+        "depth": 48,
+        "contracts": 2
+      }
+    },
+    {
+      "name": "CurrencyZone",
+      "kind": "domain",
+      "stateful": true,
+      "state_cell": "zoneState",
+      "arms": [
+        "open",
+        "depositCollateral",
+        "withdrawCollateral",
+        "borrow",
+        "repay",
+        "liquidate",
+        "vault",
+        "vaults",
+        "currency",
+        "params",
+        "brand",
+        "issuer",
+        "attest",
+        "admin"
+      ],
+      "dependencies": [
+        "Root",
+        "OracleHub",
+        "AccountFactory",
+        "RiskMath",
+        "Verifier",
+        "Clock",
+        "Governor"
+      ],
+      "creates": [],
+      "system": [
+        "rho:rchain:ertp",
+        "rho:block:data"
+      ],
+      "deploy": "contracts/src/deploy/v3/30_zone.rho",
+      "instance_key": "currency",
+      "status": "planned",
+      "budget": {
+        "bytes": 24576,
+        "depth": 48,
+        "contracts": 1
+      }
+    },
+    {
+      "name": "FxPool",
+      "kind": "domain",
+      "stateful": true,
+      "state_cell": "poolState",
+      "arms": [
+        "quote",
+        "swap",
+        "quoteAdd",
+        "addLiquidity",
+        "removeLiquidity",
+        "reserves",
+        "params",
+        "pair",
+        "terms",
+        "lpAsset",
+        "sealSeed",
+        "attest",
+        "admin"
+      ],
+      "dependencies": [
+        "Root",
+        "MarketIndex",
+        "OracleHub",
+        "AmmMath",
+        "TradabilityGate",
+        "Verifier",
+        "Clock"
+      ],
+      "creates": [],
+      "system": [
+        "rho:rchain:ertp"
+      ],
+      "deploy": "contracts/src/deploy/v3/40_pool.rho",
+      "instance_key": "market",
+      "status": "planned",
+      "budget": {
+        "bytes": 24576,
+        "depth": 48,
+        "contracts": 1
+      }
+    },
+    {
+      "name": "LiquidityLock",
+      "kind": "domain",
+      "stateful": true,
+      "state_cell": "lockState",
+      "arms": [
+        "lock",
+        "release",
+        "info",
+        "attest",
+        "admin"
+      ],
+      "dependencies": [
+        "Root",
+        "Clock",
+        "Verifier",
+        "Governor"
+      ],
+      "creates": [],
+      "system": [
+        "rho:rchain:ertp",
+        "rho:rchain:deployerId:ops"
+      ],
+      "deploy": "contracts/src/deploy/v3/41_lock.rho",
+      "instance_key": "market",
+      "status": "planned",
+      "budget": {
+        "bytes": 12288,
+        "depth": 48,
+        "contracts": 1
+      }
+    },
+    {
+      "name": "TransferBook",
+      "kind": "domain",
+      "stateful": true,
+      "state_cell": "bookState",
+      "arms": [
+        "send",
+        "nextId",
+        "terms",
+        "escrows",
+        "attest",
+        "admin"
+      ],
+      "dependencies": [
+        "Root",
+        "MarketIndex",
+        "AccountFactory",
+        "AssetResolver",
+        "FxPool",
+        "Verifier",
+        "Clock"
+      ],
+      "creates": [
+        "TransferContract"
+      ],
+      "system": [
+        "rho:rchain:ertp",
+        "rho:block:data"
+      ],
+      "deploy": "contracts/src/deploy/v3/42_book.rho",
+      "instance_key": "market",
+      "status": "planned",
+      "budget": {
+        "bytes": 24576,
+        "depth": 48,
+        "contracts": 1
+      }
+    },
+    {
+      "name": "TransferContract",
+      "kind": "domain",
+      "stateful": true,
+      "state_cell": "transferState",
+      "arms": [
+        "claim",
+        "refund",
+        "info"
+      ],
+      "dependencies": [
+        "Root",
+        "Clock",
+        "Verifier",
+        "ClaimCode",
+        "AccountFactory"
+      ],
+      "creates": [],
+      "system": [
+        "rho:rchain:ertp",
+        "rho:block:data"
+      ],
+      "deploy": "contracts/src/deploy/v3/42_book.rho",
+      "instance_key": "transfer",
+      "status": "planned",
+      "budget": {
+        "bytes": 12288,
+        "depth": 48,
+        "contracts": 1
+      }
+    },
+    {
+      "name": "TradabilityGate",
+      "kind": "domain",
+      "stateful": false,
+      "state_cell": null,
+      "arms": [
+        "admit"
+      ],
+      "dependencies": [],
+      "creates": [],
+      "system": [],
+      "deploy": "contracts/src/deploy/v3/40_pool.rho",
+      "instance_key": null,
+      "status": "planned",
+      "budget": {
+        "bytes": 4096,
+        "depth": 32,
+        "contracts": 1
+      }
+    },
+    {
+      "name": "AccountFactory",
+      "kind": "account",
+      "stateful": true,
+      "state_cell": "accountsState",
+      "arms": [
+        "getOrCreate",
+        "accountOf",
+        "verify",
+        "authorize",
+        "consumeAuth"
+      ],
+      "dependencies": [
+        "Root",
+        "AccountProvisioner",
+        "Verifier",
+        "Clock"
+      ],
+      "creates": [],
+      "system": [
+        "rho:rchain:deployerId:ops"
+      ],
+      "deploy": "contracts/src/deploy/v3/50_accounts.rho",
+      "instance_key": null,
+      "status": "planned",
+      "budget": {
+        "bytes": 12288,
+        "depth": 48,
+        "contracts": 4
+      }
+    },
+    {
+      "name": "AccountProvisioner",
+      "kind": "account",
+      "stateful": false,
+      "state_cell": null,
+      "arms": [
+        "create"
+      ],
+      "dependencies": [
+        "Root",
+        "AssetResolver",
+        "AccountGateTemplate",
+        "PurseStoreTemplate",
+        "AccountTemplate"
+      ],
+      "creates": [
+        "Account",
+        "PurseStore",
+        "AccountGate"
+      ],
+      "system": [
+        "rho:registry:insertArbitrary"
+      ],
+      "deploy": "contracts/src/deploy/v3/50_accounts.rho",
+      "instance_key": null,
+      "status": "planned",
+      "budget": {
+        "bytes": 12288,
+        "depth": 48,
+        "contracts": 4
+      }
+    },
+    {
+      "name": "AccountGateTemplate",
+      "kind": "template",
+      "stateful": false,
+      "state_cell": null,
+      "arms": [
+        "create"
+      ],
+      "dependencies": [
+        "Root",
+        "Verifier"
+      ],
+      "creates": [
+        "AccountGate"
+      ],
+      "system": [
+        "rho:rchain:deployerId:ops",
+        "rho:rev:address"
+      ],
+      "deploy": "contracts/src/deploy/v3/50_accounts.rho",
+      "instance_key": null,
+      "status": "planned",
+      "budget": {
+        "bytes": 4096,
+        "depth": 32,
+        "contracts": 4
+      }
+    },
+    {
+      "name": "PurseStoreTemplate",
+      "kind": "template",
+      "stateful": false,
+      "state_cell": null,
+      "arms": [
+        "create"
+      ],
+      "dependencies": [
+        "Root",
+        "AssetResolver"
+      ],
+      "creates": [
+        "PurseStore"
+      ],
+      "system": [
+        "rho:rchain:ertp"
+      ],
+      "deploy": "contracts/src/deploy/v3/50_accounts.rho",
+      "instance_key": null,
+      "status": "planned",
+      "budget": {
+        "bytes": 4096,
+        "depth": 32,
+        "contracts": 4
+      }
+    },
+    {
+      "name": "AccountTemplate",
+      "kind": "template",
+      "stateful": false,
+      "state_cell": null,
+      "arms": [
+        "create"
+      ],
+      "dependencies": [
+        "Root"
+      ],
+      "creates": [
+        "Account"
+      ],
+      "system": [
+        "rho:registry:insertArbitrary"
+      ],
+      "deploy": "contracts/src/deploy/v3/50_accounts.rho",
+      "instance_key": null,
+      "status": "planned",
+      "budget": {
+        "bytes": 8192,
+        "depth": 48,
+        "contracts": 4
+      }
+    },
+    {
+      "name": "Account",
+      "kind": "account",
+      "stateful": true,
+      "state_cell": "vaultState",
+      "arms": [
+        "deposit",
+        "withdraw",
+        "balance",
+        "depositFacet",
+        "sendTransfer",
+        "claimTransfer",
+        "refundTransfer",
+        "openVault",
+        "depositCollateral",
+        "withdrawCollateral",
+        "borrow",
+        "repay",
+        "liquidate",
+        "vaultInfo"
+      ],
+      "dependencies": [
+        "Root",
+        "AccountGate",
+        "PurseStore",
+        "AssetResolver",
+        "VaultCell",
+        "TransferClient",
+        "VaultClient",
+        "AccountFactory"
+      ],
+      "creates": [],
+      "system": [],
+      "deploy": "contracts/src/deploy/v3/51_account.rho",
+      "instance_key": "owner",
+      "status": "planned",
+      "budget": {
+        "bytes": 16384,
+        "depth": 48,
+        "contracts": 1
+      }
+    },
+    {
+      "name": "PurseStore",
+      "kind": "account",
+      "stateful": true,
+      "state_cell": "purseState",
+      "arms": [
+        "ensure",
+        "deposit",
+        "withdraw",
+        "balance",
+        "facet"
+      ],
+      "dependencies": [
+        "Root",
+        "AssetResolver"
+      ],
+      "creates": [],
+      "system": [
+        "rho:rchain:ertp"
+      ],
+      "deploy": "contracts/src/deploy/v3/51_account.rho",
+      "instance_key": "owner",
+      "status": "planned",
+      "budget": {
+        "bytes": 12288,
+        "depth": 48,
+        "contracts": 1
+      }
+    },
+    {
+      "name": "VaultCell",
+      "kind": "account",
+      "stateful": false,
+      "state_cell": null,
+      "arms": [
+        "deposit",
+        "withdraw",
+        "borrow",
+        "repay",
+        "info"
+      ],
+      "dependencies": [
+        "Root",
+        "CurrencyZone",
+        "AccountFactory"
+      ],
+      "creates": [],
+      "system": [
+        "rho:rchain:ertp"
+      ],
+      "deploy": "contracts/src/deploy/v3/52_vault_cell.rho",
+      "instance_key": "owner_currency",
+      "status": "planned",
+      "budget": {
+        "bytes": 8192,
+        "depth": 48,
+        "contracts": 1
+      }
+    },
+    {
+      "name": "AccountGate",
+      "kind": "account",
+      "stateful": false,
+      "state_cell": null,
+      "arms": [
+        "verify"
+      ],
+      "dependencies": [
+        "Root",
+        "Verifier"
+      ],
+      "creates": [],
+      "system": [
+        "rho:rchain:deployerId:ops",
+        "rho:rev:address"
+      ],
+      "deploy": "contracts/src/deploy/v3/51_account.rho",
+      "instance_key": "owner",
+      "status": "planned",
+      "budget": {
+        "bytes": 4096,
+        "depth": 32,
+        "contracts": 1
+      }
+    },
+    {
+      "name": "TransferClient",
+      "kind": "account",
+      "stateful": false,
+      "state_cell": null,
+      "arms": [
+        "send",
+        "claim",
+        "refund",
+        "info"
+      ],
+      "dependencies": [
+        "Root",
+        "ListingViews",
+        "MarketDirectory",
+        "TransferBook",
+        "AccountFactory"
+      ],
+      "creates": [],
+      "system": [],
+      "deploy": "contracts/src/deploy/v3/53_clients.rho",
+      "instance_key": null,
+      "status": "planned",
+      "budget": {
+        "bytes": 12288,
+        "depth": 48,
+        "contracts": 2
+      }
+    },
+    {
+      "name": "VaultClient",
+      "kind": "account",
+      "stateful": false,
+      "state_cell": null,
+      "arms": [
+        "open",
+        "depositCollateral",
+        "withdrawCollateral",
+        "borrow",
+        "repay",
+        "liquidate",
+        "info"
+      ],
+      "dependencies": [
+        "Root",
+        "CurrencyRegistry",
+        "CurrencyZone",
+        "AccountFactory"
+      ],
+      "creates": [],
+      "system": [
+        "rho:rchain:ertp"
+      ],
+      "deploy": "contracts/src/deploy/v3/53_clients.rho",
+      "instance_key": null,
+      "status": "planned",
+      "budget": {
+        "bytes": 16384,
+        "depth": 48,
+        "contracts": 2
+      }
+    }
+  ]
+}

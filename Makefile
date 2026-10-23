@@ -3,7 +3,7 @@ PY := $(VENV)/bin/python
 RCHAIN_RUST_DIR ?= ../RNodeRust
 export RCHAIN_RUST_DIR
 
-.PHONY: venv image devnet down status keys build probes deploy logs clean bootstrap pool book demo legacy-demo client-test web-build check-languages test-wasm
+.PHONY: venv image devnet down status keys build probes deploy logs clean bootstrap pool book demo legacy-demo client-test web-build check-languages test-wasm measure measure-check check-arch check-captures spec-check tla-check install-v3 unit-v3
 
 venv:
 	python3 -m venv $(VENV)
@@ -26,6 +26,40 @@ keys:
 
 build:
 	$(PY) tools/build_contracts.py
+
+measure:
+	$(PY) tools/measure_contracts.py
+
+measure-check:
+	$(PY) tools/measure_contracts.py --check
+
+check-arch:
+	$(PY) tools/check_arch.py --check
+
+check-captures:
+	$(PY) tools/check_captures.py --check
+
+# Phase 1 gate: build drift, byte/depth budgets, catalogue and capture lint.
+spec-check: build measure-check check-arch check-captures
+
+# TLC is optional; the TLA+ files are specifications, not runtime dependencies.
+tla-check:
+	@if command -v tlc >/dev/null 2>&1; then \
+	  mkdir -p /tmp/rcash-tlc; \
+	  for cfg in spec/tla/*.cfg; do \
+	    echo "== $$cfg"; \
+	    tlc -metadir /tmp/rcash-tlc -config "$$cfg" "$${cfg%.cfg}.tla" || exit 1; \
+	  done; \
+	else \
+	  echo "tlc not installed; skipping TLA+ check"; \
+	fi
+
+# v0.3 kernel installer and isolated component checks.
+install-v3: build
+	$(PY) harness/install_v3.py
+
+unit-v3:
+	$(VENV)/bin/python harness/unit_v3.py
 
 probes: build
 	$(PY) harness/rcash.py probes

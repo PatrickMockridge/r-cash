@@ -89,6 +89,12 @@ jobs:
           python-version: "3.12"
       - name: build terms
         run: python tools/build_contracts.py
+      - name: measure terms
+        run: python tools/measure_contracts.py --check
+      - name: component catalogue
+        run: python tools/check_arch.py --check
+      - name: capture lint
+        run: python tools/check_captures.py --check
       - name: no drift
         run: git diff --exit-code contracts/build
 

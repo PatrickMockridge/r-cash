@@ -1,0 +1,24 @@
+// v0.3 ClaimCode: the one claim-secret hash boundary.
+// Placeholders: __ROOT_URI__.
+new
+  ClaimCode,
+  hash(`rho:crypto:blake2b256Hash`),
+  rl(`rho:registry:lookup`),
+  rs(`rho:registry:insertArbitrary`),
+  deployerId(`rho:rchain:deployerId`),
+  deployId(`rho:rchain:deployId`),
+  rootCh, Root, uClaim, ack
+in {
+
+  // The secret is a byte array; the caller compares the returned digest.
+  contract ClaimCode(@"hash", @secret, ret) = { hash!(secret, *ret) } |
+
+  rl!(`__ROOT_URI__`, *rootCh) |
+  for (Root <- rootCh) {
+    rs!(bundle+{*ClaimCode}, *uClaim) |
+    for (@uri <- uClaim) {
+      Root!("register", "component:claim-code", uri, 1, "kernel", *deployerId, *ack) |
+      for (@r <- ack) { deployId!([uri]) }
+    }
+  }
+}

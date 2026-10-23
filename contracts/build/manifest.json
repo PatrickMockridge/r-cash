@@ -1,0 +1,248 @@
+{
+  "entries": {
+    "contracts/build/deploy/00_bootstrap.rho": {
+      "brace_depth": 41,
+      "contracts": 81,
+      "grammar_depth": 71,
+      "minified_bytes": 44120,
+      "operator_run": 7,
+      "sha256": "477782fad232483d1a3dca6836143411a441228e02672de967d3884a9aac36b9",
+      "source_bytes": 84922
+    },
+    "contracts/build/deploy/10_pool_setup.rho": {
+      "brace_depth": 10,
+      "contracts": 0,
+      "grammar_depth": 19,
+      "minified_bytes": 2265,
+      "operator_run": 1,
+      "sha256": "6b96585953ff82921479ce6360c910429a987ca3cb7e59b332d70d254f79a87f",
+      "source_bytes": 2933
+    },
+    "contracts/build/deploy/11_pool.rho": {
+      "brace_depth": 37,
+      "contracts": 22,
+      "grammar_depth": 62,
+      "minified_bytes": 16274,
+      "operator_run": 7,
+      "sha256": "edcc1ac8d2926378179fa26baf8b3a0923c13aacd049d836c6ef649498022813",
+      "source_bytes": 31266
+    },
+    "contracts/build/deploy/13_transfer.rho": {
+      "brace_depth": 37,
+      "contracts": 12,
+      "grammar_depth": 62,
+      "minified_bytes": 7039,
+      "operator_run": 3,
+      "sha256": "6b4593fc7250bc15e9487d0e0d041b82762d083e4d2aa4fe158f9fbe3953e731",
+      "source_bytes": 13351
+    },
+    "contracts/build/deploy/v2/00_directory.rho": {
+      "brace_depth": 10,
+      "contracts": 12,
+      "grammar_depth": 14,
+      "minified_bytes": 2908,
+      "operator_run": 3,
+      "sha256": "e438b105b8be2094eec94a05f66dd4175182c84af48029148dd7401d44accd48",
+      "source_bytes": 4813
+    },
+    "contracts/build/deploy/v2/01_oracle.rho": {
+      "brace_depth": 30,
+      "contracts": 52,
+      "grammar_depth": 46,
+      "minified_bytes": 21353,
+      "operator_run": 7,
+      "sha256": "05207cd92fc237d9f74bd6ca47e9975fbb1423219f5f6c567f471588ba396335",
+      "source_bytes": 33517
+    },
+    "contracts/build/deploy/v2/02_registry.rho": {
+      "brace_depth": 37,
+      "contracts": 40,
+      "grammar_depth": 56,
+      "minified_bytes": 29115,
+      "operator_run": 7,
+      "sha256": "4af6809f2bd6def031f73e955f59f2b340b44fe5a51998f5b2d3b0112cf5c8ef",
+      "source_bytes": 49709
+    },
+    "contracts/build/deploy/v2/03_accounts.rho": {
+      "brace_depth": 38,
+      "contracts": 29,
+      "grammar_depth": 68,
+      "minified_bytes": 18628,
+      "operator_run": 3,
+      "sha256": "d6ece5d487242942379d643b65aaf09e6be63d26c01bcb9ac1d9472cbfd61efd",
+      "source_bytes": 35347
+    },
+    "contracts/build/deploy/v2/04_register.rho": {
+      "brace_depth": 6,
+      "contracts": 0,
+      "grammar_depth": 10,
+      "minified_bytes": 501,
+      "operator_run": 1,
+      "sha256": "d81e4a2954d5ff38050f38b3d20ee69aad9c841528cf1495dc061077f46d9c3e",
+      "source_bytes": 787
+    },
+    "contracts/build/deploy/v2/05_zone.rho": {
+      "brace_depth": 41,
+      "contracts": 27,
+      "grammar_depth": 71,
+      "minified_bytes": 16790,
+      "operator_run": 7,
+      "sha256": "759f88ea0dc23ec585102fd0d43e23c4c61390ed0d0a96e41374d270190d2b42",
+      "source_bytes": 34635
+    },
+    "contracts/build/deploy/v2/20_pool.rho": {
+      "brace_depth": 37,
+      "contracts": 23,
+      "grammar_depth": 61,
+      "minified_bytes": 16137,
+      "operator_run": 7,
+      "sha256": "3632288dda88caf0ed2337ea04ac901a7184601bab871ee93fcef70e138f9f15",
+      "source_bytes": 30471
+    },
+    "contracts/build/deploy/v2/21_lock.rho": {
+      "brace_depth": 25,
+      "contracts": 11,
+      "grammar_depth": 42,
+      "minified_bytes": 6427,
+      "operator_run": 7,
+      "sha256": "fb0680a4f3e416829310a5f3d0ac91b55730e4ba51c81883ec94e175e7199d90",
+      "source_bytes": 10219
+    },
+    "contracts/build/deploy/v2/22_book.rho": {
+      "brace_depth": 37,
+      "contracts": 25,
+      "grammar_depth": 62,
+      "minified_bytes": 11747,
+      "operator_run": 7,
+      "sha256": "00afcc1ea5e0fb4906f2578600ac8fac365df56cdcff8a63f2c7a4d8ec59ad53",
+      "source_bytes": 20315
+    },
+    "contracts/build/deploy/v2/23_stage.rho": {
+      "brace_depth": 6,
+      "contracts": 0,
+      "grammar_depth": 11,
+      "minified_bytes": 823,
+      "operator_run": 1,
+      "sha256": "d900ed909a7466ea499b22dfb40aeb8b4ce1fbceaf094b2356371fa66378266e",
+      "source_bytes": 1061
+    },
+    "contracts/build/deploy/v2/30_register_currency.rho": {
+      "brace_depth": 5,
+      "contracts": 0,
+      "grammar_depth": 9,
+      "minified_bytes": 430,
+      "operator_run": 1,
+      "sha256": "6725475acb384a8996212330f539eb317029c92066d3a2915c3bd43e56d2dcd6",
+      "source_bytes": 715
+    },
+    "contracts/build/deploy/v2/31_open_feed.rho": {
+      "brace_depth": 4,
+      "contracts": 0,
+      "grammar_depth": 7,
+      "minified_bytes": 338,
+      "operator_run": 1,
+      "sha256": "e8d38678493cb70b38b42a34a14eca72544ae9e016488b2cbd48a50a6745e616",
+      "source_bytes": 543
+    },
+    "contracts/build/deploy/v2/32_feed_submit.rho": {
+      "brace_depth": 4,
+      "contracts": 0,
+      "grammar_depth": 7,
+      "minified_bytes": 298,
+      "operator_run": 1,
+      "sha256": "1889457c74265a1a09bc60e9f3a48aa689ed1fb1bf9b4651ed2120960c7f4594",
+      "source_bytes": 509
+    },
+    "contracts/build/deploy/v2/33_feed_activate.rho": {
+      "brace_depth": 4,
+      "contracts": 0,
+      "grammar_depth": 7,
+      "minified_bytes": 232,
+      "operator_run": 1,
+      "sha256": "aabeb4a386b7bb2a4460e0bdb846fd57d43f3f2e31eb74c0c882a59714522f82",
+      "source_bytes": 352
+    },
+    "contracts/build/deploy/v3/00_root.rho": {
+      "brace_depth": 20,
+      "contracts": 9,
+      "grammar_depth": 30,
+      "minified_bytes": 5718,
+      "operator_run": 3,
+      "sha256": "3a940b2f752ca3c0a99e73d521be131f285418de55a43da0a82bfc46f8026e3b",
+      "source_bytes": 9643
+    },
+    "contracts/build/deploy/v3/01_kernel.rho": {
+      "brace_depth": 7,
+      "contracts": 7,
+      "grammar_depth": 10,
+      "minified_bytes": 1699,
+      "operator_run": 5,
+      "sha256": "699b5db00572be4ef2eb499d9753041dc4ed601d0a614ad357a1c2bc51fa947e",
+      "source_bytes": 2073
+    },
+    "contracts/build/deploy/v3/02_bounds.rho": {
+      "brace_depth": 13,
+      "contracts": 7,
+      "grammar_depth": 18,
+      "minified_bytes": 4345,
+      "operator_run": 3,
+      "sha256": "f6b80bf84221524b072c30fd18a9755a6dd8d4f607555e9e943b112b0defd979",
+      "source_bytes": 5289
+    },
+    "contracts/build/deploy/v3/03_admin_guard.rho": {
+      "brace_depth": 10,
+      "contracts": 3,
+      "grammar_depth": 17,
+      "minified_bytes": 1721,
+      "operator_run": 4,
+      "sha256": "9a948d8d406499c80c2f15066e8bb4ae1f718e41f9676380a5f68eac3df3fa9c",
+      "source_bytes": 2343
+    },
+    "contracts/build/deploy/v3/04_governor.rho": {
+      "brace_depth": 25,
+      "contracts": 5,
+      "grammar_depth": 40,
+      "minified_bytes": 3384,
+      "operator_run": 3,
+      "sha256": "d41c10ebb21625d81d90d14b2c06bbcea682fc53e0a08dbef91944b015fa9a69",
+      "source_bytes": 6570
+    },
+    "contracts/build/deploy/v3/05_amm_math.rho": {
+      "brace_depth": 9,
+      "contracts": 6,
+      "grammar_depth": 14,
+      "minified_bytes": 1978,
+      "operator_run": 4,
+      "sha256": "676f0be5ebc555dcf639f3248696707ad978b44cf2d876d4a1f0ba8945a3979a",
+      "source_bytes": 2523
+    },
+    "contracts/build/deploy/v3/06_risk_math.rho": {
+      "brace_depth": 7,
+      "contracts": 4,
+      "grammar_depth": 10,
+      "minified_bytes": 1270,
+      "operator_run": 5,
+      "sha256": "886d24a52108a78ce6a1695f5ca28fc44584464e4b6dc249edff8839e7c3c366",
+      "source_bytes": 1721
+    },
+    "contracts/build/deploy/v3/07_oracle_math.rho": {
+      "brace_depth": 12,
+      "contracts": 8,
+      "grammar_depth": 21,
+      "minified_bytes": 2650,
+      "operator_run": 5,
+      "sha256": "581367420ab7ab0da0c90a88713d55553fe8afe07cb0fb723fb0da6097dfb3b5",
+      "source_bytes": 3328
+    },
+    "contracts/build/deploy/v3/08_claim_code.rho": {
+      "brace_depth": 6,
+      "contracts": 1,
+      "grammar_depth": 10,
+      "minified_bytes": 521,
+      "operator_run": 3,
+      "sha256": "d9c4f12715cee35361afd1a3be530791efc0a6b801f835a0605f2a2c9506a3fc",
+      "source_bytes": 729
+    }
+  },
+  "schema": "rcash:contract-metrics:v1"
+}

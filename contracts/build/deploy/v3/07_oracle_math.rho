@@ -1,0 +1,94 @@
+// v0.3 OracleMath: pure median, freshness and cross-rate arithmetic.
+// Placeholders: __ROOT_URI__.
+new
+  OracleMath, omMedian3, omMax3, omMin3, omIsFresh, omDecide,
+  rl(`rho:registry:lookup`),
+  rs(`rho:registry:insertArbitrary`),
+  deployerId(`rho:rchain:deployerId`),
+  deployId(`rho:rchain:deployId`),
+  rootCh, Root, uOracle, ack
+in {
+
+  contract omMedian3(@a, @b, @c, ret) = {
+    if (a < b) { if (b < c) { ret!(b) } else { if (a < c) { ret!(c) } else { ret!(a) } } }
+    else { if (a < c) { ret!(a) } else { if (b < c) { ret!(c) } else { ret!(b) } } }
+  } |
+
+  contract omMax3(@a, @b, @c, ret) = {
+    if (a >= b) { if (a >= c) { ret!(a) } else { ret!(c) } }
+    else { if (b >= c) { ret!(b) } else { ret!(c) } }
+  } |
+
+  contract omMin3(@a, @b, @c, ret) = {
+    if (a <= b) { if (a <= c) { ret!(a) } else { ret!(c) } }
+    else { if (b <= c) { ret!(b) } else { ret!(c) } }
+  } |
+
+  contract omIsFresh(@price, @height, @now, @maxAge, @minP, @maxP, ret) = {
+    if (height <= 0 || height > now) { ret!(false) }
+    else {
+      if ((now - height) > maxAge) { ret!(false) }
+      else { ret!(price >= minP && price <= maxP) }
+    }
+  } |
+
+  contract omDecide(@count, @quorum, @spread, @median, @spreadBps, @minP, @maxP, ret) = {
+    if (count < quorum) { ret!(false) }
+    else {
+      if (median <= 0 || median < minP || median > maxP) { ret!(false) }
+      else { ret!((spread * 10000) <= (median * spreadBps)) }
+    }
+  } |
+
+  contract OracleMath(@"median3", @a, @b, @c, ret) = {
+    omMedian3!(a, b, c, *ret)
+  } |
+
+  // Returns (fresh, median, reason). Heights and prices are per reporter slot.
+  contract OracleMath(@"fresh", @p0, @p1, @p2, @h0, @h1, @h2, @now,
+                       @quorum, @maxAge, @maxSpread, @minP, @maxP, ret) = {
+    new mCh, xCh, nCh, f0, f1, f2 in {
+      omMedian3!(p0, p1, p2, *mCh) |
+      omMax3!(p0, p1, p2, *xCh) |
+      omMin3!(p0, p1, p2, *nCh) |
+      omIsFresh!(p0, h0, now, maxAge, minP, maxP, *f0) |
+      omIsFresh!(p1, h1, now, maxAge, minP, maxP, *f1) |
+      omIsFresh!(p2, h2, now, maxAge, minP, maxP, *f2) |
+      for (@median <- mCh; @maxPx <- xCh; @minPx <- nCh;
+           @ok0 <- f0; @ok1 <- f1; @ok2 <- f2) {
+        new c0, c1, c2 in {
+          if (ok0) { c0!(1) } else { c0!(0) } |
+          if (ok1) { c1!(1) } else { c1!(0) } |
+          if (ok2) { c2!(1) } else { c2!(0) } |
+          for (@a <- c0; @b <- c1; @c <- c2) {
+            new dCh in {
+              omDecide!(a + b + c, quorum, maxPx - minPx, median, maxSpread,
+                        minP, maxP, *dCh) |
+              for (@ok <- dCh) {
+                if (ok) { ret!((true, median, Nil)) }
+                else {
+                  if (a + b + c < quorum) { ret!((false, 0, "quorum")) }
+                  else { ret!((false, 0, "spread")) }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  } |
+
+  contract OracleMath(@"rate", @basePrice, @quotePrice, ret) = {
+    if (quotePrice <= 0) { ret!(0) }
+    else { match ((basePrice * 100000000) / quotePrice).toInt() { r => ret!(r) } }
+  } |
+
+  rl!(`__ROOT_URI__`, *rootCh) |
+  for (Root <- rootCh) {
+    rs!(bundle+{*OracleMath}, *uOracle) |
+    for (@uri <- uOracle) {
+      Root!("register", "component:oracle-math", uri, 1, "kernel", *deployerId, *ack) |
+      for (@r <- ack) { deployId!([uri]) }
+    }
+  }
+}

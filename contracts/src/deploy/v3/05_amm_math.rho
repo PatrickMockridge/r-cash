@@ -1,0 +1,93 @@
+// v0.3 AmmMath: pure fixed-price market-maker arithmetic.
+// Placeholders: __ROOT_URI__.
+new
+  AmmMath,
+  rl(`rho:registry:lookup`),
+  rs(`rho:registry:insertArbitrary`),
+  deployerId(`rho:rchain:deployerId`),
+  deployId(`rho:rchain:deployId`),
+  rootCh, Root, uAmm, ack
+in {
+
+  contract AmmMath(@"value", @rb, @rq, @rate, ret) = {
+    match ((rb * rate) / 100000000).toInt() { bv => ret!(bv + rq) }
+  } |
+
+  contract AmmMath(@"weight", @rb, @rq, @rate, ret) = {
+    new vCh in {
+      AmmMath!("value", rb, rq, rate, *vCh) |
+      for (@v <- vCh) {
+        if (v <= 0) { ret!(5000) }
+        else {
+          match ((((rb * rate) / 100000000).toInt() * 10000) / v).toInt() {
+            w => ret!(w)
+          }
+        }
+      }
+    }
+  } |
+
+  contract AmmMath(@"fee", @weight, @baseSpread, @skewSpread, ret) = {
+    if (weight >= 5000) {
+      match (((weight - 5000) * skewSpread) / 5000).toInt() {
+        extra => ret!(baseSpread + extra)
+      }
+    } else {
+      match (((5000 - weight) * skewSpread) / 5000).toInt() {
+        extra => ret!(baseSpread + extra)
+      }
+    }
+  } |
+
+  contract AmmMath(@"out", @dir, @dx, @rate, @feeBps, ret) = {
+    if (dir == "b2q") {
+      match ((dx * rate) / 100000000).toInt() {
+        gross => {
+          match ((gross * (10000 - feeBps)) / 10000).toInt() {
+            out => ret!(out)
+          }
+        }
+      }
+    } else {
+      if (rate <= 0) { ret!(-1) }
+      else {
+        match ((dx * 100000000) / rate).toInt() {
+          gross => {
+            match ((gross * (10000 - feeBps)) / 10000).toInt() {
+              out => ret!(out)
+            }
+          }
+        }
+      }
+    }
+  } |
+
+  contract AmmMath(@"shares", @depositValue, @totalShares, @poolValue, @isFirst, ret) = {
+    if (isFirst) { ret!(depositValue - 100000000) }
+    else {
+      if (totalShares <= 0 || poolValue <= 0) { ret!(0) }
+      else {
+        match ((depositValue * totalShares) / poolValue).toInt() {
+          s => ret!(s)
+        }
+      }
+    }
+  } |
+
+  contract AmmMath(@"inputValue", @assetIn, @base, @quote, @amount, @rate, ret) = {
+    if (assetIn == base) {
+      match ((amount * rate) / 100000000).toInt() { v => ret!(v) }
+    } else {
+      if (assetIn == quote) { ret!(amount) } else { ret!(-1) }
+    }
+  } |
+
+  rl!(`__ROOT_URI__`, *rootCh) |
+  for (Root <- rootCh) {
+    rs!(bundle+{*AmmMath}, *uAmm) |
+    for (@uri <- uAmm) {
+      Root!("register", "component:amm-math", uri, 1, "kernel", *deployerId, *ack) |
+      for (@r <- ack) { deployId!([uri]) }
+    }
+  }
+}

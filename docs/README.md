@@ -4,22 +4,25 @@ Read in this order:
 
 1. [`INTENT.md`](INTENT.md) — the problem, the product, users, principles, v0.1 scope, success
    criteria and the trust boundaries.
-2. [`SPEC.md`](SPEC.md) — the normative v0.1 specification: system model, authority, component
-   topology, contract states and operations, invariants, economic formulas, governance, conformance
-   evidence and planned work.
-3. [`NETWORK.md`](NETWORK.md) — currencies, corridors and how a corridor is added.
-4. [`PLATFORM.md`](PLATFORM.md) — the pinned rchain-rust node, hard platform limits, measured costs,
+2. [`spec/README.md`](spec/README.md) — the normative v0.3 core specification: the component
+   calculus, the composable component catalogue, invariant ownership and wiring. New contract
+   work follows this specification; `SPEC.md` remains the v0.1 reference.
+3. [`SPEC.md`](SPEC.md) — the v0.1 specification: system model, authority, component
+   topology, contract states and operations, invariants, economic formulas, governance,
+   conformance evidence and planned work.
+4. [`NETWORK.md`](NETWORK.md) — currencies, corridors and how a corridor is added.
+5. [`PLATFORM.md`](PLATFORM.md) — the pinned rchain-rust node, hard platform limits, measured costs,
    finality and the build constraints the contracts are shaped by.
-5. [`CLIENT.md`](CLIENT.md) — the Rust SDK and CLI: signing, term encoding, node API, reads vs
+6. [`CLIENT.md`](CLIENT.md) — the Rust SDK and CLI: signing, term encoding, node API, reads vs
    writes, failure taxonomy and the parity gates.
-6. [`FRONTEND.md`](FRONTEND.md) — the React app, wallet and keystore, claim links, and why
+7. [`FRONTEND.md`](FRONTEND.md) — the React app, wallet and keystore, claim links, and why
    freshness-gated reads are signed.
-7. [`LANGUAGES.md`](LANGUAGES.md) — the language policy: Rust, Rholang, Python and
-   TypeScript.
-8. [`THREAT_MODEL.md`](THREAT_MODEL.md) — assets, adversaries, mitigations and residual risks.
-9. [`STATUS.md`](STATUS.md) — what is implemented, measured, and deferred.
-10. [`LEGAL.md`](LEGAL.md) — regulatory and compliance boundaries (not legal advice).
-11. [`SPIKE-METAMASK.md`](SPIKE-METAMASK.md) — the MetaMask signing experiment: method and
+8. [`LANGUAGES.md`](LANGUAGES.md) — the language policy: Rust, Rholang, Python and
+   TypeScript, plus TLA+ specifications.
+9. [`THREAT_MODEL.md`](THREAT_MODEL.md) — assets, adversaries, mitigations and residual risks.
+10. [`STATUS.md`](STATUS.md) — what is implemented, measured, and deferred.
+11. [`LEGAL.md`](LEGAL.md) — regulatory and compliance boundaries (not legal advice).
+12. [`SPIKE-METAMASK.md`](SPIKE-METAMASK.md) — the MetaMask signing experiment: method and
     go/no-go criteria; not run.
 
 The protocol reference implementation is `contracts/src/` (Rholang) and `contracts/deploy/`
