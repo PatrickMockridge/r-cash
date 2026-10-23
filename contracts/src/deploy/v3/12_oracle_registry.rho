@@ -1,0 +1,298 @@
+// v0.3 OracleRegistry: reporter allowlist and one feed URI per currency.
+// A feed is deployed by its sponsor; this registry binds the URI after checking
+// the sponsor's signature over the live feed instance and the feed's attestation.
+// Placeholders: __ROOT_URI__, __ADMIN_KEYS__, __ALLOWLIST__.
+new
+  OracleRegistry, oracleRegState,
+  regGovernor, regInList, regCheckReporters, regRemove, regBind,
+  regVerify, regCheckFeed,
+  rl(`rho:registry:lookup`),
+  rs(`rho:registry:insertArbitrary`),
+  deployerIdOps(`rho:rchain:deployerId:ops`),
+  deployerId(`rho:rchain:deployerId`),
+  deployId(`rho:rchain:deployId`),
+  rootCh, Root, uRegistry, ack
+in {
+
+  contract regGovernor(ret) = {
+    new rCh, gCh in {
+      rl!(`__ROOT_URI__`, *rCh) |
+      for (Root <- rCh) {
+        Root!("resolve", "component:governor", 1, *gCh) |
+        for (@(true, govUri, v) <- gCh) {
+          new gc in {
+            rl!(govUri, *gc) |
+            for (Governor <- gc) { ret!(*Governor) }
+          }
+        }
+      }
+    }
+  } |
+
+  contract regInList(@items, @i, @key, ret) = {
+    if (i >= items.length()) { ret!(false) }
+    else {
+      match items.nth(i) {
+        x => {
+          if (x == key) { ret!(true) }
+          else { regInList!(items, i + 1, key, *ret) }
+        }
+      }
+    }
+  } |
+
+  contract regRemove(@items, @i, @key, @acc, ret) = {
+    if (i >= items.length()) { ret!(acc) }
+    else {
+      match items.nth(i) {
+        x => {
+          if (x == key) { regRemove!(items, i + 1, key, acc, *ret) }
+          else { regRemove!(items, i + 1, key, acc ++ [x], *ret) }
+        }
+      }
+    }
+  } |
+
+  contract regCheckReporters(@reporters, @sponsor, @allowlist, ret) = {
+    if (reporters.length() != 3) { ret!((false, "reporters")) }
+    else {
+      match reporters.nth(0) {
+        r0 => {
+          match reporters.nth(1) {
+            r1 => {
+              match reporters.nth(2) {
+                r2 => {
+                  if (r0 == r1 || r0 == r2 || r1 == r2) {
+                    ret!((false, "reporters"))
+                  } else {
+                    new a0, a1, a2 in {
+                      regInList!(allowlist, 0, r0, *a0) |
+                      regInList!(allowlist, 0, r1, *a1) |
+                      regInList!(allowlist, 0, r2, *a2) |
+                      for (@i0 <- a0; @i1 <- a1; @i2 <- a2) {
+                        if (i0 == false || i1 == false || i2 == false) {
+                          ret!((false, "reporter not allowlisted"))
+                        } else {
+                          new s0, s1, s2 in {
+                            if (r0 == sponsor) { s0!(1) } else { s0!(0) } |
+                            if (r1 == sponsor) { s1!(1) } else { s1!(0) } |
+                            if (r2 == sponsor) { s2!(1) } else { s2!(0) } |
+                            for (@c0 <- s0; @c1 <- s1; @c2 <- s2) {
+                              if ((c0 + c1 + c2) >= 2) {
+                                ret!((false, "sponsor slots"))
+                              } else { ret!((true, Nil)) }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  } |
+
+  contract regVerify(@payload, @sig, @sponsorHex, ret) = {
+    new rCh, verCh, dCh, okCh in {
+      rl!(`__ROOT_URI__`, *rCh) |
+      for (Root <- rCh) {
+        Root!("resolve", "component:verifier", 1, *verCh) |
+        for (@(true, vUri, vv) <- verCh) {
+          new vc in {
+            rl!(vUri, *vc) |
+            for (Verifier <- vc) {
+              Verifier!("hash", payload.toUtf8Bytes(), *dCh) |
+              for (@digest <- dCh) {
+                Verifier!("sigOk", digest, sig, sponsorHex.hexToBytes(), *okCh) |
+                for (@ok <- okCh) { ret!(ok) }
+              }
+            }
+          }
+        }
+      }
+    }
+  } |
+
+  contract regCheckFeed(@feedUri, @code, @feedId, @sponsorHex, @policyHash, ret) = {
+    new fCh, infoCh in {
+      rl!(feedUri, *fCh) |
+      for (Feed <- fCh) {
+        Feed!("info", *infoCh) |
+        for (@info <- infoCh) {
+          match info {
+            (true, m) => {
+              if (m.get("feedId") != feedId
+                  || m.get("currency") != code
+                  || m.get("sponsor") != sponsorHex
+                  || m.get("policyHash") != policyHash) {
+                ret!((false, "feed attestation"))
+              } else { ret!((true, m.get("reporters"))) }
+            }
+            _ => { ret!((false, "feed info")) }
+          }
+        }
+      }
+    }
+  } |
+
+  contract regBind(@code, @feedUri, @feedId, @policyHash, @sponsorHex, ret) = {
+    for (@s <- oracleRegState) {
+      match s.get("feeds").get(code) {
+        Nil => {
+          oracleRegState!(s.set("feeds", s.get("feeds").set(code, {
+            "uri": feedUri,
+            "feedId": feedId,
+            "policyHash": policyHash,
+            "sponsor": sponsorHex,
+            "status": "active"
+          }))) |
+          ret!((true, Nil))
+        }
+        _ => { oracleRegState!(s) | ret!((false, "duplicate")) }
+      }
+    }
+  } |
+
+  contract OracleRegistry(@"registerFeed", @code, @feedUri, @feedId, @policyHash,
+                           @sponsorHex, @sig, deployerId, ret) = {
+    new pkCh in {
+      deployerIdOps!("pubKeyBytes", *deployerId, *pkCh) |
+      for (@pk <- pkCh) {
+        if (pk != sponsorHex.hexToBytes()) { ret!((false, "bad sponsor")) }
+        else {
+          new payloadCh in {
+            payloadCh!(
+              "rcash:feed-bind:v3|" ++ code ++ "|" ++ feedId ++ "|" ++ feedUri
+              ++ "|" ++ policyHash ++ "|" ++ sponsorHex) |
+            for (@payload <- payloadCh) {
+              new okCh in {
+                regVerify!(payload, sig, sponsorHex, *okCh) |
+                for (@ok <- okCh) {
+                  if (ok == false) { ret!((false, "bad sponsor signature")) }
+                  else {
+                    new fCh in {
+                      regCheckFeed!(feedUri, code, feedId, sponsorHex, policyHash, *fCh) |
+                      for (@f <- fCh) {
+                        match f {
+                          (true, reporters) => {
+                            for (@s <<- oracleRegState) {
+                              new rcCh in {
+                                regCheckReporters!(reporters, sponsorHex,
+                                                   s.get("allowlist"), *rcCh) |
+                                for (@rc <- rcCh) {
+                                  match rc {
+                                    (true, Nil) => {
+                                      regBind!(code, feedUri, feedId, policyHash,
+                                               sponsorHex, *ret)
+                                    }
+                                    _ => { ret!(rc) }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                          _ => { ret!(f) }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  } |
+
+  contract OracleRegistry(@"feedEntry", @code, ret) = {
+    for (@s <<- oracleRegState) {
+      match s.get("feeds").get(code) {
+        Nil => { ret!((false, "no feed")) }
+        entry => { ret!((true, entry)) }
+      }
+    }
+  } |
+
+  contract OracleRegistry(@"info", ret) = {
+    for (@s <<- oracleRegState) {
+      ret!((true, {"feeds": s.get("feeds"), "allowlist": s.get("allowlist")}))
+    }
+  } |
+
+  contract OracleRegistry(@"admin", @nonce, @action, @args, @sigs, ret) = {
+    for (@s <<- oracleRegState) {
+      new gCh, vCh in {
+        regGovernor!(*gCh) |
+        for (Governor <- gCh) {
+          Governor!("authorize", "oracle-registry", nonce, action, args.toString(),
+                    sigs, *vCh) |
+          for (@v <- vCh) {
+            match v {
+              (true, Nil) => {
+                for (@s2 <- oracleRegState) {
+                  match action {
+                    "addReporter" => {
+                      match args.nth(0) {
+                        reporter => {
+                          new inCh in {
+                            regInList!(s2.get("allowlist"), 0, reporter, *inCh) |
+                            for (@present <- inCh) {
+                              if (present) {
+                                oracleRegState!(s2) | ret!((false, "duplicate"))
+                              } else {
+                                oracleRegState!(s2.set("allowlist",
+                                  s2.get("allowlist") ++ [reporter])) |
+                                ret!((true, Nil))
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                    "removeReporter" => {
+                      match args.nth(0) {
+                        reporter => {
+                          new outCh in {
+                            regRemove!(s2.get("allowlist"), 0, reporter, [], *outCh) |
+                            for (@items <- outCh) {
+                              oracleRegState!(s2.set("allowlist", items)) |
+                              ret!((true, Nil))
+                            }
+                          }
+                        }
+                      }
+                    }
+                    _ => { oracleRegState!(s2) | ret!((false, "unknown admin action")) }
+                  }
+                }
+              }
+              _ => { ret!(v) }
+            }
+          }
+        }
+      }
+    }
+  } |
+
+  oracleRegState!({
+    "allowlist": __ALLOWLIST__,
+    "feeds": {},
+    "admins": __ADMIN_KEYS__,
+    "threshold": 2,
+    "govNonce": 0
+  }) |
+
+  rl!(`__ROOT_URI__`, *rootCh) |
+  for (Root <- rootCh) {
+    rs!(bundle+{*OracleRegistry}, *uRegistry) |
+    for (@uri <- uRegistry) {
+      Root!("register", "component:oracle-registry", uri, 1, "registry", *deployerId, *ack) |
+      for (@r <- ack) { deployId!([uri]) }
+    }
+  }
+}

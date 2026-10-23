@@ -242,6 +242,69 @@
       "operator_run": 3,
       "sha256": "d9c4f12715cee35361afd1a3be530791efc0a6b801f835a0605f2a2c9506a3fc",
       "source_bytes": 729
+    },
+    "contracts/build/deploy/v3/09_identity.rho": {
+      "brace_depth": 14,
+      "contracts": 3,
+      "grammar_depth": 23,
+      "minified_bytes": 1483,
+      "operator_run": 3,
+      "sha256": "60a082202df9422c360621e48209ad9bb3f4cf18f67b40c68b631ac3e350aac5",
+      "source_bytes": 2166
+    },
+    "contracts/build/deploy/v3/10_zone_factory.rho": {
+      "brace_depth": 16,
+      "contracts": 4,
+      "grammar_depth": 28,
+      "minified_bytes": 2113,
+      "operator_run": 3,
+      "sha256": "8d0d38d60b4e3eba0a187d40886993de897f55b58d2aa6f922757bdf23ddf237",
+      "source_bytes": 3118
+    },
+    "contracts/build/deploy/v3/11_currency_registry.rho": {
+      "brace_depth": 27,
+      "contracts": 9,
+      "grammar_depth": 47,
+      "minified_bytes": 5333,
+      "operator_run": 4,
+      "sha256": "30ccff29ddcb5b9670294ebf804b60062b18a66f06b57b7544b81c1d82eefc59",
+      "source_bytes": 9630
+    },
+    "contracts/build/deploy/v3/12_oracle_registry.rho": {
+      "brace_depth": 20,
+      "contracts": 11,
+      "grammar_depth": 35,
+      "minified_bytes": 6054,
+      "operator_run": 5,
+      "sha256": "fabfc172d1801b79d03e88ba359915540bca4962782cbb6f38f03c51f6376364",
+      "source_bytes": 10126
+    },
+    "contracts/build/deploy/v3/13_oracle_hub.rho": {
+      "brace_depth": 20,
+      "contracts": 7,
+      "grammar_depth": 32,
+      "minified_bytes": 2751,
+      "operator_run": 3,
+      "sha256": "cca092e8e5f73d2d404a6781bca25be7d9ef413b79e5166b624cb21f31f7c48c",
+      "source_bytes": 4506
+    },
+    "contracts/build/deploy/v3/30_zone_template.rho": {
+      "brace_depth": 36,
+      "contracts": 7,
+      "grammar_depth": 63,
+      "minified_bytes": 7372,
+      "operator_run": 5,
+      "sha256": "a76ffb88d5ef3b1f6e6eb0fe08690c437dc1d1cb2becd5aea303945ceaad7a45",
+      "source_bytes": 18441
+    },
+    "contracts/build/deploy/v3/31_feed.rho": {
+      "brace_depth": 26,
+      "contracts": 12,
+      "grammar_depth": 41,
+      "minified_bytes": 8167,
+      "operator_run": 4,
+      "sha256": "d2fe02fe1506ba8ec1ea5693f034b85f2a40feb31b905976800261e53bf0b5cd",
+      "source_bytes": 14806
     }
   },
   "schema": "rcash:contract-metrics:v1"

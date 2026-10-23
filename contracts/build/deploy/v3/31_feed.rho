@@ -1,0 +1,406 @@
+// v0.3 OracleFeed: one currency's oracle state machine.
+// Deployed per currency and signed by the sponsor. The deploy returns the feed
+// URI and its attestation; OracleRegistry binds the URI in a second deploy.
+// Placeholders: __ROOT_URI__, __CURRENCY__, __FEED_ID__, __REPORTERS__,
+//               __SPONSOR_PUB__, __POLICY_HASH__, and the policy values.
+new
+  OracleFeed, feedState,
+  feedNow, feedSlot, feedStore, feedRead, feedCountSeen, feedGovernor, feedVerify,
+  rl(`rho:registry:lookup`),
+  rs(`rho:registry:insertArbitrary`),
+  bd(`rho:block:data`),
+  deployId(`rho:rchain:deployId`),
+  uriCh, attestCh
+in {
+
+  contract feedNow(ret) = {
+    new rCh, cCh in {
+      rl!(`__ROOT_URI__`, *rCh) |
+      for (Root <- rCh) {
+        Root!("resolve", "component:clock", 1, *cCh) |
+        for (@(true, clockUri, v) <- cCh) {
+          new ccCh in {
+            rl!(clockUri, *ccCh) |
+            for (Clock <- ccCh) { Clock!("now", *ret) }
+          }
+        }
+      }
+    }
+  } |
+
+  contract feedSlot(@s, @index, ret) = {
+    match s.get("prices").get(index) {
+      Nil => { ret!((0, 0)) }
+      entry => { ret!((entry.get("price"), entry.get("height"))) }
+    }
+  } |
+
+  contract feedStore(@s, @index, @price, @height, @seenKey, ret) = {
+    match s.get("prices").set(index, {"price": price, "height": height}) {
+      prices => {
+        match s.set("prices", prices) {
+          s1 => {
+            match s1.set(seenKey, true) {
+              s2 => {
+                ret!(s2.set("trialSubmits", s2.get("trialSubmits") + 1)
+                      .set("rev", s2.get("rev") + 1))
+              }
+            }
+          }
+        }
+      }
+    }
+  } |
+
+  contract feedCountSeen(@s, ret) = {
+    new a, b, c in {
+      if (s.get("seen0")) { a!(1) } else { a!(0) } |
+      if (s.get("seen1")) { b!(1) } else { b!(0) } |
+      if (s.get("seen2")) { c!(1) } else { c!(0) } |
+      for (@x <- a; @y <- b; @z <- c) { ret!(x + y + z) }
+    }
+  } |
+
+  contract feedRead(@s, @now, @requireActive, ret) = {
+    if (requireActive && s.get("active") == false) { ret!((false, 0, 0, "trial")) }
+    else {
+      if (s.get("paused")) { ret!((false, 0, 0, "paused")) }
+      else {
+        new a, b, c in {
+          feedSlot!(s, 0, *a) | feedSlot!(s, 1, *b) | feedSlot!(s, 2, *c) |
+          for (@x0 <- a; @x1 <- b; @x2 <- c) {
+            match x0 {
+              (p0, h0) => {
+                match x1 {
+                  (p1, h1) => {
+                    match x2 {
+                      (p2, h2) => {
+                        new rCh, omCh, mCh in {
+                          rl!(`__ROOT_URI__`, *rCh) |
+                          for (Root <- rCh) {
+                            Root!("resolve", "component:oracle-math", 1, *omCh) |
+                            for (@(true, omUri, v) <- omCh) {
+                              new oc in {
+                                rl!(omUri, *oc) |
+                                for (OracleMath <- oc) {
+                                  OracleMath!("fresh", p0, p1, p2, h0, h1, h2, now,
+                                              s.get("quorum"), s.get("maxAgeBlocks"),
+                                              s.get("maxSpreadBps"), s.get("minPrice"),
+                                              s.get("maxPrice"), *mCh) |
+                                  for (@r <- mCh) {
+                                    match r {
+                                      (true, median, Nil) => {
+                                        new minCh in {
+                                          if (h0 <= h1) {
+                                            if (h0 <= h2) { minCh!(h0) } else { minCh!(h2) }
+                                          } else {
+                                            if (h1 <= h2) { minCh!(h1) } else { minCh!(h2) }
+                                          } |
+                                          for (@mh <- minCh) {
+                                            ret!((true, median, now - mh, Nil))
+                                          }
+                                        }
+                                      }
+                                      (false, m, why) => { ret!((false, 0, 0, why)) }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  } |
+
+  contract feedGovernor(ret) = {
+    new rCh, gCh in {
+      rl!(`__ROOT_URI__`, *rCh) |
+      for (Root <- rCh) {
+        Root!("resolve", "component:governor", 1, *gCh) |
+        for (@(true, govUri, v) <- gCh) {
+          new gc in {
+            rl!(govUri, *gc) |
+            for (Governor <- gc) { ret!(*Governor) }
+          }
+        }
+      }
+    }
+  } |
+
+  contract feedVerify(@s, @index, @price, @height, @pubKey, @sig, ret) = {
+    new rCh, verCh in {
+      rl!(`__ROOT_URI__`, *rCh) |
+      for (Root <- rCh) {
+        Root!("resolve", "component:verifier", 1, *verCh) |
+        for (@(true, vUri, vv) <- verCh) {
+          new vc, dCh, okCh in {
+            rl!(vUri, *vc) |
+            for (Verifier <- vc) {
+              match "rcash:oracle-submit:v3|" ++ s.get("feedId") ++ "|"
+                    ++ s.get("currency") ++ "|" ++ index.toString() ++ "|"
+                    ++ price.toString() ++ "|" ++ height.toString() {
+                payload => {
+                  Verifier!("hash", payload.toUtf8Bytes(), *dCh) |
+                  for (@digest <- dCh) {
+                    Verifier!("sigOk", digest, sig, pubKey.hexToBytes(), *okCh) |
+                    for (@ok <- okCh) { ret!(ok) }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  } |
+
+  contract OracleFeed(@"submit", @index, @price, @height, @pubKey, @sig, ret) = {
+    for (@s <<- feedState) {
+      if (s.get("paused")) { ret!((false, "paused")) }
+      else {
+        if (index < 0 || index > 2) { ret!((false, "bad index")) }
+        else {
+          match s.get("reporters").nth(index) {
+            expected => {
+              if (pubKey != expected) { ret!((false, "not reporter")) }
+              else {
+                new nowCh in {
+                  feedNow!(*nowCh) |
+                  for (@now <- nowCh) {
+                    if (height > now) { ret!((false, "future price")) }
+                    else {
+                      if ((now - height) > 1000) { ret!((false, "stale submit")) }
+                      else {
+                        new vCh in {
+                          feedVerify!(s, index, price, height, pubKey, sig, *vCh) |
+                          for (@ok <- vCh) {
+                            if (ok == false) { ret!((false, "bad signature")) }
+                            else {
+                              for (@s2 <- feedState) {
+                                if (s2.get("paused") || s2.get("rev") != s.get("rev")) {
+                                  feedState!(s2) | ret!((false, "changed"))
+                                } else {
+                                  new slotCh, keyCh in {
+                                    feedSlot!(s2, index, *slotCh) |
+                                    match index {
+                                      0 => { keyCh!("seen0") }
+                                      1 => { keyCh!("seen1") }
+                                      _ => { keyCh!("seen2") }
+                                    } |
+                                    for (@slot <- slotCh; @seenKey <- keyCh) {
+                                      match slot {
+                                        (priorPrice, priorHeight) => {
+                                          if (height <= priorHeight) {
+                                            feedState!(s2) |
+                                            ret!((false, "height not monotonic"))
+                                          } else {
+                                            new stCh in {
+                                              feedStore!(s2, index, price, height,
+                                                         seenKey, *stCh) |
+                                              for (@ns <- stCh) {
+                                                feedState!(ns) | ret!((true, Nil))
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  } |
+
+  contract OracleFeed(@"get", ret) = {
+    new nowCh in {
+      feedNow!(*nowCh) |
+      for (@now <- nowCh) {
+        for (@s <<- feedState) {
+          new rCh in {
+            feedRead!(s, now, true, *rCh) |
+            for (@r <- rCh) {
+              match r {
+                (fresh, price, age, reason) => {
+                  ret!((true, {"fresh": fresh, "price": price,
+                               "age": age, "reason": reason}))
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  } |
+
+  contract OracleFeed(@"activate", ret) = {
+    new nowCh in {
+      feedNow!(*nowCh) |
+      for (@now <- nowCh) {
+        for (@s <<- feedState) {
+          if (s.get("active")) { ret!((false, "already active")) }
+          else {
+            if (s.get("paused")) { ret!((false, "paused")) }
+            else {
+              new seenCh, readCh in {
+                feedCountSeen!(s, *seenCh) |
+                feedRead!(s, now, false, *readCh) |
+                for (@seen <- seenCh; @r <- readCh) {
+                  match r {
+                    (fresh, price, age, why) => {
+                      if ((now - s.get("trialStart")) < s.get("trialBlocks")) {
+                        ret!((false, "trial"))
+                      } else {
+                        if (s.get("trialSubmits") < s.get("trialMinSubmits")) {
+                          ret!((false, "trial submits"))
+                        } else {
+                          if (seen < s.get("quorum")) { ret!((false, "quorum")) }
+                          else {
+                            if (fresh == false) { ret!((false, why)) }
+                            else {
+                              for (@s2 <- feedState) {
+                                if (s2.get("active") || s2.get("paused")
+                                    || s2.get("rev") != s.get("rev")) {
+                                  feedState!(s2) | ret!((false, "changed"))
+                                } else {
+                                  feedState!(s2.set("active", true)
+                                    .set("listedAt", now)
+                                    .set("rev", s2.get("rev") + 1)) |
+                                  ret!((true, Nil))
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  } |
+
+  contract OracleFeed(@"info", ret) = {
+    for (@s <<- feedState) {
+      ret!((true, {
+        "feedId": s.get("feedId"),
+        "currency": s.get("currency"),
+        "reporters": s.get("reporters"),
+        "sponsor": s.get("sponsorHex"),
+        "quorum": s.get("quorum"),
+        "maxAgeBlocks": s.get("maxAgeBlocks"),
+        "maxSpreadBps": s.get("maxSpreadBps"),
+        "minPrice": s.get("minPrice"),
+        "maxPrice": s.get("maxPrice"),
+        "trialBlocks": s.get("trialBlocks"),
+        "trialMinSubmits": s.get("trialMinSubmits"),
+        "trialSubmits": s.get("trialSubmits"),
+        "trialStart": s.get("trialStart"),
+        "active": s.get("active"),
+        "paused": s.get("paused"),
+        "policyHash": s.get("policyHash"),
+        "rev": s.get("rev")
+      }))
+    }
+  } |
+
+  contract OracleFeed(@"admin", @action, @arg, @nonce, @sigs, ret) = {
+    for (@s <<- feedState) {
+      new gCh, vCh, nowCh in {
+        feedGovernor!(*gCh) |
+        feedNow!(*nowCh) |
+        for (Governor <- gCh; @now <- nowCh) {
+          Governor!("authorize", "oracle:" ++ s.get("currency"), nonce,
+                    action, arg.toString(), sigs, *vCh) |
+          for (@v <- vCh) {
+            match v {
+              (true, Nil) => {
+                for (@s2 <- feedState) {
+                  match action {
+                    "setPaused" => {
+                      feedState!(s2.set("paused", arg)
+                        .set("rev", s2.get("rev") + 1)) |
+                      ret!((true, Nil))
+                    }
+                    "restartTrial" => {
+                      feedState!(s2.set("active", false)
+                        .set("paused", false)
+                        .set("seen0", false).set("seen1", false).set("seen2", false)
+                        .set("trialSubmits", 0)
+                        .set("trialStart", now)
+                        .set("listedAt", 0)
+                        .set("rev", s2.get("rev") + 1)) |
+                      ret!((true, Nil))
+                    }
+                    _ => {
+                      feedState!(s2) | ret!((false, "unknown admin action"))
+                    }
+                  }
+                }
+              }
+              _ => { ret!(v) }
+            }
+          }
+        }
+      }
+    }
+  } |
+
+  new nowCh in {
+    bd!(*nowCh) |
+    for (@now, @sender, @ts <- nowCh) {
+      feedState!({
+        "feedId": "__FEED_ID__",
+        "currency": "__CURRENCY__",
+        "reporters": __REPORTERS__,
+        "sponsorHex": "__SPONSOR_PUB__",
+        "quorum": __QUORUM__,
+        "maxAgeBlocks": __MAX_AGE__,
+        "maxSpreadBps": __MAX_SPREAD__,
+        "minPrice": __MIN_PRICE__,
+        "maxPrice": __MAX_PRICE__,
+        "policyHash": "__POLICY_HASH__",
+        "trialStart": now,
+        "trialBlocks": __TRIAL_BLOCKS__,
+        "trialMinSubmits": __TRIAL_MIN_SUBMITS__,
+        "seen0": false, "seen1": false, "seen2": false,
+        "trialSubmits": 0,
+        "active": false,
+        "paused": false,
+        "listedAt": 0,
+        "prices": {},
+        "rev": 0
+      }) |
+
+      rs!(bundle+{*OracleFeed}, *uriCh) |
+      for (@uri <- uriCh) {
+        OracleFeed!("info", *attestCh) |
+        for (@att <- attestCh) { deployId!((uri, att)) }
+      }
+    }
+  }
+}

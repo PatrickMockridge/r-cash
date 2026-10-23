@@ -43,9 +43,11 @@ created capability in its closure, so no live capability crosses a deploy.
 
 | Factory | Directory | Writes |
 |---|---|---|
-| `ZoneFactory` | `ZoneDirectory` | `currency → zoneUri` |
-| `FeedFactory` | `OracleRegistry` (feed slots) | `currency → {feedUri, policyHash, sponsor}` |
+| `ZoneFactory` | `ZoneDirectory` | `currency → zoneUri`, created through `ZoneTemplate` |
 | `MarketFactory` | `MarketDirectory` | `marketId → {poolUri, bookUri, lockUri, termsHash}` |
+
+`OracleFeed` is deployed per currency by its sponsor; `OracleRegistry.registerFeed` binds
+the URI after the sponsor signature and feed attestation check. There is no feed factory.
 
 The factory is the only writer. A caller cannot supply a pool, book, lock, zone or feed.
 The sponsor signs the economic terms, not an arbitrary contract URI. `MarketDirectory`
@@ -67,15 +69,16 @@ by a block boundary before the next.
 | 01 | `Clock`, `Verifier`, `Codec` | `component:clock`, `component:verifier`, `component:codec` |
 | 02 | `Bounds`, `AdminGuard`, `AmmMath`, `RiskMath`, `OracleMath`, `ClaimCode` | `component:*` |
 | 03 | `Governor` | `component:governor` |
-| 04 | `ZoneFactory` + `ZoneDirectory` | `component:zone-factory`, `component:zone-directory` |
-| 05 | `CurrencyRegistry` | `component:currency-registry` |
-| 06 | `FeedFactory` + `OracleRegistry` | `component:feed-factory`, `component:oracle-registry` |
-| 07 | `OracleHub` | `component:oracle-hub` |
-| 08 | `MarketFactory` + `MarketDirectory` + `MarketTerms` + `MarketIndex` | `component:market-*` |
-| 09 | `AssetResolver`, `ListingViews` | `component:asset-resolver`, `component:listing-views` |
-| 10 | `TransferClient`, `VaultClient` | `component:transfer-client`, `component:vault-client` |
-| 11 | account templates + `AccountProvisioner` + `AccountFactory` | `component:account-*` |
-| 12 | per currency: `ZoneFactory.create` (returns the zone URI and `{currency, paramsHash}` attestation), then `CurrencyRegistry.register` with that attestation | `zone:<CODE>` |
+| 04 | `ZoneTemplate` | `component:zone-template` |
+| 05 | `ZoneFactory` + `ZoneDirectory` | `component:zone-factory`, `component:zone-directory` |
+| 06 | `CurrencyRegistry` | `component:currency-registry` |
+| 07 | `OracleRegistry` | `component:oracle-registry` |
+| 08 | `OracleHub` | `component:oracle-hub` |
+| 09 | `MarketFactory` + `MarketDirectory` + `MarketTerms` + `MarketIndex` | `component:market-*` |
+| 10 | `AssetResolver`, `ListingViews` | `component:asset-resolver`, `component:listing-views` |
+| 11 | `TransferClient`, `VaultClient` | `component:transfer-client`, `component:vault-client` |
+| 12 | `AccountFactory` | `component:account-factory` |
+| 12 | per currency: `ZoneFactory.create` (via `ZoneTemplate`, returns the zone URI and attestation), then `CurrencyRegistry.register` with the sponsor signature and attestation | `zone:<CODE>` |
 | 13 | per currency: `OracleFeed`, then `OracleRegistry.registerFeed` | `feed:<CODE>` |
 | 14 | per market: `MarketFactory.createMarket`, seed, lock, activate | `market:<PAIR>:vN` |
 | 99 | `Root.freeze` | — |

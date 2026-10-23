@@ -36,21 +36,21 @@ separately and do not create a runtime cycle.
 
 | Component | State | Interface | Responsibility |
 |---|---|---|---|
-| `CurrencyRegistry` | `currencyState` | `register`, `currency`, `currencies`, `setPaused`, `admin` | Currency records. A registration requires the zone URI to equal `ZoneDirectory(code)` and a `ZoneFactory` attestation `{currency, paramsHash}` to match; the registry does not call the zone. Status is `active` or `paused`. |
+| `CurrencyRegistry` | `currencyState` | `register`, `currency`, `currencies`, `admin` | Currency records. Registration requires the sponsor deployer key, a signature over `rcash:currency-bind:v3|code|zoneUri|paramsHash|sponsor`, a `ZoneDirectory(code)` match and the live zone attestation. Status is `active` or `paused`. |
 | `MarketTerms` | `termsState` | `put`, `get`, `boundsOk` | Content-addressed `termsHash → {terms, values}`. `put` recomputes the hash and rejects a mismatch. |
 | `MarketIndex` | `marketState` | `stage`, `activate`, `pause`, `delist`, `cancel`, `market`, `marketFor`, `status`, `isActive`, `admin` | Market status, pair uniqueness, version monotonicity and nonce in one cell. |
 | `MarketDirectory` | `directoryState` | `bind`, `seal`, `unseal`, `byId`, `slot` | Per-market `{poolUri, bookUri, lockUri, termsHash, sealed}`. Only `MarketFactory` writes; a draft slot may be overwritten, then sealed. |
 | `OracleRegistry` | `oracleRegState` | `registerFeed`, `feedEntry`, `reporters`, `allowlist`, `admin` | Reporter allowlist and per-currency feed URI plus policy hash. |
-| `ZoneDirectory` | `zoneState` | `register`, `lookup`, `entries` | `currency → zoneUri`. Only `ZoneFactory` writes. |
+| `ZoneDirectory` | `zoneDirectoryState` | `register`, `lookup`, `entries` | `currency → zoneUri`. Only `ZoneFactory` writes, through a fresh capability created in the same deploy. |
 
 ## 4. Domain components
 
 | Component | State | Interface | Responsibility |
 |---|---|---|---|
-| `ZoneFactory` | none | `create(currency, params, sponsor, sig)` | Validates zone params, creates `CurrencyZone`, registers `ZoneDirectory`. |
-| `CurrencyZone` (currency) | `zoneState` | `open`, `depositCollateral`, `withdrawCollateral`, `borrow`, `repay`, `liquidate`, `vault`, `vaults`, `currency`, `params`, `brand`, `issuer`, `attest`, `admin` | Vault accounting, accrual, health, debt ceiling, min/max debt, liquidation, stablecoin mint/burn and REV custody. |
-| `FeedFactory` | none | `create(currency, feedId, reporters, sponsor, policy, sig)` | Validates policy, creates `OracleFeed`. |
-| `OracleFeed` (currency) | `feedState` | `submit`, `get`, `feedStatus`, `activate`, `setPaused`, `restartTrial`, `attest`, `admin` | One currency's trial, prices, freshness, revision and status. |
+| `ZoneFactory` | none | `create(currency, params, paramsHash, sponsor, sig)` | Resolves `ZoneTemplate`, receives the created zone URI and attestation, and registers it in `ZoneDirectory`. |
+| `ZoneTemplate` | none | `create(currency, params, paramsHash, sponsor, sig)` | Verifies the sponsor signature and on-chain bounds, creates the issuer/purses, seeds `zoneState`, defines `CurrencyZone`, and returns its URI and attestation. |
+| `CurrencyZone` (currency) | `zoneState` | `currency`, `params`, `brand`, `issuer`, `attest`, `open`, `vault`, `vaults`, `admin`; CDP arms next | Identity, views, vault opening and pause. Collateral, borrow, repay and liquidation are the next increment, split into separate contracts to fit the parser depth. |
+| `OracleFeed` (currency) | `feedState` | `submit`, `get`, `activate`, `info`, `admin` | Per-currency feed deployed by the sponsor and bound by `OracleRegistry`; no factory. |
 | `OracleHub` | none | `get`, `feedStatus`, `getPair`, `reporters` | Stateless router; `getPair(base, quote, maxAgeBlocks)` returns per-feed freshness and ages. Callers enforce their own age bound. |
 | `MarketFactory` | none | `createMarket(terms, termsValues, sponsorSig)` | Puts terms in `MarketTerms`, creates `FxPool`, `LiquidityLock` and `TransferBook` from templates, binds their URIs in `MarketDirectory`, stages `MarketIndex`. |
 | `FxPool` (market) | `poolState` | `quote`, `swap`, `quoteAdd`, `addLiquidity`, `removeLiquidity`, `reserves`, `params`, `pair`, `terms`, `lpAsset`, `sealSeed`, `attest`, `admin` | Reserve and share accounting, swaps, liquidity, seed attestation; holds base/quote/LP purses. |
@@ -58,7 +58,7 @@ separately and do not create a runtime cycle.
 | `TransferBook` (market) | `bookState` | `send`, `nextId`, `terms`, `escrows`, `attest`, `admin` | Allocates ids, performs the swap, creates a `TransferContract` per transfer. |
 | `TransferContract` (transfer, R) | `transferState` | `claim`, `refund`, `info` | Authoritative transfer object: record, payment and claim token in one cell. |
 | `TradabilityGate` | none | `admit(status, fresh, value, inputValue, terms)` | Pure policy verdict; receives all inputs and never calls back into the pool. |
-| `AccountFactory` | `accountsState` | `getOrCreate`, `accountOf`, `verify`, `authorize`, `consumeAuth` | One account per owner; `proofHash` stored, proof returned once; one-shot auth token cells. |
+| `AccountFactory` | `factoryState` | `getOrCreate`, `verify`, `accountOf`; `authorize`/`consumeAuth` next | One proof per owner; the proof name is created once and returned only by `getOrCreate`. Account provisioning and one-shot auth tokens arrive with the account layer. |
 | `AccountProvisioner` | none | `create(ownerId, pubKeyBytes)` | Orchestrates the three account templates. |
 | `Account` (owner, R) | `vaultState` | `deposit`, `withdraw`, `balance`, `depositFacet`, `sendTransfer`, `claimTransfer`, `refundTransfer`, vault passthroughs | Owner-authenticated thin router. Holds the `PurseStore` capability and a `currency → vaultCellUri` map. |
 | `PurseStore` (owner, R) | `purseState` | `ensure`, `deposit`, `withdraw`, `balance`, `facet` | One purse per asset; ERTP custody. |
@@ -121,7 +121,7 @@ would make the invariant unprovable.
 | Current region | Destination |
 |---|---|
 | median, max, min, freshness, decision, policy hash | `OracleMath`, `Codec` |
-| `openFeed` closure | `FeedFactory` + `OracleFeed` |
+| `openFeed` closure | per-currency `OracleFeed` deploy + `OracleRegistry.registerFeed` |
 | per-feed submit/get/status/activate/pause/restart | `OracleFeed` |
 | hub submit/get/feedStatus/activateFeed/getPair/reporters | `OracleHub` |
 | allowlist, add/remove reporter, admin | `OracleRegistry`, `Governor` |

@@ -1,0 +1,267 @@
+// v0.3 CurrencyRegistry: currency code -> zone, params and sponsor.
+// Registration requires the sponsor's deployer key, a signature over the zone
+// URI, the ZoneDirectory match and the live zone's attestation.
+// Placeholders: __ROOT_URI__, __ADMIN_KEYS__.
+new
+  CurrencyRegistry, currencyState,
+  currencyNow, currencyVerify, currencyZoneCheck, currencyBind, currencyGovernor,
+  rl(`rho:registry:lookup`),
+  rs(`rho:registry:insertArbitrary`),
+  deployerIdOps(`rho:rchain:deployerId:ops`),
+  deployerId(`rho:rchain:deployerId`),
+  deployId(`rho:rchain:deployId`),
+  rootCh, Root, uRegistry, ack
+in {
+
+  contract currencyNow(ret) = {
+    new rCh, cCh in {
+      rl!(`__ROOT_URI__`, *rCh) |
+      for (Root <- rCh) {
+        Root!("resolve", "component:clock", 1, *cCh) |
+        for (@(true, clockUri, v) <- cCh) {
+          new cc in {
+            rl!(clockUri, *cc) |
+            for (Clock <- cc) { Clock!("now", *ret) }
+          }
+        }
+      }
+    }
+  } |
+
+  contract currencyVerify(@payload, @sig, @sponsorHex, ret) = {
+    new rCh, verCh, dCh, okCh in {
+      rl!(`__ROOT_URI__`, *rCh) |
+      for (Root <- rCh) {
+        Root!("resolve", "component:verifier", 1, *verCh) |
+        for (@(true, vUri, vv) <- verCh) {
+          new vc in {
+            rl!(vUri, *vc) |
+            for (Verifier <- vc) {
+              Verifier!("hash", payload.toUtf8Bytes(), *dCh) |
+              for (@digest <- dCh) {
+                Verifier!("sigOk", digest, sig, sponsorHex.hexToBytes(), *okCh) |
+                for (@ok <- okCh) { ret!(ok) }
+              }
+            }
+          }
+        }
+      }
+    }
+  } |
+
+  contract currencyZoneCheck(@zoneUri, @code, @paramsHash, @sponsorHex, ret) = {
+    new zCh, aCh in {
+      rl!(zoneUri, *zCh) |
+      for (Zone <- zCh) {
+        Zone!(["attest"], *aCh) |
+        for (@a <- aCh) {
+          match a {
+            (true, m) => {
+              if (m.get("currency") != code
+                  || m.get("paramsHash") != paramsHash
+                  || m.get("sponsor") != sponsorHex
+                  || m.get("template") != "rcash:currency-zone:v3") {
+                ret!((false, "zone attestation"))
+              } else { ret!((true, m)) }
+            }
+            _ => { ret!((false, "zone attestation")) }
+          }
+        }
+      }
+    }
+  } |
+
+  contract currencyBind(@code, @zoneUri, @paramsHash, @sponsorHex, @params, @now, ret) = {
+    for (@s <- currencyState) {
+      match s.get("currencies").get(code) {
+        Nil => {
+          currencyState!(s.set("currencies", s.get("currencies").set(code, {
+            "code": code,
+            "zoneUri": zoneUri,
+            "params": params,
+            "paramsHash": paramsHash,
+            "sponsor": sponsorHex,
+            "status": "active",
+            "paused": false,
+            "createdAt": now
+          }))) |
+          ret!((true, Nil))
+        }
+        _ => { currencyState!(s) | ret!((false, "duplicate")) }
+      }
+    }
+  } |
+
+  contract currencyGovernor(ret) = {
+    new rCh, gCh in {
+      rl!(`__ROOT_URI__`, *rCh) |
+      for (Root <- rCh) {
+        Root!("resolve", "component:governor", 1, *gCh) |
+        for (@(true, govUri, v) <- gCh) {
+          new gc in {
+            rl!(govUri, *gc) |
+            for (Governor <- gc) { ret!(*Governor) }
+          }
+        }
+      }
+    }
+  } |
+
+  contract CurrencyRegistry(@"register", @code, @zoneUri, @paramsHashHex,
+                             @sponsorHex, @sig, deployerId, ret) = {
+    new pkCh in {
+      deployerIdOps!("pubKeyBytes", *deployerId, *pkCh) |
+      for (@pk <- pkCh) {
+        if (pk != sponsorHex.hexToBytes()) { ret!((false, "bad sponsor")) }
+        else {
+          new payloadCh in {
+            payloadCh!(
+              "rcash:currency-bind:v3|" ++ code ++ "|" ++ zoneUri ++ "|"
+              ++ paramsHashHex ++ "|" ++ sponsorHex) |
+            for (@payload <- payloadCh) {
+              new okCh in {
+                currencyVerify!(payload, sig, sponsorHex, *okCh) |
+                for (@ok <- okCh) {
+                  if (ok == false) { ret!((false, "bad sponsor signature")) }
+                  else {
+                    new rCh, dCh in {
+                      rl!(`__ROOT_URI__`, *rCh) |
+                      for (Root <- rCh) {
+                        Root!("resolve", "component:zone-directory", 1, *dCh) |
+                        for (@(true, dirUri, v) <- dCh) {
+                          new dc, luCh in {
+                            rl!(dirUri, *dc) |
+                            for (Directory <- dc) {
+                              Directory!("lookup", code, *luCh) |
+                              for (@lu <- luCh) {
+                                match lu {
+                                  (true, registeredUri) => {
+                                    if (registeredUri.toString() != zoneUri.toString()) {
+                                      ret!((false, "zone not registered"))
+                                    } else {
+                                      new zCh in {
+                                        currencyZoneCheck!(registeredUri, code,
+                                                           paramsHashHex, sponsorHex, *zCh) |
+                                        for (@zc <- zCh) {
+                                          match zc {
+                                            (true, m) => {
+                                              new nowCh in {
+                                                currencyNow!(*nowCh) |
+                                                for (@now <- nowCh) {
+                                                  currencyBind!(code, zoneUri.toString(), paramsHashHex,
+                                                                sponsorHex, m.get("params"),
+                                                                now, *ret)
+                                                }
+                                              }
+                                            }
+                                            _ => { ret!(zc) }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                  _ => { ret!((false, "zone not registered")) }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  } |
+
+  contract CurrencyRegistry(@"currency", @code, ret) = {
+    for (@s <<- currencyState) {
+      match s.get("currencies").get(code) {
+        Nil => { ret!((false, "no currency")) }
+        record => { ret!((true, record)) }
+      }
+    }
+  } |
+
+  contract CurrencyRegistry(@"currencies", ret) = {
+    for (@s <<- currencyState) {
+      ret!((true, s.get("currencies")))
+    }
+  } |
+
+  contract CurrencyRegistry(@"admin", @nonce, @action, @args, @sigs, ret) = {
+    for (@s <<- currencyState) {
+      new gCh, vCh in {
+        currencyGovernor!(*gCh) |
+        for (Governor <- gCh) {
+          Governor!("authorize", "currency-registry", nonce, action, args.toString(),
+                    sigs, *vCh) |
+          for (@v <- vCh) {
+            match v {
+              (true, Nil) => {
+                for (@s2 <- currencyState) {
+                  match action {
+                    "setPaused" => {
+                      match args.nth(0) {
+                        code => {
+                          match args.nth(1) {
+                            paused => {
+                              match s2.get("currencies").get(code) {
+                                Nil => {
+                                  currencyState!(s2) | ret!((false, "no currency"))
+                                }
+                                record => {
+                                  if (paused) {
+                                    currencyState!(s2.set("currencies",
+                                      s2.get("currencies").set(code,
+                                        record.set("paused", true)
+                                          .set("status", "paused")))) |
+                                    ret!((true, Nil))
+                                  } else {
+                                    currencyState!(s2.set("currencies",
+                                      s2.get("currencies").set(code,
+                                        record.set("paused", false)
+                                          .set("status", "active")))) |
+                                    ret!((true, Nil))
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                    _ => {
+                      currencyState!(s2) | ret!((false, "unknown admin action"))
+                    }
+                  }
+                }
+              }
+              _ => { ret!(v) }
+            }
+          }
+        }
+      }
+    }
+  } |
+
+  currencyState!({
+    "currencies": {},
+    "admins": __ADMIN_KEYS__,
+    "threshold": 2,
+    "govNonce": 0
+  }) |
+
+  rl!(`__ROOT_URI__`, *rootCh) |
+  for (Root <- rootCh) {
+    rs!(bundle+{*CurrencyRegistry}, *uRegistry) |
+    for (@uri <- uRegistry) {
+      Root!("register", "component:currency-registry", uri, 1, "registry", *deployerId, *ack) |
+      for (@r <- ack) { deployId!([uri]) }
+    }
+  }
+}

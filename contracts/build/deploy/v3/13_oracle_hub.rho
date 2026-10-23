@@ -1,0 +1,154 @@
+// v0.3 OracleHub: stateless routing over OracleRegistry and the per-currency feed.
+// getPair takes the caller's age bound; the caller (pool or zone) owns the term.
+// Placeholders: __ROOT_URI__.
+new
+  OracleHub, hubFeedEntry, hubFeedCap, hubRate,
+  rl(`rho:registry:lookup`),
+  rs(`rho:registry:insertArbitrary`),
+  deployerId(`rho:rchain:deployerId`),
+  deployId(`rho:rchain:deployId`),
+  rootCh, Root, uHub, ack
+in {
+
+  contract hubFeedEntry(@code, ret) = {
+    new rCh, regCh in {
+      rl!(`__ROOT_URI__`, *rCh) |
+      for (Root <- rCh) {
+        Root!("resolve", "component:oracle-registry", 1, *regCh) |
+        for (@(true, regUri, v) <- regCh) {
+          new rc in {
+            rl!(regUri, *rc) |
+            for (Registry <- rc) { Registry!("feedEntry", code, *ret) }
+          }
+        }
+      }
+    }
+  } |
+
+  contract hubFeedCap(@code, ret) = {
+    new eCh in {
+      hubFeedEntry!(code, *eCh) |
+      for (@e <- eCh) {
+        match e {
+          (true, entry) => {
+            new fCh in {
+              rl!(entry.get("uri"), *fCh) |
+              for (Feed <- fCh) { ret!((true, *Feed, entry)) }
+            }
+          }
+          _ => { ret!(e) }
+        }
+      }
+    }
+  } |
+
+  contract hubRate(@basePrice, @quotePrice, ret) = {
+    new rCh, omCh in {
+      rl!(`__ROOT_URI__`, *rCh) |
+      for (Root <- rCh) {
+        Root!("resolve", "component:oracle-math", 1, *omCh) |
+        for (@(true, omUri, v) <- omCh) {
+          new oc in {
+            rl!(omUri, *oc) |
+            for (OracleMath <- oc) {
+              OracleMath!("rate", basePrice, quotePrice, *ret)
+            }
+          }
+        }
+      }
+    }
+  } |
+
+  contract OracleHub(@"get", @code, ret) = {
+    new fCh in {
+      hubFeedCap!(code, *fCh) |
+      for (@f <- fCh) {
+        match f {
+          (true, Feed, entry) => { @Feed!("get", *ret) }
+          _ => { ret!(f) }
+        }
+      }
+    }
+  } |
+
+  contract OracleHub(@"feedStatus", @code, ret) = {
+    new fCh in {
+      hubFeedCap!(code, *fCh) |
+      for (@f <- fCh) {
+        match f {
+          (true, Feed, entry) => { @Feed!("info", *ret) }
+          _ => { ret!(f) }
+        }
+      }
+    }
+  } |
+
+  contract OracleHub(@"getPair", @base, @quote, @maxAge, ret) = {
+    new bCh, qCh in {
+      hubFeedCap!(base, *bCh) | hubFeedCap!(quote, *qCh) |
+      for (@b <- bCh; @q <- qCh) {
+        match b {
+          (true, BaseFeed, be) => {
+            match q {
+              (true, QuoteFeed, qe) => {
+                new bg, qg in {
+                  @BaseFeed!("get", *bg) | @QuoteFeed!("get", *qg) |
+                  for (@br <- bg; @qr <- qg) {
+                    match br {
+                      (true, bm) => {
+                        match qr {
+                          (true, qm) => {
+                            new rateCh in {
+                              hubRate!(bm.get("price"), qm.get("price"), *rateCh) |
+                              for (@rate <- rateCh) {
+                                ret!((true, {
+                                  "rate": rate,
+                                  "fresh": bm.get("fresh") && qm.get("fresh")
+                                           && bm.get("age") <= maxAge
+                                           && qm.get("age") <= maxAge,
+                                  "basePrice": bm.get("price"),
+                                  "quotePrice": qm.get("price"),
+                                  "baseAge": bm.get("age"),
+                                  "quoteAge": qm.get("age")
+                                }))
+                              }
+                            }
+                          }
+                          _ => { ret!((false, "quote feed")) }
+                        }
+                      }
+                      _ => { ret!((false, "base feed")) }
+                    }
+                  }
+                }
+              }
+              _ => { ret!(q) }
+            }
+          }
+          _ => { ret!(b) }
+        }
+      }
+    }
+  } |
+
+  contract OracleHub(@"reporters", @code, ret) = {
+    new fCh in {
+      hubFeedCap!(code, *fCh) |
+      for (@f <- fCh) {
+        match f {
+          (true, Feed, entry) => { @Feed!("info", *ret) }
+          _ => { ret!(f) }
+        }
+      }
+    }
+  } |
+
+  rl!(`__ROOT_URI__`, *rootCh) |
+  for (Root <- rootCh) {
+    rs!(bundle+{*OracleHub}, *uHub) |
+    for (@uri <- uHub) {
+      Root!("register", "component:oracle-hub", uri, 1, "domain", *deployerId, *ack) |
+      for (@r <- ack) { deployId!([uri]) }
+    }
+  }
+}

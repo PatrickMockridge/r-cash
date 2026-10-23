@@ -3,22 +3,28 @@
 **Phases 0-4 core are implemented and passing on the local devnet.** This is still a devnet-only
 prototype; no real funds and no public testnet.
 
-## v0.3 composable core (in progress)
+## v0.3 composable core (Phase 3 in progress)
 
-The v0.3 specification and Phase 2 kernel are implemented. The specification is in
-[`spec/`](spec/README.md); the machine-readable catalogue is
+The v0.3 specification, Phase 2 kernel and Phase 3 listing layer are implemented. The
+specification is in [`spec/`](spec/README.md); the machine-readable catalogue is
 [`contracts/components.json`](../contracts/components.json).
 
 | Area | Result |
 |---|---|
-| Formal spec and tooling | Calculus, component catalogue, invariant table and wiring docs; six TLA+ models; `measure_contracts.py`, `check_arch.py`, `check_captures.py` |
-| Kernel install | Root, AdminGuard, Clock, Verifier, Codec, Bounds, AmmMath, RiskMath, OracleMath, ClaimCode, Governor on a fresh devnet (blocks 2-34) |
-| Isolated checks | **26/26** — resolve/get/keys, non-installer refusal, clock, hash, canonical codec, bounds accept/refuse, AMM/risk/oracle vectors, governor admins, 2-of-3 AdminGuard threshold |
-| Persistence | Node produced blocks past height 128 with no `decode continuation failed`; every unit call crossed block boundaries |
-| Budgets | Every v3 unit is under the 24 KiB target; max measured depth 40; at most 9 contracts in a deploy |
+| Formal spec and tooling | Calculus, component catalogue, invariant table and wiring docs; six TLA+ models (TLC clean); `measure_contracts.py`, `check_arch.py`, `check_captures.py` |
+| Kernel install | Root, AdminGuard, Clock, Verifier, Codec, Bounds, AmmMath, RiskMath, OracleMath, ClaimCode, Governor |
+| Oracle | OracleRegistry, one OracleFeed per currency, OracleHub; **19/19** feed checks and **15/15** hub checks (submit, trial, activate, bind, attestation, duplicate/bad-signature/bad-deployer refusals, pair rate, missing feed) |
+| Zones and currencies | AccountFactory, ZoneDirectory, ZoneFactory, ZoneTemplate, CurrencyRegistry; **11/11** zone checks and **8/8** currency checks (signed params, params-hash binding, directory, views, duplicate/bad-signature/unregistered-zone refusals) |
+| Isolated checks | **79/79** across `unit_v3`, `unit_feed`, `unit_hub`, `unit_zone`, `unit_currency` |
+| Persistence | Node at height 216 with no `decode continuation failed`; every check crossed block boundaries |
+| Budgets | Max measured 8.8 KiB, depth 63, 12 contracts in a deploy; all under the hard limits |
 
-The v0.2 contracts remain in the tree as legacy; v0.3 does not inline stateful components and
-does not capture registry-resolved capabilities in a bundle.
+The zone template currently implements identity, views, `open` and pause. Collateral,
+borrow, repay and liquidation are the next zone increment: the combined CDP term exceeds the
+node's parser-depth limit, so the next step is to split those arms into separate contracts
+and flatten their nested checks. The v0.2 contracts remain in the tree as legacy; v0.3 does
+not inline stateful components and does not capture registry-resolved capabilities in a
+bundle.
 
 ## Measured results
 

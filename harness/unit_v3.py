@@ -44,10 +44,15 @@ def decode(value):
             return tuple(decode(item) for item in value["ExprTuple"]["data"])
         if "ExprList" in value:
             return [decode(item) for item in value["ExprList"]["data"]]
+        if "ExprSet" in value:
+            return [decode(item) for item in value["ExprSet"]["data"]]
         if "ExprMap" in value:
+            data = value["ExprMap"]["data"]
+            if isinstance(data, dict):
+                return {key: decode(item) for key, item in data.items()}
             return {
                 decode(entry["key"]): decode(entry["value"])
-                for entry in value["ExprMap"]["data"]
+                for entry in data
             }
         if "ExprByteArray" in value:
             return bytes.fromhex(value["ExprByteArray"]["data"])

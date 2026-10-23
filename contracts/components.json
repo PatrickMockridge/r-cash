@@ -302,11 +302,11 @@
       "system": [],
       "deploy": "contracts/src/deploy/v3/10_zone_factory.rho",
       "instance_key": null,
-      "status": "planned",
+      "status": "implemented",
       "budget": {
         "bytes": 8192,
         "depth": 32,
-        "contracts": 2
+        "contracts": 3
       }
     },
     {
@@ -323,7 +323,8 @@
         "Bounds",
         "Codec",
         "Verifier",
-        "Clock"
+        "Clock",
+        "ZoneTemplate"
       ],
       "creates": [
         "CurrencyZone"
@@ -333,11 +334,11 @@
       ],
       "deploy": "contracts/src/deploy/v3/10_zone_factory.rho",
       "instance_key": null,
-      "status": "planned",
+      "status": "implemented",
       "budget": {
-        "bytes": 16384,
-        "depth": 48,
-        "contracts": 2
+        "bytes": 8192,
+        "depth": 32,
+        "contracts": 1
       }
     },
     {
@@ -365,11 +366,11 @@
       "system": [],
       "deploy": "contracts/src/deploy/v3/11_currency_registry.rho",
       "instance_key": null,
-      "status": "planned",
+      "status": "implemented",
       "budget": {
-        "bytes": 24576,
+        "bytes": 16384,
         "depth": 48,
-        "contracts": 1
+        "contracts": 9
       }
     },
     {
@@ -396,44 +397,13 @@
       "system": [
         "rho:rchain:deployerId:ops"
       ],
-      "deploy": "contracts/src/deploy/v3/12_feed_factory.rho",
+      "deploy": "contracts/src/deploy/v3/12_oracle_registry.rho",
       "instance_key": null,
-      "status": "planned",
+      "status": "implemented",
       "budget": {
         "bytes": 16384,
         "depth": 48,
-        "contracts": 2
-      }
-    },
-    {
-      "name": "FeedFactory",
-      "kind": "factory",
-      "stateful": false,
-      "state_cell": null,
-      "arms": [
-        "create"
-      ],
-      "dependencies": [
-        "Root",
-        "OracleRegistry",
-        "Bounds",
-        "Codec",
-        "Verifier",
-        "Clock"
-      ],
-      "creates": [
-        "OracleFeed"
-      ],
-      "system": [
-        "rho:block:data"
-      ],
-      "deploy": "contracts/src/deploy/v3/12_feed_factory.rho",
-      "instance_key": null,
-      "status": "planned",
-      "budget": {
-        "bytes": 16384,
-        "depth": 48,
-        "contracts": 2
+        "contracts": 11
       }
     },
     {
@@ -466,11 +436,11 @@
       ],
       "deploy": "contracts/src/deploy/v3/31_feed.rho",
       "instance_key": "currency",
-      "status": "planned",
+      "status": "implemented",
       "budget": {
-        "bytes": 24576,
+        "bytes": 16384,
         "depth": 48,
-        "contracts": 1
+        "contracts": 12
       }
     },
     {
@@ -494,11 +464,11 @@
       "system": [],
       "deploy": "contracts/src/deploy/v3/13_oracle_hub.rho",
       "instance_key": null,
-      "status": "planned",
+      "status": "implemented",
       "budget": {
         "bytes": 8192,
         "depth": 48,
-        "contracts": 1
+        "contracts": 7
       }
     },
     {
@@ -733,13 +703,13 @@
         "rho:rchain:ertp",
         "rho:block:data"
       ],
-      "deploy": "contracts/src/deploy/v3/30_zone.rho",
+      "deploy": "contracts/src/deploy/v3/30_zone_template.rho",
       "instance_key": "currency",
-      "status": "planned",
+      "status": "implemented",
       "budget": {
-        "bytes": 24576,
-        "depth": 48,
-        "contracts": 1
+        "bytes": 16384,
+        "depth": 64,
+        "contracts": 7
       }
     },
     {
@@ -927,13 +897,13 @@
       "system": [
         "rho:rchain:deployerId:ops"
       ],
-      "deploy": "contracts/src/deploy/v3/50_accounts.rho",
+      "deploy": "contracts/src/deploy/v3/09_identity.rho",
       "instance_key": null,
-      "status": "planned",
+      "status": "implemented",
       "budget": {
-        "bytes": 12288,
+        "bytes": 4096,
         "depth": 48,
-        "contracts": 4
+        "contracts": 3
       }
     },
     {
@@ -1236,6 +1206,39 @@
         "bytes": 16384,
         "depth": 48,
         "contracts": 2
+      }
+    },
+    {
+      "name": "ZoneTemplate",
+      "kind": "factory",
+      "stateful": false,
+      "state_cell": null,
+      "arms": [
+        "create"
+      ],
+      "dependencies": [
+        "Root",
+        "Bounds",
+        "Codec",
+        "Verifier",
+        "Clock",
+        "AccountFactory",
+        "ZoneDirectory"
+      ],
+      "creates": [
+        "CurrencyZone"
+      ],
+      "system": [
+        "rho:rchain:ertp",
+        "rho:block:data"
+      ],
+      "deploy": "contracts/src/deploy/v3/30_zone_template.rho",
+      "instance_key": null,
+      "status": "implemented",
+      "budget": {
+        "bytes": 16384,
+        "depth": 64,
+        "contracts": 7
       }
     }
   ]

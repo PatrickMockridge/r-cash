@@ -163,6 +163,41 @@ def main(argv: list[str] | None = None) -> int:
         state[f"{name}_uri"] = result["uris"][0]
         save(state)
 
+    identity = step("09_identity", "identity", common)
+    state["account_factory_uri"] = identity["uris"][0]
+    save(state)
+
+    allowlist = "[" + ", ".join(
+        f'"{keys[n]["public"]}"' for n in ["reporter1", "reporter2", "reporter3"]
+    ) + "]"
+    registry = step("12_oracle_registry", "oracle_registry", {
+        "__ROOT_URI__": root_uri,
+        "__ADMIN_KEYS__": admins,
+        "__ALLOWLIST__": allowlist,
+    })
+    state["oracle_registry_uri"] = registry["uris"][0]
+    save(state)
+
+    hub = step("13_oracle_hub", "oracle_hub", common)
+    state["oracle_hub_uri"] = hub["uris"][0]
+    save(state)
+
+    template = step("30_zone_template", "zone_template", common)
+    state["zone_template_uri"] = template["uris"][0]
+    save(state)
+
+    zone_factory = step("10_zone_factory", "zone_factory", common)
+    state["zone_directory_uri"] = zone_factory["uris"][0]
+    state["zone_factory_uri"] = zone_factory["uris"][1]
+    save(state)
+
+    currency_registry = step("11_currency_registry", "currency_registry", {
+        "__ROOT_URI__": root_uri,
+        "__ADMIN_KEYS__": admins,
+    })
+    state["currency_registry_uri"] = currency_registry["uris"][0]
+    save(state)
+
     print(json.dumps(state, indent=2))
     return 0
 
