@@ -111,7 +111,7 @@ export default function Accounts() {
       <section className="panel muted small">
         Balances are one signed deploy: the Account arm needs <code>deployerId</code>, so a
         read costs phlo and the app shows the node's finalised answer. Freshness-gated
-        reads (quotes, vault health) are signed for the same reason.
+        reads (quotes and balances) are signed for the same reason.
       </section>
     </div>
   );

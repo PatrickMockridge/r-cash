@@ -9,63 +9,30 @@ means a devnet scenario, `TLA+` names the model in `spec/tla`.
 | ID | Invariant | Owner | Enforcement | Test |
 |---|---|---|---|---|
 | I1 | Quiescent linearity: one `Full` in every cell | every stateful component | every consumed path re-posts; P1/P6 | TLA+ `CellLinearity`, unit |
-| I2 | Currency code unique; zone URI matches `ZoneDirectory`; params hash matches the `ZoneFactory` attestation | `CurrencyRegistry` | single-cell commit after reading the directory and verifying the attestation | unit, scenario |
+| I2 | Currency code unique; stablecoin URI matches `StablecoinDirectory`; params hash matches the factory attestation | `CurrencyRegistry` | single-cell commit after reading the directory and verifying the attestation | unit, scenario |
 | I3 | One active market per pair; version strictly increases | `MarketIndex` | `stage`/`activate` consume one cell; `byPair` in the same cell | TLA+ `PoolConservation` peer, scenario |
 | I4 | Legal market transitions: `draft → active → paused/active → delisted`, `draft → cancelled`; terminal states do not revive | `MarketIndex` | transition table in the arm | unit, scenario |
 | I5 | Terms integrity: `termsHash = H(schema, values)`; no mutation | `MarketTerms` | content-addressed `put` recomputes the hash | unit, vectors |
 | I6 | Market URI slots are factory-created, sponsor-authorized and sealed before activation | `MarketDirectory` | `bind`/`seal` in one cell; only `MarketFactory` | unit, scenario |
 | I7 | Feed freshness: quorum signed prices, median > 0, age, band, spread | `OracleFeed` | one cell per feed; P1 commit after signature verification | TLA+ `CapabilityProvenance` sibling, unit |
 | I8 | Three distinct reporter keys; sponsor occupies at most one slot | `OracleRegistry` | registration checks before the registry consume | unit, scenario |
-| I9 | Pair rate is fresh per feed and within the caller's age bound | `OracleHub` + caller | `getPair` returns ages; `FxPool`/`CurrencyZone` enforce their term | unit, scenario |
+| I9 | Pair rate is fresh per feed and within the caller's age bound | `OracleHub` + caller | `getPair` returns ages; `FxPool` enforces its term | unit, scenario |
 | I10 | Pool reserves equal native custody | `FxPool` | reserves change only with native deposit/withdraw; `attest` reads the purses | TLA+ `PoolConservation`, unit |
 | I11 | `totalShares = lpMinted − lpBurned` | `FxPool` | share update and LP mint/burn in one transition | TLA+ `PoolConservation`, unit |
 | I12 | Depth floor, min ticket, max trade and first-deposit tolerance | `FxPool` | gate inside the consumed-state critical section; tolerance from params | unit, scenario |
 | I13 | Lock is one-shot; release only to beneficiary after height; cancel only by admin | `LiquidityLock` | one cell; consume-first funding; P4 | unit, scenario |
 | I14 | Transfer status changes at most once; `open → claimed` xor `open → refunded` | `TransferContract` | one per-transfer cell consume | TLA+ `TransferExclusivity`, unit |
-| I15 | No payment is stranded on a refusal | `TransferBook`, `TransferContract`, `FxPool`, `CurrencyZone` | P3/P6: `fail()` after value movement; no `(false, …)` after a write | unit, fault injection |
-| I16 | Vault health, ceiling, min/max debt, close factor | `CurrencyZone` | inside the `zoneState` consume, with `RiskMath` before the consume | unit, scenario |
-| I17 | `totalDebt = Σ vault.debt` and `totalDebt + badDebt = totalPrincipal + totalAccruedInterest` | `CurrencyZone` | accrual delta applied to vault and totals on every touch; write-off moves residual to `badDebt` | TLA+ `CdpAccounting`, unit |
-| I18 | `ertpSupply(stable) = totalPrincipal` | `CurrencyZone` | mint/burn only in zone arms; issuer stays private | TLA+ `CdpAccounting`, unit |
+| I15 | No payment is stranded on a refusal | `TransferBook`, `TransferContract`, `FxPool` | P3/P6: `fail()` after value movement; no `(false, …)` after a write | unit, fault injection |
 | I19 | Admin threshold and monotone nonce | `Governor` | `authorize` checks threshold and per-domain nonce | TLA+ `AdminNonce`, unit |
 | I20 | Capability provenance and bundleability | every component | `check_captures.py`; block-boundary persistence test | TLA+ `CapabilityProvenance`, scenario |
 | I21 | Only the owner's `deployerId` passes owner arms; proof never returned after creation; auth tokens are one-shot | `AccountGate`, `AccountFactory` | `AccountGate.verify`; `proofHash`; token cell consume | unit, scenario |
 | I22 | Deploy resource bounds | every deploy | `measure_contracts.py`, `check_arch.py`, devnet parse gate | CI |
 
-## 2. Corrected CDP accounting
+## 2. Stablecoin issuer (v0.4)
 
-The v0.2 equation `supply = totalDebt` is false once interest accrues: borrow mints
-principal, while interest is a claim on collateral, not new stablecoins. The v0.3 state is
-
-```
-totalPrincipal          stablecoins minted minus burned
-totalAccruedInterest    interest ever accrued on outstanding debt
-totalDebt               Σ vault.debt
-badDebt                 debt written off after an under-collateralised liquidation
-```
-
-The invariants are
-
-```
-ertpSupply(stable) = totalPrincipal
-totalDebt = Σ vault.debt
-totalDebt + badDebt = totalPrincipal + totalAccruedInterest
-```
-
-Every arm that touches a vault first computes the accrual delta with `RiskMath.accrue` and
-adds it to both the vault's debt and the totals. A liquidation that seizes less than the
-debt writes off the residual:
-
-```
-vault.debt       := 0
-totalDebt        := totalDebt - residual
-badDebt          := badDebt + residual
-```
-
-The third equation is preserved because `totalDebt + badDebt` is unchanged. A repayment
-reduces `totalPrincipal` by the principal burned and `totalAccruedInterest` by the interest
-paid; the sum `totalDebt + badDebt` falls by the payment. `minDebt` is enforced after every
-borrow, collateral withdrawal and partial repay: a vault's debt is either zero or at least
-`minDebt`.
+The DAI-like, REV-collateralised issuer is specified in Phase 1. The old CDP
+accounting section is deleted; the new issuer will define stablecoin supply, vault
+debt, accrual and liquidation invariants in its own section when implemented.
 
 ## 3. Canonical groups (v3)
 
@@ -80,7 +47,10 @@ hash = blake2b256(utf8(encode(schema, values)))
 A value containing `|` or `:` cannot collide with another tuple because its length is part
 of the encoding. `MarketTerms.put` recomputes this hash and rejects a mismatch.
 
-### Market terms — `rcash:market-terms:v3` (27 values)
+### Market terms — `rcash:market-terms:v4`
+
+The v0.4 schema drops the old zone URIs and is finalized with the market components in
+Phase 4. The v3 27-value schema is not active.
 
 | # | Field | Enforced by |
 |---|---|---|
@@ -91,8 +61,6 @@ of the encoding. `MarketTerms.put` recomputes this hash and rejects a mismatch.
 | 4 | version | `MarketIndex.stage` monotonicity |
 | 5 | sponsorPubKey | sponsor signature |
 | 6 | sponsorOwnerId | `revAddress` derivation |
-| 7 | baseZoneUri | `CurrencyRegistry` |
-| 8 | quoteZoneUri | `CurrencyRegistry` |
 | 9 | baseFeedPolicyHash | `OracleRegistry` live policy |
 | 10 | quoteFeedPolicyHash | `OracleRegistry` live policy |
 | 11 | baseSpreadBps | `FxPool` fee formula |
@@ -110,18 +78,12 @@ of the encoding. `MarketTerms.put` recomputes this hash and rejects a mismatch.
 | 23 | lockUntilHeight | `LiquidityLock` and activation |
 | 24 | bookDefaultExpiryBlocks | `TransferBook.send` default |
 | 25 | bookMaxExpiryBlocks | `TransferBook.send` maximum |
-| 26 | maxPairAgeBlocks | `FxPool`/`CurrencyZone` caller bound to `OracleHub.getPair` |
+| 26 | maxPairAgeBlocks | `FxPool` caller bound to `OracleHub.getPair` |
 
 Removed from the v1 schema: `depthFloorUsdE8`, `minTicketUsdE8`, `protocolFeeBps`,
 `autoPause`. They were hashed but not enforced. A field is either enforced on-chain or
 absent. A price-skew field is also absent: there is no third reference against which to
 measure skew.
-
-### Zone params — `rcash:zone-params:v3` (8 values)
-
-`currency, mcrBps, bonusBps, closeFactorBps, ratePerBlock, debtCeiling, minDebt, maxDebt`.
-Bounds are checked by `Bounds.checkZone` before `CurrencyRegistry.register` and at zone
-construction. Zone params are immutable for the life of the zone.
 
 ### Feed policy — `rcash:oracle-policy:v3` (12 values)
 
@@ -142,20 +104,15 @@ caller passes zero.
 | `TransferBookV2.send` peek then write after the pool await | P3 effect-then-commit; per-transfer cells; `fail()` if status changed |
 | `ListingRegistry` eight maps in one cell | `CurrencyRegistry`, `MarketTerms`, `MarketIndex`, `MarketDirectory`, `ListingViews` |
 | `registerMarketCap` stores caller-supplied caps | deleted; factory-created URIs in `MarketDirectory`, sealed before activation |
-| `minDebt` never enforced | `CurrencyZone` borrow, collateral withdrawal and partial repay |
 | hardcoded 1% first deposit | `firstDepositToleranceBps` (field 15) |
 | economic bounds only in Rust | `Bounds.check*` on-chain in registration, stage and construction |
 | `protocolFeeBps`, `autoPause` unenforced | removed from the v3 schema |
 | dead `bounds`, `tombstone`, `keyUse` | deleted; `Bounds` is a pure component; status replaces tombstone |
 | live cap in a bundle (`03_accounts`) | `Root` URI strings only; no registry-resolved cap in a bundle |
-| `totalDebt` drifts from `Σ debt` | accrual delta applied to totals on every touch |
-| liquidation on a stale price | `liquidate` requires a fresh pair read |
 | activation can overwrite a cancel | consume + revalidate status/nonce/terms; `fail()` on mismatch |
-| `borrow` awaits a caller `depositFacet` after mint | deleted; the zone returns the payment |
 | permissionless `lockTerms` | deleted; terms are a constructor argument |
 | permissionless `ComponentRegistry.lock`/`set` | deleted; `Root` is installer-signed and freezes terminally |
 | `LiquidityLock.lock` peek/deposit/consume race | consume-first funding; P4; `fail()` on native refusal |
-| zone view leaks the vault auth | views return `{ownerId, collateral, debt, lastHeight, health}` only |
 | feed policy signature can bind a fake feed | signed `feedId` + `feed.attest()` comparison |
 | `getPair` claims per-market skew it cannot see | caller passes `maxAgeBlocks`; skew field removed |
 
@@ -176,12 +133,9 @@ lock mismatch             lock too short          terms drift
 pair mismatch             pair has active market  not draft
 not sealed                not beneficiary         too early
 not open                  expired                 not expired
-bad secret                close                   healthy
-below MCR                 overpayment             min debt
-max debt                  ceiling                 height not monotonic
+bad secret                height not monotonic
 bad signature             bad sponsor signature   currency not authorized
-currency exists           zone currency mismatch  params hash mismatch
-zone not registered       duplicate              unknown component
-frozen                    replay                  below threshold
+currency exists           params hash mismatch    duplicate
+unknown component         frozen                    replay                  below threshold
 expiry                    expiry too long          amount too small
 ```

@@ -64,17 +64,6 @@ pub struct FxRate {
     pub reason: String,
 }
 
-/// A vault as the zone's public view reports it.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct VaultView {
-    pub collateral: i64,
-    pub debt: i64,
-    pub healthy: bool,
-    pub liquidatable: bool,
-    pub fresh: bool,
-    pub rate: i64,
-}
-
 /// A transfer's public record.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TransferInfo {
@@ -247,95 +236,6 @@ impl Client {
         )?)
         .await?
         .into_result()
-    }
-
-    // --- currency zone ------------------------------------------------------
-
-    /// `zone.vault(ownerId)` for a currency.
-    pub async fn zone_vault(
-        &self,
-        currency: &str,
-        owner_id: &str,
-    ) -> Result<VaultView, ChainError> {
-        let uri = zone_uri(self, currency)?;
-        let call = terms::args(&["\"vault\"".to_string(), terms::s(owner_id)?]);
-        let values = self
-            .explore_reply(&terms::uri_call(&uri, &call))
-            .await?
-            .into_result()?;
-        let map = values
-            .first()
-            .and_then(RhoValue::as_map)
-            .ok_or_else(|| decode("vault did not return a map"))?;
-        Ok(VaultView {
-            collateral: map_int(map, "collateral")?,
-            debt: map_int(map, "debt")?,
-            healthy: map_bool(map, "health")?,
-            liquidatable: map_bool(map, "liquidatable")?,
-            fresh: map_bool(map, "fresh")?,
-            rate: map_int(map, "rate")?,
-        })
-    }
-
-    /// `zone.vaults()` as a map of owner id to vault.
-    pub async fn zone_vaults(
-        &self,
-        currency: &str,
-    ) -> Result<BTreeMap<String, RhoValue>, ChainError> {
-        let uri = zone_uri(self, currency)?;
-        let values = self
-            .explore_reply(&terms::uri_call(&uri, "\"vaults\""))
-            .await?
-            .into_result()?;
-        Ok(values
-            .first()
-            .and_then(RhoValue::as_map)
-            .ok_or_else(|| decode("vaults did not return a map"))?
-            .clone())
-    }
-
-    /// `zone.params()`.
-    pub async fn zone_params(
-        &self,
-        currency: &str,
-    ) -> Result<BTreeMap<String, RhoValue>, ChainError> {
-        let uri = zone_uri(self, currency)?;
-        let values = self
-            .explore_reply(&terms::uri_call(&uri, "\"params\""))
-            .await?
-            .into_result()?;
-        Ok(values
-            .first()
-            .and_then(RhoValue::as_map)
-            .ok_or_else(|| decode("zone params did not return a map"))?
-            .clone())
-    }
-
-    /// `zone.supply()`: the zone's outstanding debt.
-    pub async fn zone_supply(&self, currency: &str) -> Result<i64, ChainError> {
-        let uri = zone_uri(self, currency)?;
-        let values = self
-            .explore_reply(&terms::uri_call(&uri, "\"supply\""))
-            .await?
-            .into_result()?;
-        int_at(&values, 0)
-    }
-
-    /// `zone.brand()`, `zone.issuer()` or `zone.currency()`.
-    pub async fn zone_field(&self, currency: &str, field: &str) -> Result<RhoValue, ChainError> {
-        if !matches!(field, "brand" | "issuer" | "currency") {
-            return Err(decode(format!("unknown zone field {field}")));
-        }
-        let uri = zone_uri(self, currency)?;
-        let call = format!("\"{field}\"");
-        let values = self
-            .explore_reply(&terms::uri_call(&uri, &call))
-            .await?
-            .into_result()?;
-        values
-            .first()
-            .cloned()
-            .ok_or_else(|| decode("zone field returned nothing"))
     }
 
     // --- transfer book ------------------------------------------------------
@@ -514,32 +414,6 @@ impl Client {
         })
     }
 
-    /// `zone.vault(ownerId)` as a signed read (accurate health and liquidatability).
-    pub async fn zone_vault_signed(
-        &self,
-        currency: &str,
-        owner_id: &str,
-    ) -> Result<VaultView, ChainError> {
-        let uri = zone_uri(self, currency)?;
-        let call = terms::args(&["\"vault\"".to_string(), terms::s(owner_id)?]);
-        let value = self
-            .signed_value(&terms::uri_call_deploy(&uri, &call))
-            .await?;
-        let values = Reply::from_value(&value)?.into_result()?;
-        let map = values
-            .first()
-            .and_then(RhoValue::as_map)
-            .ok_or_else(|| decode("vault did not return a map"))?;
-        Ok(VaultView {
-            collateral: map_int(map, "collateral")?,
-            debt: map_int(map, "debt")?,
-            healthy: map_bool(map, "health")?,
-            liquidatable: map_bool(map, "liquidatable")?,
-            fresh: map_bool(map, "fresh")?,
-            rate: map_int(map, "rate")?,
-        })
-    }
-
     /// `book.quote(source, dest, amount)` as a signed read.
     pub async fn transfer_quote_signed(
         &self,
@@ -619,17 +493,6 @@ impl Client {
         }
         Ok(Balances { owner_id, amounts })
     }
-}
-
-fn zone_uri(
-    client: &Client,
-    currency: &str,
-) -> Result<rcash_core::assets::RegistryUri, ChainError> {
-    client
-        .require_manifest()?
-        .zone(currency)
-        .cloned()
-        .ok_or_else(|| ChainError::Refused(format!("no currency zone for {currency}")))
 }
 
 fn decode(message: impl Into<String>) -> ChainError {

@@ -1,59 +1,36 @@
 # Status
 
-**Phases 0-4 core are implemented and passing on the local devnet.** This is still a devnet-only
-prototype; no real funds and no public testnet.
+**The v0.4 payment-first reset is in progress.** The old CDP is deleted; the kernel,
+oracle and governor layers are retained. This is still a devnet-only prototype; no real
+funds and no public testnet.
 
-## v0.3 composable core (Phase 3 in progress)
+## v0.4 payment-first reset (Phase 0)
 
-The v0.3 specification, Phase 2 kernel and Phase 3 listing layer are implemented. The
-specification is in [`spec/`](spec/README.md); the machine-readable catalogue is
-[`contracts/components.json`](../contracts/components.json).
-
-| Area | Result |
-|---|---|
-| Formal spec and tooling | Calculus, component catalogue, invariant table and wiring docs; six TLA+ models (TLC clean); `measure_contracts.py`, `check_arch.py`, `check_captures.py` |
-| Kernel install | Root, AdminGuard, Clock, Verifier, Codec, Bounds, AmmMath, RiskMath, OracleMath, ClaimCode, Governor |
-| Oracle | OracleRegistry, one OracleFeed per currency, OracleHub; **19/19** feed checks and **15/15** hub checks (submit, trial, activate, bind, attestation, duplicate/bad-signature/bad-deployer refusals, pair rate, missing feed) |
-| Zones and currencies | AccountFactory, ZoneDirectory, ZoneFactory, ZoneTemplate, CurrencyRegistry; **11/11** zone checks and **8/8** currency checks (signed params, params-hash binding, directory, views, duplicate/bad-signature/unregistered-zone refusals) |
-| Isolated checks | **79/79** across `unit_v3`, `unit_feed`, `unit_hub`, `unit_zone`, `unit_currency` |
-| Persistence | Node at height 216 with no `decode continuation failed`; every check crossed block boundaries |
-| Budgets | Max measured 8.8 KiB, depth 63, 12 contracts in a deploy; all under the hard limits |
-
-The zone template currently implements identity, views, `open` and pause. Collateral,
-borrow, repay and liquidation are the next zone increment: the combined CDP term exceeds the
-node's parser-depth limit, so the next step is to split those arms into separate contracts
-and flatten their nested checks. The v0.2 contracts remain in the tree as legacy; v0.3 does
-not inline stateful components and does not capture registry-resolved capabilities in a
-bundle.
-
-## Measured results
+The product is a decentralised TransferWise, not a lending platform. The old CDP,
+vault, collateral and Mint surfaces are deleted from the active contracts, tests,
+docs, SDK, CLI, WASM, web app and TLA models. The kernel, oracle and governor layer
+is retained; the composable REV-backed stablecoin issuer and the payment layer are
+the next build.
 
 | Area | Result |
 |---|---|
-| Phase-0 capability gates | **12/12** — persistence, rollback of tuple space and native ERTP/REV, ERTP purse across blocks, REV round-trip, deployerId containment, registry, clock, signatures, claim hash, cost/finality |
-| Accounts and Directory | **7/7** — two keys, owner-only withdrawal, unauthorized refusal, Directory lock |
-| Oracle | **19/19** — signed reporter prices, median, freshness, spread, cross rate, 2-of-3 admin, replay rejection, staleness |
-| CDP / CurrencyZone | **19/19** — open, collateral, borrow, MCR limits, repay, interest, health, withdrawal limits |
-| Liquidation | **17/17** — price drop, liquidatable vault, permissionless liquidation, debt/collateral accounting |
-| rNGN/rKES FxPool (FPMM) | **14/14** — add liquidity, LP tokens, swap both directions, reserves, remove liquidity |
-| Transfer/claim/refund | **7/7** — send with claim hash, recipient claim, expired-transfer refund |
+| Deleted | v0.1/v0.2/v0.3 CDP contracts, vault arms, CDP tests/scenarios, `CdpAccounting` TLA, SDK/CLI/WASM vault methods, web Mint screen, CDP docs sections |
+| Retained | Root, Clock, Verifier, Codec, Bounds (without `checkZone`), AdminGuard, Governor, AmmMath, OracleMath, ClaimCode, OracleRegistry/Feed/Hub, AccountFactory identity |
+| Gates | build, measure, architecture, capture, language and TLA gates pass; the old capture finding is gone |
+| Next | composable REV-backed stablecoin issuer (issuer, custody, vault book, liquidation, risk parameters), accounts/purses, send/claim/refund, convert/liquidity/market listing |
 
-## Packaged demo
+The stablecoin design is DAI-like: REV-only collateral, per-currency systems, MCR,
+interest, liquidation and bad debt, with separate contracts per authority. Bridged
+BTC/ETH collateral is a separate future workstream. There is no borrower-facing
+lending UI, yield product or credit market.
 
-`make demo` on a fresh devnet exits **0**: the bootstrap, pool setup, FxPool deploy, TransferBook
-deploy, pool scenario (14/14) and transfer scenario (7/7) all pass. The deploy scripts write
-`deployments/devnet.json` with the Directory, AccountFactory, OracleHub, zone, Components and pool
-URIs/installation markers.
+## Legacy v0.1 results
 
-## What works end to end
+The v0.1 payment scenarios (accounts, oracle, pool, transfer/claim/refund) remain as
+historical evidence. The CDP and liquidation results are removed with the old CDP code.
 
-1. A key opens an Account (non-custodial, per-key).
-2. The Account can hold REV, rNGN, rKES and LP tokens.
-3. A REV holder opens NGN/KES vaults, deposits collateral, borrows local stablecoin, repays, and is
-   liquidated if the oracle price drops below MCR.
-4. The rNGN/rKES FPMM quotes at the median oracle rate with a spread and inventory skew; LPs earn it.
-5. A sender sends local currency with a claim hash; the recipient claims with the secret; an
-   expired transfer refunds to the sender.
+No packaged demo runs during the v0.4 reset; the fresh v0.4 install and payment
+journey land with the new issuer and payment layers.
 
 ## Client migration
 
@@ -73,30 +50,26 @@ license.
 - MetaMask is **read-only** in the supported path; the `secp256k1:eth` signing spike is
   specified but not run (`SPIKE-METAMASK.md`).
 
-**R1 (typed reads) is complete.** `rcash` reads live devnet state for the oracle
-(`get`, `getPair`, reporters), the FX pool (`quote`, `quoteAdd`, `reserves`, `params`,
-`pair`, LP asset), currency zones (`vault`, `vaults`, `params`, `supply`, brand/issuer/
-currency), transfer records (`info`, `nextId`, `quote`), native REV balances, and an
-account's balances in one signed deploy. The fixed-point math module mirrors the SPEC
-formulas with the seeded-vault vectors pinned as tests.
+**R1 (typed reads) is complete for the legacy v0.1 surface.** `rcash` reads the oracle,
+the FX pool (`quote`, `quoteAdd`, `reserves`, `params`, `pair`, LP asset), transfer
+records (`info`, `nextId`, `quote`), native REV balances, and an account's balances in
+one signed deploy. Vault and zone-vault reads are removed with the old CDP.
 
-**R2 (protocol writes) is complete.** The CLI can fund an Account, open/operate NGN and
-KES vaults, add/remove liquidity, swap/convert, send/claim/refund transfers, and submit
-signed reporter prices. `rcash devnet demo` runs the acceptance journey and exits 0:
-oracle refresh, funding, both vaults, borrow, liquidity add/remove, convert, send+claim,
-send+refund, and balance readback (10 steps).
+**R2 (protocol writes) is complete for the legacy v0.1 surface.** The CLI can fund an
+Account, add/remove liquidity, swap/convert, send/claim/refund transfers, and submit
+signed reporter prices. Vault and borrow commands are removed; `devnet demo` is retired
+until the v0.4 payment journey is built.
 
 A platform finding changed the read design: `explore-deploy` runs with no block context
 (`rho:block:data` returns height 0), so every freshness-gated read must be a signed deploy.
 The CLI does that; the SDK keeps public variants only for values that do not depend on
 freshness. Documented in `CLIENT.md`.
 
-**R3 (wasm wallet and React UI) is complete.** `crates/rcash-wasm` exposes the wallet,
-encrypted Web3 v3 keystore and the SDK operations; `web/` is a React + Vite + TypeScript
-app with Accounts, Receive, Convert, Pay, Claim, Liquidity, Mint and Settings screens.
-Batch and Ramps are explicitly disabled. The Playwright journey passes on the devnet:
-create a wallet, fund it from the faucet, deposit REV, open a vault, deposit collateral,
-borrow NGN and convert NGN→KES, all through the UI and the wasm module.
+**R3 (wasm wallet and React UI) is complete for the payment screens.** `crates/rcash-wasm`
+exposes the wallet, encrypted Web3 v3 keystore and the SDK operations; `web/` is a React +
+Vite + TypeScript app with Accounts, Receive, Convert, Pay, Claim, Liquidity and Settings.
+The Mint screen and vault operations are removed. Batch and Ramps remain disabled. The
+browser journey will be rebuilt for the v0.4 payment flow.
 
 Secrets never reach the DOM: the key stays in wasm, the keystore is encrypted into
 IndexedDB, and a claim secret lives only in the URL fragment.
@@ -110,9 +83,9 @@ funds.
 
 ## Specification
 
-`docs/INTENT.md` is the product intent; `docs/SPEC.md` is the normative v0.1 specification. The spec
-marks the implemented arms and separates them from planned components; the Components registry is
-locked by the TransferBook deploy so no later caller can redirect the pool or book.
+`docs/INTENT.md` is the product intent. `docs/spec/` is the normative v0.4 core
+specification; `docs/SPEC.md` is the v0.1 legacy reference. The v0.4 component catalogue
+is `contracts/components.json`.
 
 ## Platform constraints that shaped the build
 
@@ -134,10 +107,9 @@ locked by the TransferBook deploy so no later caller can redirect the pool or bo
 ## Honest risks
 
 - Oracle is a 3-reporter committee; the pool/book pause on stale feeds.
-- REV collateral is volatile; liquidation has no stability-pool backstop.
+- The v0.4 stablecoin issuer is REV-only; REV volatility can produce bad debt, and the
+  issuer must enforce MCR, close factor and bad-debt accounting. Bridged collateral is a
+  separate future workstream.
 - Ramps are off-chain and unbonded; local fiat payout is a trust decision.
 - Claim secrets are bearer authority; loss is unrecoverable before expiry.
 - The chain is pre-testnet (rchain-rust #242); this is not safe for real value.
-- The liquidation path uses the oracle's median and the vault view reports `fresh`; the keeper must
-  check freshness. A stale feed can make the vault view report liquidatable while the payout helper
-  refuses; the keeper should treat both `fresh=false` and refusal as "do not liquidate".

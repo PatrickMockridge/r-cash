@@ -5,7 +5,6 @@ import Accounts from "./routes/Accounts";
 import Claim from "./routes/Claim";
 import Convert from "./routes/Convert";
 import Liquidity from "./routes/Liquidity";
-import Mint from "./routes/Mint";
 import Pay from "./routes/Pay";
 import Receive from "./routes/Receive";
 import Settings from "./routes/Settings";
@@ -27,7 +26,6 @@ export default function App() {
         <Route path="pay" element={<Pay />} />
         <Route path="claim/:id/:secret" element={<Claim />} />
         <Route path="liquidity" element={<Liquidity />} />
-        <Route path="mint" element={<Mint />} />
         <Route
           path="batch"
           element={

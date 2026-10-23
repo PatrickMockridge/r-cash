@@ -16,8 +16,8 @@ mod terms;
 mod writes;
 
 pub use rcash_chain::rho_expr::{Reply as ProtocolReply, RhoValue as ProtocolValue};
-pub use reads::{Balances, FxRate, PriceFeed, Quote, QuoteAdd, Reserves, TransferInfo, VaultView};
-pub use writes::{RepayResult, SwapResult, TxResult, VaultAmounts, VaultHealth};
+pub use reads::{Balances, FxRate, PriceFeed, Quote, QuoteAdd, Reserves, TransferInfo};
+pub use writes::{SwapResult, TxResult};
 
 pub use rcash_chain;
 

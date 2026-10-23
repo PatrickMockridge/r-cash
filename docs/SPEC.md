@@ -1,4 +1,7 @@
-# R-Cash — Formal Specification (v0.1)
+# R-Cash — Formal Specification (v0.1 legacy)
+
+> Legacy v0.1 document. The CDP/CurrencyZone sections are deleted in v0.4; the current
+> payment-first core specification is in [`spec/`](spec/README.md).
 
 **Status:** devnet prototype; normative for v0.1. **Intent:** [`INTENT.md`](INTENT.md).
 **Platform:** rchain-rust at commit `e2d073dcd02f1e560ccb84749937138a1e184b0b`; the Rholang
@@ -13,7 +16,7 @@ are non-normative.
 ## 1. Scope and conformance
 
 R-Cash v0.1 is a single-corridor payments core: the NGN↔KES corridor, with rNGN and rKES issued by
-REV-collateralised CurrencyZones. A conforming implementation MUST provide the contracts, states,
+stablecoin issuers. A conforming implementation MUST provide the contracts, states,
 operations, invariants and initialization sequence in §§4–13, under the platform constraints in §14.
 
 The reference implementation is the Rholang in `contracts/src/` and the harness in `harness/`.
@@ -35,10 +38,8 @@ Conformance evidence is listed in §14.4.
 | `deployerId` | The deploy's unforgeable signer capability (`rho:rchain:deployerId`); also a bearer capability over that key's native REV |
 | `ownerId` | REV address derived from the owner public key; a public account identifier |
 | `accountProof` | Unforgeable per-account capability minted by AccountFactory; never returned by `getOrCreate` |
-| `vaultAuth` | Unforgeable per-vault capability minted by CurrencyZone.open |
 | Claim secret | A caller-chosen byte string, recommended 32 random bytes |
 | `claimHash` | `blake2b256(secret)` |
-| MCR | Minimum collateral ratio, in bps |
 | Deploy height | The block height of the deploy that executes an operation |
 
 ---
@@ -67,9 +68,8 @@ allowances and no global balance table.
 | Authority | Held by | Used for |
 |---|---|---|
 | `deployerId` | The deploying key's deploy | Account owner authentication only |
-| `ownerId` (public) | Everyone | Identifying Accounts and vaults; never authority |
-| `accountProof` | The Account contract | Opening/recovering its vault; authorising book send/refund |
-| `vaultAuth` | The Account contract | CurrencyZone hot operations |
+| `ownerId` (public) | Everyone | Identifying Accounts; never authority |
+| `accountProof` | The Account contract | Authorising book send/refund |
 | Claim secret | Sender and intended recipient/ramp | Claiming an escrowed transfer |
 | `bootstrapCap`/unlocked state | The protocol deployer, during installation | Directory registration, Components naming |
 | Reporter public key | Allowlisted reporter | Oracle submission |
@@ -78,7 +78,7 @@ allowances and no global balance table.
 **DeployerId containment (normative).** The Account is the only application contract that receives a
 `deployerId`. It makes exactly one read-only call, `deployerId:ops!("pubKeyBytes", *deployerId, ret)`,
 compares the result with the stored owner public key, and MUST NOT store, emit, log or use the
-`deployerId` for value movement. Other contracts receive `accountProof`, `vaultAuth`, claim secrets
+`deployerId` for value movement. Other contracts receive `accountProof`, claim secrets
 or signatures instead.
 
 ### 3.3 Trust assumptions (A1–A10)
@@ -112,7 +112,6 @@ or signatures instead.
 | AccountFactory | one | Directory key `component:accounts` |
 | Account | one per ownerId | AccountFactory state |
 | OracleHub | one | Directory key `component:oracle` |
-| CurrencyZone | one per currency | Directory key `component:zone:<CODE>` |
 | FxPool | one per corridor | Components key `pool:NGN/KES:fpmm` |
 | TransferBook | one per corridor | Components key `transfer:NGN/KES` |
 
@@ -126,8 +125,6 @@ ComponentRegistry; Components is a simple contract and is installed normally.
 names:
   component:accounts       -> URI(AccountFactory)
   component:oracle         -> URI(OracleHub)
-  component:zone:NGN       -> URI(CurrencyZone NGN)
-  component:zone:KES       -> URI(CurrencyZone KES)
   component:pools          -> URI(ComponentRegistry)
 assets:
   REV                    {kind:"rev",    controllerKey:"system:ertp",          decimals:8}
@@ -138,7 +135,6 @@ assets:
 
 ### 4.3 Initialization sequence (normative)
 
-1. **Bootstrap** (one deploy): create Directory, AccountFactory, OracleHub, CurrencyZone rNGN, CurrencyZone
    rKES, ComponentRegistry. Seed reporters/admins/params. Register the Directory names/assets above.
    Lock the Directory. Publish the Directory URI on `@"rcash:directory"`.
 2. **Pool setup** (one deploy): create the rNGN/rKES ERTP purses and the LP kit/burn purse; store
@@ -168,7 +164,7 @@ working admin arm in v0.1; adding a currency or component requires a new bootstr
 | `(false, reason)` | Business refusal; no value moved |
 | `fail()` | Reducer error; deploy and all its writes revert |
 
-Reason strings are stable for tests: e.g. `"not owner"`, `"unknown asset"`, `"below MCR"`,
+Reason strings are stable for tests: e.g. `"not owner"`, `"unknown asset"`,
 `"stale oracle"`, `"bad secret"`, `"expired"`, `"not open"`, `"above close factor"`, `"locked"`,
 `"replay"`, `"signatures"`.
 
@@ -259,7 +255,6 @@ ownerPubKey : ByteArray            // the owner's 65-byte uncompressed public ke
 ownerId     : String               // REV address
 proof       : name                 // accountProof
 purseState  : Map<assetId, {purse: name, brand: value}>
-vaultState  : Map<currency, vaultAuth>
 directory   : channel              // Directory
 ```
 
@@ -275,13 +270,7 @@ The `deployerId` is never stored, emitted or used for value movement.
 | `depositFacet` | `assetId` | none | lazily creates the purse; `(true, depositFacet)` |
 | `withdraw` | `*deployerId, assetId, amount` | owner | `(true, payment)` or `(false, "no purse")` |
 | `balance` | `*deployerId, assetId` | owner | `(true, Int)` |
-| `openVault` | `*deployerId, currency` | owner | resolves the zone via Directory; `zone.open(ownerId, proof)`; stores `vaultAuth`; `(true, ownerId)` |
-| `depositCollateral` | `*deployerId, currency, amount` | owner | withdraws REV from the Account's REV purse; `zone.depositCollateral(ownerId, vaultAuth, payment)` |
-| `withdrawCollateral` | `*deployerId, currency, amount` | owner | `zone.withdrawCollateral`; deposits the returned REV payment into the Account |
-| `borrow` | `*deployerId, currency, amount` | owner | obtains the stablecoin deposit facet; `zone.borrow` |
 | `repay` | `*deployerId, currency, amount` | owner | withdraws stablecoin; `zone.repay` |
-| `vaultInfo` | `*deployerId, currency` | owner | `zone.vault(ownerId)` |
-| `liquidate` | `*deployerId, currency, victimOwnerId, amount` | owner (spends the caller's stablecoin) | withdraws stablecoin; `zone.liquidate(victimOwnerId, payment)`; deposits the returned REV payment |
 | `sendTransfer` | `*deployerId, sourceAsset, destAsset, sourceAmount, minDest, claimHash, expiry` | owner | withdraws source; `book.send(..., ownerId, proof)` |
 | `claimTransfer` | `transferId, destAsset, secret` | claim secret | `book.claim`; deposits the returned payment into the Account; `(true, amount)` |
 | `refundTransfer` | `*deployerId, transferId, destAsset` | owner | `book.refund(..., ownerId, proof)`; deposits the returned payment |
@@ -296,7 +285,7 @@ Directory and call `issuer`/`brand`; `LP:NGN/KES:fpmm` resolves Components → p
 **Invariants.**
 - AC1: A purse is only spent by an owner-authenticated operation, except `claimTransfer`, which is
   authorised by the claim secret and deposits into the Account itself.
-- AC2: The `proof` and `vaultAuth` are never emitted to the caller or stored outside the Account and
+- AC2: The `proof` is never emitted to the caller or stored outside the Account and
   the trusted contract that issued them.
 - AC3: An Account never holds a consumed state cell across a caller-supplied await; purse creation
   happens before any state consume.
@@ -330,87 +319,7 @@ With the three latest prices `p0,p1,p2` and heights `h0,h1,h2`:
 
 A reporter's update is accepted even if it is a large move (a crash must be reportable); the
 `fresh` decision, not the update, is the gate for consumers. Consumers MUST treat `fresh == false`
-as "do not borrow, withdraw, swap or quote".
-
----
-
-## 10. CurrencyZone
-
-**State:** `{currency, vaults: Map<ownerId, {auth: name, collateral: Int, debt: Int, lastHeight: Int}>, totalDebt: Int, totalCollateral: Int, badDebt: Int, params, paused: Bool, admins, threshold, govNonce}`.
-**Captured:** stable brand/issuer/mint, burn deposit facet, REV issuer and purse, OracleHub,
-AccountFactory, Directory, `bd`, `hash`, `verify`, Guard.
-
-**Params (v0.1):**
-
-| Key | Value |
-|---|---|
-| `mcrBps` | 20,000 (200%) |
-| `bonusBps` | 800 (8%) |
-| `closeFactorBps` | 5,000 (50%) |
-| `ratePerBlock` | 3,171 (≈5% APR at a 2 s block) |
-| `debtCeiling` | 10,000,000,000,000 |
-| `minDebt` | 1,000,000 |
-| `maxDebt` | 10,000,000,000,000 |
-
-| Arm | Args | Auth | Pre | Post / reply |
-|---|---|---|---|---|
-| `open` | `ownerId, accountProof` | proof via AccountFactory | proof valid | creates a vault with a fresh `vaultAuth`, or returns the existing auth to the proven owner; `(true, auth)` |
-| `depositCollateral` | `ownerId, auth, payment` | vaultAuth | `auth` matches; payment is REV | accrues; credits collateral; deposits into the zone's REV purse; `(true, {collateral, debt})` |
-| `withdrawCollateral` | `ownerId, auth, amount` | vaultAuth | `amount>0`; `amount<=collateral`; fresh; post-healthy | accrues; debits; withdraws REV from the zone purse; `(true, payment)` |
-| `borrow` | `ownerId, auth, amount, depositFacet` | vaultAuth | not paused; fresh; `rate>0`; `debt+amount <= maxDebt`; `totalDebt+amount <= ceiling`; post-healthy | accrues; mints the stablecoin to the facet; `(true, {debt, health})` |
-| `repay` | `ownerId, auth, payment` | vaultAuth | payment is the stablecoin; `amount <= accrued debt` | accrues; deposits into the burn purse; reduces debt and totalDebt; `(true, {debt, repaid})` |
-| `liquidate` | `ownerId, payment` | permissionless | payment is the stablecoin; vault unhealthy; `amount <= debt*closeFactorBps/10000` | accrues; burns; seizes `min(collateral, amount*(10000+bonusBps)*1e8/(rate*10000))`; pays REV; `(true, revPayment)` |
-| `vault` | `ownerId` | none | — | `(true, {collateral, debt, health, liquidatable, fresh, rate})` |
-| `vaults` | — | none | — | `(true, vaults)` |
-| `params`, `supply`, `brand`, `issuer`, `currency` | — | none | — | views |
-| `admin` | `nonce, action, args, sigs` | 2-of-3 | nonce | `setParams [mcr,bonus,close,rate,ceiling,minDebt,maxDebt]`; `setPaused [0|1]` |
-
-### 10.1 Accrual
-
-On every vault mutation and in the view:
-```
-interest = ceil(debt * ratePerBlock * (now - lastHeight) / 1e12)
-debt'    = debt + interest
-lastHeight' = now
-```
-Simple interest, rounded up; no timestamp is used. `totalDebt` is updated on borrow, repay and
-liquidation; interest accrued lazily in a vault is reflected when that vault is touched. The view
-reports the accrued debt without mutating.
-
-### 10.2 Health and liquidation
-
-Let `rate` be `OracleHub.getPair("REV", currency).rate` (local base units per REV drop × 1e8).
-```
-collateralLocal = floor(collateral * rate / 1e8)
-healthy         = debt == 0 OR (rate > 0 AND collateralLocal * 10000 >= debt * mcrBps)
-```
-Liquidation:
-```
-seized = min(collateral, floor(amount * (10000 + bonusBps) * 1e8 / (rate * 10000)))
-debt'  = accrued - amount
-collateral' = collateral - seized
-badDebt' = badDebt + (if collateral' == 0 then debt' else 0)
-```
-The liquidator's stablecoin payment is burned (deposited into the burn purse); the REV payment is
-withdrawn from the zone's purse. `totalDebt` decreases by `amount`; `totalCollateral` by `seized`.
-
-**Known v0.1 limitation (normative warning).** The `liquidate` arm uses the median rate but does
-**not** independently require `fresh == true`; the `vault` view reports `fresh`. A keeper MUST check
-`vault(ownerId).fresh == true` before liquidating and MUST treat a stale feed as "do not liquidate".
-A stale feed can make the view report `liquidatable == true` while the payout is refused; the keeper
-is responsible for the freshness gate.
-
-### 10.3 Zone invariants
-
-- Z1: Stablecoin supply equals `totalDebt` plus any bad debt carried in `totalDebt`; minting occurs
-  only in `borrow`, burning only in `repay`/`liquidate`.
-- Z2: For every vault, `debt` is non-decreasing except for `repay`/`liquidate`, and collateral changes
-  only through `depositCollateral`/`withdrawCollateral`/`liquidate`.
-- Z3: After `borrow` or `withdrawCollateral` succeeds, a vault with `debt>0` satisfies the health
-  inequality with a fresh rate.
-- Z4: A vault's `lastHeight` never decreases; accrual uses a non-negative height delta.
-- Z5: The total collateral is the sum of vault collateral; the zone's REV purse balance is at least
-  `totalCollateral` (subject to the deploy-atomicity of native writes).
+as "do not withdraw, swap or quote".
 
 ---
 
@@ -514,21 +423,6 @@ auto-claim; a recipient without a wallet is served by a ramp that holds the secr
 
 ## 13. Economic specification and parameters
 
-### 13.1 CDP parameters
-
-| Parameter | v0.1 | Meaning |
-|---|---|---|
-| MCR | 20,000 bps | Minimum collateral ratio for borrow/withdraw |
-| Liquidation bonus | 800 bps | Seized collateral above the repaid value |
-| Close factor | 5,000 bps | Maximum share of debt a single liquidation may repay |
-| Stability fee | 3,171 per block (≈5% APR at 2 s blocks) | Simple interest, per-block |
-| Debt ceiling | 1e13 base units per currency | Global per-currency cap |
-| Min / max debt | 1e6 / 1e13 | Vault size bounds |
-| Oracle quorum | 2 of 3 | Fresh reporters required |
-| Oracle max age | 50 blocks | Staleness |
-| Oracle max spread | 200 bps | Agreement tolerance |
-| Oracle absolute band | [1, 1e12] | Price sanity |
-
 ### 13.2 Pool and transfer parameters
 
 | Parameter | v0.1 |
@@ -570,8 +464,6 @@ v0.1. A ramp's fiat payout fee is off-chain and outside this specification.
 | §3 platform/atomicity/authority | `spikes/` probes + `docs/PLATFORM.md` | 12/12 |
 | §6–8 Directory/Accounts | `harness/scenarios/phase1.py` | 7/7 |
 | §9 Oracle | `oracle.py` | 19/19 |
-| §10 CurrencyZone | `vault.py` | 19/19 |
-| §10.2 liquidation | `liquidation.py` | 17/17 |
 | §11 FxPool | `pool.py` | 14/14 |
 | §12 TransferBook | `transfer.py` | 7/7 |
 | End-to-end | `make demo` | exit 0 |
@@ -613,14 +505,11 @@ The following are **not** part of v0.1 and MUST NOT be assumed by a v0.1 client:
 
 | Term | Definition |
 |---|---|
-| CDP | Collateralised debt position; a vault of REV collateral and local stablecoin debt |
 | Corridor | A directed pair of local currencies with a pool, oracle pair and ramps |
 | DeployerId | The deploy signer's unforgeable capability; also a REV-spending capability |
 | ERTP | Electronic Rights Transfer Protocol: brand, mint, issuer, purse, payment |
 | FPMM | Fixed-price market maker; quotes at an oracle anchor with spread and inventory skew |
 | LP | Liquidity provider; holds LP tokens and earns the spread |
-| MCR | Minimum collateral ratio |
 | ownerId | Public REV address derived from the owner's public key |
 | REV | The chain's native token; 1 REV = 1e8 drops |
 | RSpace | The tuple-space store; contract state is held in channels |
-| Vault | A CurrencyZone record: collateral, debt, last accrual height, vaultAuth |

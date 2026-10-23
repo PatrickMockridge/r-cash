@@ -8,7 +8,6 @@ const links = [
   ["/convert", "Convert"],
   ["/pay", "Pay"],
   ["/liquidity", "Liquidity"],
-  ["/mint", "Mint"],
   ["/batch", "Batch"],
   ["/ramps", "Ramps"],
   ["/settings", "Settings"],

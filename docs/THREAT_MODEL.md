@@ -2,12 +2,12 @@
 
 ## Assets
 
-- Native REV collateral held by `CurrencyZone`.
+- Native REV collateral held by the stablecoin issuer (`VaultBook`/`CollateralCustody`).
 - Local stablecoins (rNGN, rKES) held in Accounts, pools and transfer escrow.
 - LP tokens and pool reserves.
 - Claim secrets (bearer authority over escrowed transfer funds).
-- Account proofs and vault authorities (unforgeable capabilities).
-- Oracle prices (collateral and FX).
+- Account proofs; issuer vault authorities are separate per-vault capabilities.
+- Oracle prices (issuer collateral and FX).
 
 ## Adversaries
 
@@ -30,9 +30,9 @@
 | Double claim / double deposit | ERTP payment consumed on first deposit; transfer status checked; claim secret hash; adversarial tests |
 | Refund before expiry / claim after expiry | Block-height checks in `TransferBook` |
 | Claim secret loss | Sender refunds after expiry; no recovery service; documented |
-| Oracle manipulation / stale feed | 2-of-3 reporters, median, spread and freshness checks, absolute band, pause; borrowed/swap actions require fresh |
+| Oracle manipulation / stale feed | 2-of-3 reporters, median, spread and freshness checks, absolute band, pause; issuer mint and swap actions require fresh |
 | Oracle reporter key compromise | Quorum threshold; governance can replace reporters; documented trust |
-| Liquidation cascade / bad debt | 200% MCR, partial close factor, liquidation bonus; no stability pool in MVP |
+| Issuer liquidation cascade / bad debt | 200% MCR, partial close factor, liquidation bonus; no stability pool in MVP |
 | First-depositor LP inflation | `MINIMUM_LIQUIDITY` burned; oracle-checked first deposit; floor/ceil rules |
 | Rounding drains value | Outputs floor, debts/fees up; property tests |
 | Ramp takes the secret and does not pay fiat | Allowlisted ramps; no bond in MVP; documented trust; bonded ramps later |

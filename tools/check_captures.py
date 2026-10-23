@@ -30,7 +30,7 @@ SRC = ROOT / "contracts" / "src"
 BASELINE = ROOT / "tools" / "capture_baseline.json"
 
 REGISTRY_CALL = re.compile(
-    r"(Components!|Directory!|ListingRegistry!|Root!|ZoneDirectory!|"
+    r"(Components!|Directory!|ListingRegistry!|Root!|StablecoinDirectory!|"
     r"OracleRegistry!|MarketDirectory!|CurrencyRegistry!|rl!)"
     r"\s*\((.*?)\)",
     re.S,

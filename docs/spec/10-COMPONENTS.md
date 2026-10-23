@@ -19,7 +19,6 @@ separately and do not create a runtime cycle.
 | `Bounds` | none | `checkZone`, `checkFeed`, `checkPool`, `checkBook`, `checkTerms` | Pure on-chain bounds for every canonical group. |
 | `AdminGuard` | none | `verify(domain, nonce, action, argsHash, sigs, admins, threshold)` | Threshold signature verification over `rcash:admin:v1|domain|nonce|action|args`. |
 | `AmmMath` | none | `value`, `weight`, `fee`, `out`, `shares` | Pure FPMM arithmetic, floor outputs and shares. |
-| `RiskMath` | none | `accrue`, `health`, `payout`, `seize` | Pure CDP arithmetic, ceil interest. |
 | `OracleMath` | none | `median3`, `fresh`, `rate` | Median, spread, freshness, cross rate. |
 | `ClaimCode` | none | `hash(secret)` | Claim-secret hashing. |
 
@@ -29,27 +28,22 @@ separately and do not create a runtime cycle.
 |---|---|---|---|
 | `Governor` | `governorState` | `authorize(domain, nonce, action, argsHash, sigs)`, `admins()`, `admin(...)` | Owns the admin set, threshold and per-domain nonce. Units call `authorize` and apply the verified intent. `AdminGuard` is its pure verifier. |
 
-`Root` is the only singleton directory. Per-instance URIs live in `ZoneDirectory`,
 `OracleRegistry` and `MarketDirectory`. `Directory` and `ComponentRegistry` are deleted.
 
 ## 3. Registries
 
 | Component | State | Interface | Responsibility |
 |---|---|---|---|
-| `CurrencyRegistry` | `currencyState` | `register`, `currency`, `currencies`, `admin` | Currency records. Registration requires the sponsor deployer key, a signature over `rcash:currency-bind:v3|code|zoneUri|paramsHash|sponsor`, a `ZoneDirectory(code)` match and the live zone attestation. Status is `active` or `paused`. |
+| `CurrencyRegistry` (planned v0.4) | `currencyState` | `register`, `currency`, `currencies`, `admin` | Currency records. Registration requires the sponsor deployer key, a signature over the stablecoin-system URI and params hash, a `StablecoinDirectory(code)` match and the live stablecoin attestation. Status is `active` or `paused`. |
 | `MarketTerms` | `termsState` | `put`, `get`, `boundsOk` | Content-addressed `termsHash → {terms, values}`. `put` recomputes the hash and rejects a mismatch. |
 | `MarketIndex` | `marketState` | `stage`, `activate`, `pause`, `delist`, `cancel`, `market`, `marketFor`, `status`, `isActive`, `admin` | Market status, pair uniqueness, version monotonicity and nonce in one cell. |
 | `MarketDirectory` | `directoryState` | `bind`, `seal`, `unseal`, `byId`, `slot` | Per-market `{poolUri, bookUri, lockUri, termsHash, sealed}`. Only `MarketFactory` writes; a draft slot may be overwritten, then sealed. |
 | `OracleRegistry` | `oracleRegState` | `registerFeed`, `feedEntry`, `reporters`, `allowlist`, `admin` | Reporter allowlist and per-currency feed URI plus policy hash. |
-| `ZoneDirectory` | `zoneDirectoryState` | `register`, `lookup`, `entries` | `currency → zoneUri`. Only `ZoneFactory` writes, through a fresh capability created in the same deploy. |
 
 ## 4. Domain components
 
 | Component | State | Interface | Responsibility |
 |---|---|---|---|
-| `ZoneFactory` | none | `create(currency, params, paramsHash, sponsor, sig)` | Resolves `ZoneTemplate`, receives the created zone URI and attestation, and registers it in `ZoneDirectory`. |
-| `ZoneTemplate` | none | `create(currency, params, paramsHash, sponsor, sig)` | Verifies the sponsor signature and on-chain bounds, creates the issuer/purses, seeds `zoneState`, defines `CurrencyZone`, and returns its URI and attestation. |
-| `CurrencyZone` (currency) | `zoneState` | `currency`, `params`, `brand`, `issuer`, `attest`, `open`, `vault`, `vaults`, `admin`; CDP arms next | Identity, views, vault opening and pause. Collateral, borrow, repay and liquidation are the next increment, split into separate contracts to fit the parser depth. |
 | `OracleFeed` (currency) | `feedState` | `submit`, `get`, `activate`, `info`, `admin` | Per-currency feed deployed by the sponsor and bound by `OracleRegistry`; no factory. |
 | `OracleHub` | none | `get`, `feedStatus`, `getPair`, `reporters` | Stateless router; `getPair(base, quote, maxAgeBlocks)` returns per-feed freshness and ages. Callers enforce their own age bound. |
 | `MarketFactory` | none | `createMarket(terms, termsValues, sponsorSig)` | Puts terms in `MarketTerms`, creates `FxPool`, `LiquidityLock` and `TransferBook` from templates, binds their URIs in `MarketDirectory`, stages `MarketIndex`. |
@@ -60,12 +54,10 @@ separately and do not create a runtime cycle.
 | `TradabilityGate` | none | `admit(status, fresh, value, inputValue, terms)` | Pure policy verdict; receives all inputs and never calls back into the pool. |
 | `AccountFactory` | `factoryState` | `getOrCreate`, `verify`, `accountOf`; `authorize`/`consumeAuth` next | One proof per owner; the proof name is created once and returned only by `getOrCreate`. Account provisioning and one-shot auth tokens arrive with the account layer. |
 | `AccountProvisioner` | none | `create(ownerId, pubKeyBytes)` | Orchestrates the three account templates. |
-| `Account` (owner, R) | `vaultState` | `deposit`, `withdraw`, `balance`, `depositFacet`, `sendTransfer`, `claimTransfer`, `refundTransfer`, vault passthroughs | Owner-authenticated thin router. Holds the `PurseStore` capability and a `currency → vaultCellUri` map. |
+| `Account` (owner, R) | `purseStoreUri`, `transferClientUri` | `deposit`, `withdraw`, `balance`, `depositFacet`, `sendTransfer`, `claimTransfer`, `refundTransfer` | Owner-authenticated thin payment router. Holds the `PurseStore` capability and resolves the transfer client; no vault state or CDP arms. |
 | `PurseStore` (owner, R) | `purseState` | `ensure`, `deposit`, `withdraw`, `balance`, `facet` | One purse per asset; ERTP custody. |
-| `VaultCell` (owner, currency, R) | none | `deposit`, `withdraw`, `borrow`, `repay`, `info` | Holds the zone auth in its closure and forwards vault operations. |
 | `AccountGate` (owner, R) | none | `verify(deployerId)` | Owner authentication; no state. |
 | `TransferClient` | none | `send`, `claim`, `refund`, `info` | Account-side transfer orchestration; resolves the book and market. |
-| `VaultClient` | none | `open`, `depositCollateral`, `withdrawCollateral`, `borrow`, `repay`, `liquidate`, `info` | Account-side CDP orchestration; resolves the zone. |
 | `AssetResolver` | none | `meta(assetId)`, `issuer(assetId)`, `makePurse(assetId)`, `makeFacet(assetId)` | Derives asset metadata and read-only issuer/purse capabilities from the registries; no second copy of asset truth. |
 | `ListingViews` | none | `currency`, `asset`, `assets`, `markets`, `marketView`, `marketFor`, `terms`, `isActive` | Read-only projection of the registries, markets and feeds. |
 
@@ -76,14 +68,12 @@ would make the invariant unprovable.
 
 | Cluster | Invariant |
 |---|---|
-| `CurrencyZone` | vault records, totals, supply, custody and nonce move together |
 | `FxPool` | reserves, shares, LP mint/burn and seed attestation move together |
 | `MarketIndex` | status, pair index, version and nonce move together |
 | `MarketDirectory` | the three URI slots and the seal move together |
 | `TransferContract` | the transfer record, payment and claim token move together |
 
 `Account` owns only its routing map; purse custody is in `PurseStore`, vault authority is in
-`VaultCell`, and the proof never leaves the account.
 
 ## 6. Split map
 
@@ -92,7 +82,6 @@ would make the invariant unprovable.
 | Current region | Destination |
 |---|---|
 | `listingNow`, `listingPairKey`, `listingZoneOk`, `listingZoneParamsHash` | `Clock`, `Bounds`, `Codec` |
-| `registerCurrency`, `currency`, `currencies`, pinned-currency logic | `CurrencyRegistry` + `ZoneDirectory` |
 | `stageMarket`, `listingStage`, `listingStoreDraft` | `MarketIndex.stage` + `MarketTerms` + `MarketFactory` |
 | `activateMarket`, `listingActivate` | `MarketIndex.activate` + `MarketDirectory.seal` + attestations |
 | `registerMarketCap`, `marketCap`, `marketCapsById` | `MarketDirectory`; caller-supplied caps are deleted |
@@ -107,11 +96,9 @@ would make the invariant unprovable.
 |---|---|
 | asset metadata and controller URI resolution | `AssetResolver` |
 | internal purse, lookup purse, ensure purse | `PurseStore` |
-| zone and vault auth resolution | `VaultClient` + `VaultCell` |
 | book lookup and legacy fallbacks | `TransferClient`; legacy fallback deleted |
 | deposit, withdraw, balance, deposit facet | `Account` → `PurseStore` |
 | send/claim/refund and `ByMarket` variants | `Account` → `TransferClient` → `TransferBook`/`TransferContract` |
-| open vault through vault info | `Account` → `VaultClient` → `VaultCell` → `CurrencyZone` |
 | deployerId checks in every arm | `AccountGate` once per arm |
 | bundled account capability in factory state | account capability and `proofHash` stored directly |
 | `ListingRegistry`, `Directory`, `Components` captures | deleted; `rootUri` string only |
@@ -126,16 +113,6 @@ would make the invariant unprovable.
 | hub submit/get/feedStatus/activateFeed/getPair/reporters | `OracleHub` |
 | allowlist, add/remove reporter, admin | `OracleRegistry`, `Governor` |
 | `keyUse` | deleted |
-
-### `CurrencyZone.rho` (706 / 22)
-
-| Current region | Destination |
-|---|---|
-| `zoneNow`, accrual, rate, health, bad-debt increment | `Clock`, `RiskMath` |
-| vault registry, totals, params, REV purse, issuer | stay in `CurrencyZone` |
-| `zoneUpdate` | folded into each arm; accrual delta applied to the vault and totals |
-| `zoneAdminApply` | `Governor` |
-| `depositFacet` parameter in `borrow` | deleted; the zone mints to itself and returns the payment |
 
 ### `FxPoolV2.rho` (648 / 21)
 

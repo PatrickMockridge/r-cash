@@ -30,7 +30,7 @@ A component is
 C = (id, S, c, π, δ, Inv)
 ```
 
-- `id` is a stable identity (`component:currency-registry`, `zone:NGN`,
+- `id` is a stable identity (`component:currency-registry`, `stablecoin:NGN`,
   `market:KES/NGN:v3:pool`, `transfer:<book-id>:<n>`);
 - `S` is the state type in the component's cell;
 - `c : Name⟨Cell⟨S⟩⟩` is exactly one state cell, created by `new` inside the component
@@ -95,7 +95,7 @@ holding a consumed cell or after an irreversible write. Callback-shaped paramete
 - immutable values (strings, bytes, maps, URI strings, stable keys);
 - names created by `new` in the same term (own cells, child contracts, proofs, tokens).
 
-It may **not** close over any name obtained from `Root.resolve`, `ZoneDirectory`,
+It may **not** close over any name obtained from `Root.resolve`, `StablecoinDirectory`,
 `OracleRegistry`, `MarketDirectory`, `CurrencyRegistry` or `rho:registry:lookup`. The
 `03_accounts` continuation failure is this case: `AccountFactory` was bundled while closing
 over a live `ListingRegistry` capability read from `ComponentRegistry`. v3 carries
@@ -132,7 +132,8 @@ These hold and must be preserved.
   capabilities are payments and reply channels only.
 - **L4 Conservation.** For each brand, `minted − burned = Σ purses + Σ payments`. Pool
   reserves equal custody; each open transfer cell holds exactly its payment; lock shares
-  equal its LP purse; zone custody covers collateral.
+  equal its LP purse; the stablecoin issuer's supply equals its principal, and the
+  VaultBook's collateral custody covers its vault debt.
 - **L5 Single-cell serialisability.** A one-cell read-modify-write is equivalent to an
   atomic operation. The `RECV` is the linearization point.
 - **L6 Joint invariants are co-located.** If an invariant cannot be preserved by one cell,
@@ -140,7 +141,7 @@ These hold and must be preserved.
   reserve/confirm protocol. Splitting an invariant across cells is a design error.
 - **L7 Data-only state, with named exceptions.** State stores strings, integers, bytes,
   lists and maps. Live names are allowed only for own `new`-bound cells, ERTP
-  purses/payments, per-account vault auths, per-transfer cells and claim tokens.
+  purses/payments, per-vault issuer auths, per-transfer cells and claim tokens.
   Registry-resolved capabilities and caller-supplied caps are never stored.
 - **L8 Bounded units.** Every unit has a byte, depth and contract-count budget. A unit over
   budget is split; it is never inlined further.
@@ -199,7 +200,7 @@ if it refuses: fail()
 ```
 
 The only protocol that may hold a cell across an await, because native channels are
-responsive. Used by mint/burn, collateral custody, lock funding and claim payout. If any
+responsive. Used by stablecoin mint/burn, issuer collateral custody, lock funding and claim payout. If any
 write preceded the native call, a refusal calls `fail()`; it never returns `(false, …)`.
 
 ### P5 — Reserve/confirm

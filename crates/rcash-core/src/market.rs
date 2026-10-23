@@ -11,7 +11,6 @@ use crate::CoreError;
 /// The terms schema string.
 pub const TERMS_SCHEMA: &str = "rcash:market-terms:v1";
 /// The zone-params schema string.
-pub const ZONE_SCHEMA: &str = "rcash:zone-params:v1";
 /// The oracle-policy schema string.
 pub const FEED_SCHEMA: &str = "rcash:oracle-policy:v1";
 /// The pool-params schema string.
@@ -37,64 +36,6 @@ pub enum MarketStatus {
 impl MarketStatus {
     pub fn is_active(self) -> bool {
         matches!(self, Self::Active)
-    }
-}
-
-/// Currency-zone parameters, fixed at currency activation.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ZoneParams {
-    pub mcr_bps: i64,
-    pub bonus_bps: i64,
-    pub close_factor_bps: i64,
-    pub rate_per_block: i64,
-    pub debt_ceiling: i64,
-    pub min_debt: i64,
-    pub max_debt: i64,
-}
-
-impl ZoneParams {
-    /// The canonical values in schema order.
-    pub fn values(&self) -> Vec<String> {
-        vec![
-            self.mcr_bps.to_string(),
-            self.bonus_bps.to_string(),
-            self.close_factor_bps.to_string(),
-            self.rate_per_block.to_string(),
-            self.debt_ceiling.to_string(),
-            self.min_debt.to_string(),
-            self.max_debt.to_string(),
-        ]
-    }
-
-    pub fn canonical(&self) -> String {
-        format!("{ZONE_SCHEMA}|{}", self.values().join("|"))
-    }
-
-    /// Protocol safety bounds. Returns one message per violation.
-    pub fn violations(&self) -> Vec<String> {
-        let mut out = Vec::new();
-        if !(15_000..=50_000).contains(&self.mcr_bps) {
-            out.push("mcrBps must be 15000..50000".into());
-        }
-        if !(0..=2_000).contains(&self.bonus_bps) {
-            out.push("bonusBps must be 0..2000".into());
-        }
-        if !(1_000..=10_000).contains(&self.close_factor_bps) {
-            out.push("closeFactorBps must be 1000..10000".into());
-        }
-        if !(0..=50_000).contains(&self.rate_per_block) {
-            out.push("ratePerBlock must be 0..50000".into());
-        }
-        if !(10_000_000_000..=1_000_000_000_000).contains(&self.debt_ceiling) {
-            out.push("debtCeiling must be 1e10..1e15".into());
-        }
-        if !(10_000..=1_000_000_000).contains(&self.min_debt) {
-            out.push("minDebt must be 1e4..1e9".into());
-        }
-        if self.max_debt < self.min_debt || self.max_debt > self.debt_ceiling {
-            out.push("maxDebt must be >= minDebt and <= debtCeiling".into());
-        }
-        out
     }
 }
 
@@ -483,19 +424,6 @@ mod tests {
         let vectors: serde_json::Value =
             serde_json::from_str(include_str!("../../../tests/terms/terms-vectors.json"))
                 .expect("vectors");
-        let zone = ZoneParams {
-            mcr_bps: 20_000,
-            bonus_bps: 800,
-            close_factor_bps: 5_000,
-            rate_per_block: 3_171,
-            debt_ceiling: 10_000_000_000_000,
-            min_debt: 1_000_000,
-            max_debt: 10_000_000_000_000,
-        };
-        assert_eq!(
-            zone.canonical(),
-            vectors["zone"]["canonical"].as_str().unwrap()
-        );
         let feed = FeedPolicy {
             quorum: 2,
             max_age_blocks: 50,

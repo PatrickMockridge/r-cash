@@ -9,12 +9,10 @@ contract AccountFactory(@"getOrCreate", @pubKeyBytes, ret) = {
       for (@accounts <- factoryState) {
         match accounts.get(ownerId) {
           Nil => {
-            new account, accountInternalPurse, accountLookupPurse, accountZone, accountVaultAuth,
-                  accountEnsurePurse, accountTransferBookLegacy, accountAssetMeta,
+            new account, accountInternalPurse, accountLookupPurse, accountEnsurePurse, accountTransferBookLegacy, accountAssetMeta,
                   accountControllerUri, accountBookById, accountBookFor,
-                  proof, purseState, vaultState in {
+                  proof, purseState in {
               purseState!({}) |
-              vaultState!({}) |
               // @@INLINE:core/AccountBodyV2.rho@@
               factoryState!(accounts.set(ownerId, {
                 "account": bundle+{*account},

@@ -19,7 +19,7 @@ convert directly between currencies, and pay anyone — with a wallet or a claim
 liquidity providers, not correspondent banks, earn the FX spread.
 
 R-Cash is not a general DeFi suite. Local-currency stablecoins exist to hold and move money; the FX
-pool exists to price and settle conversions and payments; the oracle prices collateral and FX; the
+pool exists to price and settle conversions and payments; the oracle prices the stablecoin issuer's collateral and FX; the
 claim link makes a recipient without a wallet reachable; and the ramp layer is the local payout
 interface. If a component does not serve **hold → receive → convert → pay → get paid**, it is not in
 this build.
@@ -51,9 +51,9 @@ for platforms. R-Cash targets the payments core on-chain:
 | **SME / business** | Pay suppliers and contractors, batch payroll, hold operating balances |
 | **Recipient without a wallet** | Open a claim link, choose a local payout partner, receive mobile money or cash |
 | **Liquidity provider** | Deposit both sides of a corridor, earn the FX spread |
-| **Local-currency minter** | Lock REV, mint local currency, spend or supply it |
+| **Stablecoin issuer** | Lock REV, mint local currency, spend or supply it; issuer infrastructure, not a lending product |
 | **Ramp partner** | On-ramp fiat, pay out claims off-chain on licensed local rails |
-| **Keeper** | Liquidate unhealthy CDPs, watch expiries |
+| **Keeper** | Liquidate unhealthy issuer vaults, watch expiries |
 
 ## 5. Principles
 
@@ -66,7 +66,7 @@ for platforms. R-Cash targets the payments core on-chain:
    mandatory USD hop.
 4. **Reachable recipients.** A claim link plus a local payout partner lets someone receive value
    without learning about keys.
-5. **Risk isolation.** Each currency has its own CDP, debt ceiling, collateral and pools. A run on
+5. **Risk isolation.** Each currency has its own stablecoin issuer, debt ceiling, collateral and pools. A run on
    one currency cannot drain another.
 6. **Capability security.** Authority is a name or a signature, not an account number or an
    allowance. The Account is the only application contract that receives the deployer's
@@ -78,7 +78,7 @@ for platforms. R-Cash targets the payments core on-chain:
 
 ## 6. Why RChain / rchain-rust
 
-- **Native REV** is the collateral asset, with a native vault and an ERTP brand, so a CDP can custody
+- **Native REV** is the collateral asset, with a native vault and an ERTP brand, so a collateralised issuer can custody
   REV without a bridge or a wrapped token.
 - **ERTP** provides multi-asset purses, payments consumed exactly once, issuers and amount math,
   which the stablecoins and LP tokens use directly.
@@ -95,7 +95,7 @@ for platforms. R-Cash targets the payments core on-chain:
 
 - Non-custodial Accounts (per key) with REV, rNGN, rKES and LP-token purses.
 - Signed three-reporter oracle with median, freshness, spread and absolute-band checks.
-- rNGN and rKES CurrencyZones: REV-collateralised CDP, borrow/repay, interest, MCR, liquidation.
+- rNGN and rKES stablecoin issuers: REV-backed mint/redeem, interest, MCR and liquidation as issuer infrastructure.
 - rNGN/rKES FxPool: oracle-anchored fixed-price market maker, spread + inventory skew, LP tokens,
   add/remove liquidity, swaps both ways.
 - TransferBook: quote, send with a claim hash, claim with the secret, refund after expiry.
@@ -109,13 +109,13 @@ user CLI/SDK, web UI, public-testnet deployment.
 
 **Functional (v0.1):** a fresh devnet runs `make demo` to completion:
 - the Account is funded with REV;
-- NGN and KES vaults are opened, collateral is deposited and local currency is borrowed;
+- NGN and KES issuer vaults are opened, collateral is deposited and local currency is minted;
 - liquidity is added to the rNGN/rKES pool, a swap executes and liquidity is removed;
 - a claimable transfer is sent, claimed with its secret, and an expired transfer is refunded.
 
 **Economic:** a sender pays the corridor spread, not a correspondent-bank fee; the LP's share of
-that spread is measurable; the stablecoin's collateral ratio is enforced on every borrow and
-withdrawal; a price fall produces a liquidatable vault and a solvent liquidation.
+that spread is measurable; the stablecoin issuer's collateral ratio is enforced on every mint and
+withdrawal; a price fall produces a liquidatable issuer vault and a solvent liquidation.
 
 **Technical:** every state-changing assertion is verified against finalised state; a failed deploy
 leaves no partial state; phlo cost per operation is measured; no test relies on an unmeasured claim.
@@ -136,11 +136,11 @@ committee, ramps, bootstrap window, pre-testnet chain) are documented and visibl
 
 ## 10. Roadmap
 
-1. **v0.1 (this repo):** corridor core — accounts, local currency CDP, oracle, FPMM, claim/refund.
+1. **v0.1 (this repo):** corridor core — accounts, local stablecoin issuer, oracle, FPMM, claim/refund.
 2. **v0.2:** CPMM backup venue + Router best-of-two; batch payouts; PaymentRequests; RampRegistry and
    a mock ramp; direct-delivery transfers.
 3. **v0.3:** multi-hop routing, OTC limit orders/RFQ for size, GHS/UGX/ZAR corridors, protocol fee
-   switch, stability-pool/bad-debt backstop.
+   switch; bridged collateral and a bad-debt backstop are future workstreams.
 4. **Production:** public testnet, external audit, licensed ramp partners, KYC/AML and local counsel
    in each corridor, user wallet/UI and a platform API.
 

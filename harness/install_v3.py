@@ -158,7 +158,7 @@ def main(argv: list[str] | None = None) -> int:
     state["governor_uri"] = governor["uris"][0]
     save(state)
 
-    for name in ["05_amm_math", "06_risk_math", "07_oracle_math", "08_claim_code"]:
+    for name in ["05_amm_math", "07_oracle_math", "08_claim_code"]:
         result = step(name, name, common)
         state[f"{name}_uri"] = result["uris"][0]
         save(state)
@@ -180,22 +180,6 @@ def main(argv: list[str] | None = None) -> int:
 
     hub = step("13_oracle_hub", "oracle_hub", common)
     state["oracle_hub_uri"] = hub["uris"][0]
-    save(state)
-
-    template = step("30_zone_template", "zone_template", common)
-    state["zone_template_uri"] = template["uris"][0]
-    save(state)
-
-    zone_factory = step("10_zone_factory", "zone_factory", common)
-    state["zone_directory_uri"] = zone_factory["uris"][0]
-    state["zone_factory_uri"] = zone_factory["uris"][1]
-    save(state)
-
-    currency_registry = step("11_currency_registry", "currency_registry", {
-        "__ROOT_URI__": root_uri,
-        "__ADMIN_KEYS__": admins,
-    })
-    state["currency_registry_uri"] = currency_registry["uris"][0]
     save(state)
 
     print(json.dumps(state, indent=2))

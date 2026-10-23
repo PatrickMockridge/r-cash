@@ -31,7 +31,6 @@ immediately before each freshness-gated step).
 | `/pay` | Send a claimable transfer | Shows the claim link and warns about the secret |
 | `/claim/:id/:secret` | Review and claim a transfer | Secret stays in the URL fragment |
 | `/liquidity` | Reserves, quote the KES side, add/remove | LP balance included |
-| `/mint` | Fund REV, open a vault, collateral, borrow, repay, withdraw | Shows MCR health and freshness |
 | `/batch` | Disabled | `sendBatch` is not in v0.1 |
 | `/ramps` | Disabled | Off-chain licensed-partner boundary |
 | `/settings` | Node URL, manifest, export keystore, lock | Only non-secret config is stored |
@@ -54,7 +53,7 @@ No screen uses mock balances, quotes, partners or transactions. Disabled screens
 ## Reads and freshness
 
 `explore-deploy` has no block context: `rho:block:data` reports height 0 there. Every
-freshness-gated read (oracle, pool quote, zone vault health, book quote) is therefore a
+freshness-gated read (oracle, pool quote, book quote) is therefore a
 **signed deploy**, which costs phlo. A new account with no REV cannot run one; the Accounts
 screen reads the native REV balance first (free) and only enables the signed balance read
 once the account can pay for it.

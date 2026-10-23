@@ -169,24 +169,6 @@ def main() -> int:
         True,
     )
 
-    zone_ok = ('{"mcrBps": 20000, "bonusBps": 800, "closeFactorBps": 5000, '
-               '"ratePerBlock": 3171, "debtCeiling": 10000000000000, '
-               '"minDebt": 1000000, "maxDebt": 10000000000000}')
-    check(
-        "Bounds.checkZone ok",
-        one(call(state["bounds_uri"], "Bounds",
-                 ok_or_reason(f'Bounds!("checkZone", {zone_ok}, *r)')), secret),
-        "ok",
-    )
-    zone_bad = ('{"mcrBps": 1000, "bonusBps": 800, "closeFactorBps": 5000, '
-                '"ratePerBlock": 3171, "debtCeiling": 10000000000000, '
-                '"minDebt": 1000000, "maxDebt": 10000000000000}')
-    check(
-        "Bounds.checkZone bad mcr",
-        one(call(state["bounds_uri"], "Bounds",
-                 ok_or_reason(f'Bounds!("checkZone", {zone_bad}, *r)')), secret),
-        "mcr",
-    )
     check(
         "Bounds.checkFeed ok",
         one(call(state["bounds_uri"], "Bounds",
@@ -236,28 +218,6 @@ def main() -> int:
                  'AmmMath!("shares", 200000000, 0, 0, true, *r) |\n'
                  "  for (@x <- r) { deployId!(x) }"), secret),
         100000000,
-    )
-
-    check(
-        "RiskMath.accrue",
-        one(call(state["06_risk_math_uri"], "RiskMath",
-                 'RiskMath!("accrue", 100, 0, 10, 3171, *r) |\n'
-                 "  for (@x <- r) { deployId!(x) }"), secret),
-        101,
-    )
-    check(
-        "RiskMath.health",
-        one(call(state["06_risk_math_uri"], "RiskMath",
-                 'RiskMath!("health", 200, 100, 100000000, 20000, *r) |\n'
-                 "  for (@x <- r) { deployId!(x) }"), secret),
-        True,
-    )
-    check(
-        "RiskMath.payout",
-        one(call(state["06_risk_math_uri"], "RiskMath",
-                 'RiskMath!("payout", 100, 800, 100000000, *r) |\n'
-                 "  for (@x <- r) { deployId!(x) }"), secret),
-        108,
     )
 
     check(

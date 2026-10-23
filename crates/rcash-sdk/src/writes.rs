@@ -4,13 +4,11 @@
 //! the decoded reply. A refusal is `ChainError::Refused`; a reverted deploy is
 //! `ChainError::DeployFailed`. Both leave the protocol state unchanged.
 
-use std::collections::BTreeMap;
-
 use rcash_chain::rho_expr::{Reply, RhoValue};
 use rcash_chain::ChainError;
 use rcash_core::Amount;
 
-use crate::reads::{VaultView, POOL_KEY};
+use crate::reads::POOL_KEY;
 use crate::{terms, Client};
 
 /// The result of an Account arm: the owner id and the arm's reply values.
@@ -18,27 +16,6 @@ use crate::{terms, Client};
 pub struct TxResult {
     pub owner_id: String,
     pub values: Vec<RhoValue>,
-}
-
-/// A vault's collateral and debt.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct VaultAmounts {
-    pub collateral: i64,
-    pub debt: i64,
-}
-
-/// The borrow result.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct VaultHealth {
-    pub debt: i64,
-    pub healthy: bool,
-}
-
-/// The repay result.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RepayResult {
-    pub debt: i64,
-    pub repaid: i64,
 }
 
 /// The swap result.
@@ -82,134 +59,6 @@ impl Client {
             .account_tx(&terms::withdraw_rev_to(&factory, amount, address)?)
             .await?;
         reply(&tx.values, 0)
-    }
-
-    /// Open (or recover) the caller's vault for a currency.
-    pub async fn vault_open(&self, currency: &str) -> Result<(), ChainError> {
-        let factory = self.require_manifest()?.account_factory_uri.clone();
-        let call = format!("\"openVault\", *deployerId, {}", terms::s(currency)?);
-        let tx = self
-            .account_tx(&terms::account_call(&factory, &call))
-            .await?;
-        reply(&tx.values, 0)?.into_result()?;
-        Ok(())
-    }
-
-    /// Deposit REV collateral.
-    pub async fn vault_deposit_collateral(
-        &self,
-        currency: &str,
-        amount: i64,
-    ) -> Result<VaultAmounts, ChainError> {
-        let factory = self.require_manifest()?.account_factory_uri.clone();
-        let call = format!(
-            "\"depositCollateral\", *deployerId, {}, {amount}",
-            terms::s(currency)?
-        );
-        let tx = self
-            .account_tx(&terms::account_call(&factory, &call))
-            .await?;
-        let values = reply(&tx.values, 0)?.into_result()?;
-        let map = map_at(&values, 0)?;
-        Ok(VaultAmounts {
-            collateral: map_int(map, "collateral")?,
-            debt: map_int(map, "debt")?,
-        })
-    }
-
-    /// Withdraw REV collateral into the Account's REV purse.
-    pub async fn vault_withdraw_collateral(
-        &self,
-        currency: &str,
-        amount: i64,
-    ) -> Result<Amount, ChainError> {
-        let factory = self.require_manifest()?.account_factory_uri.clone();
-        let call = format!(
-            "\"withdrawCollateral\", *deployerId, {}, {amount}",
-            terms::s(currency)?
-        );
-        let tx = self
-            .account_tx(&terms::account_call(&factory, &call))
-            .await?;
-        let values = reply(&tx.values, 0)?.into_result()?;
-        Ok(Amount::raw(int_at(&values, 0)?))
-    }
-
-    /// Borrow local currency against the vault.
-    pub async fn vault_borrow(
-        &self,
-        currency: &str,
-        amount: i64,
-    ) -> Result<VaultHealth, ChainError> {
-        let factory = self.require_manifest()?.account_factory_uri.clone();
-        let call = format!("\"borrow\", *deployerId, {}, {amount}", terms::s(currency)?);
-        let tx = self
-            .account_tx(&terms::account_call(&factory, &call))
-            .await?;
-        let values = reply(&tx.values, 0)?.into_result()?;
-        let map = map_at(&values, 0)?;
-        Ok(VaultHealth {
-            debt: map_int(map, "debt")?,
-            healthy: map_bool(map, "health")?,
-        })
-    }
-
-    /// Repay local currency.
-    pub async fn vault_repay(
-        &self,
-        currency: &str,
-        amount: i64,
-    ) -> Result<RepayResult, ChainError> {
-        let factory = self.require_manifest()?.account_factory_uri.clone();
-        let call = format!("\"repay\", *deployerId, {}, {amount}", terms::s(currency)?);
-        let tx = self
-            .account_tx(&terms::account_call(&factory, &call))
-            .await?;
-        let values = reply(&tx.values, 0)?.into_result()?;
-        let map = map_at(&values, 0)?;
-        Ok(RepayResult {
-            debt: map_int(map, "debt")?,
-            repaid: map_int(map, "repaid")?,
-        })
-    }
-
-    /// The caller's vault view (signed: it needs `deployerId`).
-    pub async fn vault_info(&self, currency: &str) -> Result<VaultView, ChainError> {
-        let factory = self.require_manifest()?.account_factory_uri.clone();
-        let call = format!("\"vaultInfo\", *deployerId, {}", terms::s(currency)?);
-        let tx = self
-            .account_tx(&terms::account_call(&factory, &call))
-            .await?;
-        let values = reply(&tx.values, 0)?.into_result()?;
-        let map = map_at(&values, 0)?;
-        Ok(VaultView {
-            collateral: map_int(map, "collateral")?,
-            debt: map_int(map, "debt")?,
-            healthy: map_bool(map, "health")?,
-            liquidatable: map_bool(map, "liquidatable")?,
-            fresh: map_bool(map, "fresh")?,
-            rate: map_int(map, "rate")?,
-        })
-    }
-
-    /// Liquidate an unhealthy vault, paying local currency from this Account.
-    pub async fn vault_liquidate(
-        &self,
-        currency: &str,
-        victim_owner_id: &str,
-        amount: i64,
-    ) -> Result<Amount, ChainError> {
-        let factory = self.require_manifest()?.account_factory_uri.clone();
-        let call = format!(
-            "\"liquidate\", *deployerId, {}, {}, {amount}",
-            terms::s(currency)?,
-            terms::s(victim_owner_id)?
-        );
-        let tx = self
-            .account_tx(&terms::account_call(&factory, &call))
-            .await?;
-        let values = reply(&tx.values, 0)?.into_result()?;
-        Ok(Amount::raw(int_at(&values, 0)?))
     }
 
     /// Send a claimable transfer. `claim_hash_hex` is the 32-byte BLAKE2b hash of the secret.
@@ -430,23 +279,4 @@ fn int_at(values: &[RhoValue], index: usize) -> Result<i64, ChainError> {
         .get(index)
         .and_then(RhoValue::as_int)
         .ok_or_else(|| decode(format!("value {index} is not an integer")))
-}
-
-fn map_at(values: &[RhoValue], index: usize) -> Result<&BTreeMap<String, RhoValue>, ChainError> {
-    values
-        .get(index)
-        .and_then(RhoValue::as_map)
-        .ok_or_else(|| decode(format!("value {index} is not a map")))
-}
-
-fn map_int(map: &BTreeMap<String, RhoValue>, key: &str) -> Result<i64, ChainError> {
-    map.get(key)
-        .and_then(RhoValue::as_int)
-        .ok_or_else(|| decode(format!("map key {key} is not an integer")))
-}
-
-fn map_bool(map: &BTreeMap<String, RhoValue>, key: &str) -> Result<bool, ChainError> {
-    map.get(key)
-        .and_then(RhoValue::as_bool)
-        .ok_or_else(|| decode(format!("map key {key} is not a boolean")))
 }

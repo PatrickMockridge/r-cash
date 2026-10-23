@@ -39,15 +39,6 @@ export interface Reserves {
   paused: boolean;
 }
 
-export interface VaultView {
-  collateral: number;
-  debt: number;
-  health: boolean;
-  liquidatable: boolean;
-  fresh: boolean;
-  rate: number;
-}
-
 export interface TransferInfo {
   sender: string;
   source: string;

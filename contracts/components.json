@@ -124,7 +124,6 @@
       "stateful": false,
       "state_cell": null,
       "arms": [
-        "checkZone",
         "checkFeed",
         "checkPool",
         "checkBook",
@@ -189,29 +188,6 @@
         "bytes": 8192,
         "depth": 32,
         "contracts": 6
-      }
-    },
-    {
-      "name": "RiskMath",
-      "kind": "kernel",
-      "stateful": false,
-      "state_cell": null,
-      "arms": [
-        "accrue",
-        "health",
-        "payout",
-        "seize"
-      ],
-      "dependencies": [],
-      "creates": [],
-      "system": [],
-      "deploy": "contracts/src/deploy/v3/06_risk_math.rho",
-      "instance_key": null,
-      "status": "implemented",
-      "budget": {
-        "bytes": 8192,
-        "depth": 32,
-        "contracts": 4
       }
     },
     {
@@ -284,64 +260,6 @@
       }
     },
     {
-      "name": "ZoneDirectory",
-      "kind": "registry",
-      "stateful": true,
-      "state_cell": "zoneDirectoryState",
-      "arms": [
-        "register",
-        "lookup",
-        "entries"
-      ],
-      "dependencies": [
-        "Root",
-        "Verifier",
-        "Codec"
-      ],
-      "creates": [],
-      "system": [],
-      "deploy": "contracts/src/deploy/v3/10_zone_factory.rho",
-      "instance_key": null,
-      "status": "implemented",
-      "budget": {
-        "bytes": 8192,
-        "depth": 32,
-        "contracts": 3
-      }
-    },
-    {
-      "name": "ZoneFactory",
-      "kind": "factory",
-      "stateful": false,
-      "state_cell": null,
-      "arms": [
-        "create"
-      ],
-      "dependencies": [
-        "Root",
-        "ZoneDirectory",
-        "Bounds",
-        "Codec",
-        "Verifier",
-        "Clock",
-        "ZoneTemplate"
-      ],
-      "creates": [
-        "CurrencyZone"
-      ],
-      "system": [
-        "rho:block:data"
-      ],
-      "deploy": "contracts/src/deploy/v3/10_zone_factory.rho",
-      "instance_key": null,
-      "status": "implemented",
-      "budget": {
-        "bytes": 8192,
-        "depth": 32,
-        "contracts": 1
-      }
-    },
-    {
       "name": "CurrencyRegistry",
       "kind": "registry",
       "stateful": true,
@@ -355,7 +273,6 @@
       ],
       "dependencies": [
         "Root",
-        "ZoneDirectory",
         "Bounds",
         "Codec",
         "Verifier",
@@ -364,9 +281,9 @@
       ],
       "creates": [],
       "system": [],
-      "deploy": "contracts/src/deploy/v3/11_currency_registry.rho",
+      "deploy": "contracts/src/deploy/v4/11_currency_registry.rho",
       "instance_key": null,
-      "status": "implemented",
+      "status": "planned",
       "budget": {
         "bytes": 16384,
         "depth": 48,
@@ -666,50 +583,6 @@
         "bytes": 16384,
         "depth": 48,
         "contracts": 2
-      }
-    },
-    {
-      "name": "CurrencyZone",
-      "kind": "domain",
-      "stateful": true,
-      "state_cell": "zoneState",
-      "arms": [
-        "open",
-        "depositCollateral",
-        "withdrawCollateral",
-        "borrow",
-        "repay",
-        "liquidate",
-        "vault",
-        "vaults",
-        "currency",
-        "params",
-        "brand",
-        "issuer",
-        "attest",
-        "admin"
-      ],
-      "dependencies": [
-        "Root",
-        "OracleHub",
-        "AccountFactory",
-        "RiskMath",
-        "Verifier",
-        "Clock",
-        "Governor"
-      ],
-      "creates": [],
-      "system": [
-        "rho:rchain:ertp",
-        "rho:block:data"
-      ],
-      "deploy": "contracts/src/deploy/v3/30_zone_template.rho",
-      "instance_key": "currency",
-      "status": "implemented",
-      "budget": {
-        "bytes": 16384,
-        "depth": 64,
-        "contracts": 7
       }
     },
     {
@@ -1031,23 +904,14 @@
         "depositFacet",
         "sendTransfer",
         "claimTransfer",
-        "refundTransfer",
-        "openVault",
-        "depositCollateral",
-        "withdrawCollateral",
-        "borrow",
-        "repay",
-        "liquidate",
-        "vaultInfo"
+        "refundTransfer"
       ],
       "dependencies": [
         "Root",
         "AccountGate",
         "PurseStore",
         "AssetResolver",
-        "VaultCell",
         "TransferClient",
-        "VaultClient",
         "AccountFactory"
       ],
       "creates": [],
@@ -1086,36 +950,6 @@
       "status": "planned",
       "budget": {
         "bytes": 12288,
-        "depth": 48,
-        "contracts": 1
-      }
-    },
-    {
-      "name": "VaultCell",
-      "kind": "account",
-      "stateful": false,
-      "state_cell": null,
-      "arms": [
-        "deposit",
-        "withdraw",
-        "borrow",
-        "repay",
-        "info"
-      ],
-      "dependencies": [
-        "Root",
-        "CurrencyZone",
-        "AccountFactory"
-      ],
-      "creates": [],
-      "system": [
-        "rho:rchain:ertp"
-      ],
-      "deploy": "contracts/src/deploy/v3/52_vault_cell.rho",
-      "instance_key": "owner_currency",
-      "status": "planned",
-      "budget": {
-        "bytes": 8192,
         "depth": 48,
         "contracts": 1
       }
@@ -1173,72 +1007,6 @@
         "bytes": 12288,
         "depth": 48,
         "contracts": 2
-      }
-    },
-    {
-      "name": "VaultClient",
-      "kind": "account",
-      "stateful": false,
-      "state_cell": null,
-      "arms": [
-        "open",
-        "depositCollateral",
-        "withdrawCollateral",
-        "borrow",
-        "repay",
-        "liquidate",
-        "info"
-      ],
-      "dependencies": [
-        "Root",
-        "CurrencyRegistry",
-        "CurrencyZone",
-        "AccountFactory"
-      ],
-      "creates": [],
-      "system": [
-        "rho:rchain:ertp"
-      ],
-      "deploy": "contracts/src/deploy/v3/53_clients.rho",
-      "instance_key": null,
-      "status": "planned",
-      "budget": {
-        "bytes": 16384,
-        "depth": 48,
-        "contracts": 2
-      }
-    },
-    {
-      "name": "ZoneTemplate",
-      "kind": "factory",
-      "stateful": false,
-      "state_cell": null,
-      "arms": [
-        "create"
-      ],
-      "dependencies": [
-        "Root",
-        "Bounds",
-        "Codec",
-        "Verifier",
-        "Clock",
-        "AccountFactory",
-        "ZoneDirectory"
-      ],
-      "creates": [
-        "CurrencyZone"
-      ],
-      "system": [
-        "rho:rchain:ertp",
-        "rho:block:data"
-      ],
-      "deploy": "contracts/src/deploy/v3/30_zone_template.rho",
-      "instance_key": null,
-      "status": "implemented",
-      "budget": {
-        "bytes": 16384,
-        "depth": 64,
-        "contracts": 7
       }
     }
   ]

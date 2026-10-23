@@ -43,13 +43,13 @@ created capability in its closure, so no live capability crosses a deploy.
 
 | Factory | Directory | Writes |
 |---|---|---|
-| `ZoneFactory` | `ZoneDirectory` | `currency → zoneUri`, created through `ZoneTemplate` |
+| `StablecoinFactory` (Phase 1) | `StablecoinDirectory` | `currency → {stablecoinUri, vaultBookUri, paramsHash, sponsor}` |
 | `MarketFactory` | `MarketDirectory` | `marketId → {poolUri, bookUri, lockUri, termsHash}` |
 
 `OracleFeed` is deployed per currency by its sponsor; `OracleRegistry.registerFeed` binds
 the URI after the sponsor signature and feed attestation check. There is no feed factory.
 
-The factory is the only writer. A caller cannot supply a pool, book, lock, zone or feed.
+The factory is the only writer. A caller cannot supply a pool, book, lock, stablecoin or feed.
 The sponsor signs the economic terms, not an arbitrary contract URI. `MarketDirectory`
 accepts draft binds and a final `seal`; a sealed slot is immutable for that market version.
 
@@ -67,23 +67,20 @@ by a block boundary before the next.
 |---|---|---|
 | 00 | `Root` | `rcash:root` |
 | 01 | `Clock`, `Verifier`, `Codec` | `component:clock`, `component:verifier`, `component:codec` |
-| 02 | `Bounds`, `AdminGuard`, `AmmMath`, `RiskMath`, `OracleMath`, `ClaimCode` | `component:*` |
+| 02 | `Bounds`, `AdminGuard`, `AmmMath`, `OracleMath`, `ClaimCode` | `component:*` |
 | 03 | `Governor` | `component:governor` |
-| 04 | `ZoneTemplate` | `component:zone-template` |
-| 05 | `ZoneFactory` + `ZoneDirectory` | `component:zone-factory`, `component:zone-directory` |
-| 06 | `CurrencyRegistry` | `component:currency-registry` |
 | 07 | `OracleRegistry` | `component:oracle-registry` |
 | 08 | `OracleHub` | `component:oracle-hub` |
 | 09 | `MarketFactory` + `MarketDirectory` + `MarketTerms` + `MarketIndex` | `component:market-*` |
 | 10 | `AssetResolver`, `ListingViews` | `component:asset-resolver`, `component:listing-views` |
-| 11 | `TransferClient`, `VaultClient` | `component:transfer-client`, `component:vault-client` |
+| 11 | `TransferClient` | `component:transfer-client` |
 | 12 | `AccountFactory` | `component:account-factory` |
-| 12 | per currency: `ZoneFactory.create` (via `ZoneTemplate`, returns the zone URI and attestation), then `CurrencyRegistry.register` with the sponsor signature and attestation | `zone:<CODE>` |
+| 13 | per currency: `StablecoinFactory.create`, then `CurrencyRegistry.register` (Phase 1) | `stablecoin:<CODE>` |
 | 13 | per currency: `OracleFeed`, then `OracleRegistry.registerFeed` | `feed:<CODE>` |
 | 14 | per market: `MarketFactory.createMarket`, seed, lock, activate | `market:<PAIR>:vN` |
 | 99 | `Root.freeze` | — |
 
-The installer writes `deployments/devnet-v3.json` only after the final step. Each step
+The installer writes `deployments/devnet-v4.json` only after the final step. Each step
 records the deploy id, block hash, block number, URIs, measured bytes/depth and phlo. A
 failed step aborts the install; it never writes a half-installed manifest.
 
@@ -117,8 +114,7 @@ decision is a snapshot; the `active` transition is the linearization point.
 `MarketIndex.status(marketId)` is the single authority for whether a market may trade.
 `FxPool.swap`/`addLiquidity` and `TransferBook.send` read it before consuming state. Local
 `paused` flags may only reduce trading. `pause`/`delist` is one `MarketIndex` write; it does
-not require three coordinated unit writes. Claim, refund, release and healthy collateral
-withdrawal remain available after pause/delist.
+not require three coordinated unit writes. Claim, refund and release remain available after pause/delist.
 
 ## 6. Rotation and freeze
 
@@ -128,7 +124,7 @@ withdrawal remain available after pause/delist.
 | `OracleFeed` | new feed URI and registry version; old feed readable until retired |
 | `MarketDirectory` slots | draft overwrite by the factory; sealed at activation; no post-activation overwrite |
 | `CurrencyRegistry`, `MarketIndex`, `MarketTerms` | append-only or content-addressed; no destructive rotation |
-| Custody (`CurrencyZone`, `FxPool`, `TransferBook`, `LiquidityLock`, `AccountFactory`) | no in-place rotation; freeze/drain, deploy a new version, re-seed |
+| Custody (`Stablecoin`, `VaultBook`, `FxPool`, `TransferBook`, `LiquidityLock`, `AccountFactory`) | no in-place rotation; freeze/drain, deploy a new version, re-seed |
 | `Root` | immutable after freeze; a successor `Root` is the upgrade path |
 
 ## 7. Persistence gate
@@ -144,8 +140,8 @@ therefore performs an empirical gate after every deploy that creates a bundled c
 
 A `decode continuation failed`, a missing reply, or a changed result fails the install.
 The unit and scenario runs also check that no state cell stores a capability obtained from
-`Root.resolve`, `ZoneDirectory`, `OracleRegistry`, `MarketDirectory`, `CurrencyRegistry` or
-`rho:registry:lookup`.
+`Root.resolve`, `StablecoinDirectory`, `OracleRegistry`, `MarketDirectory`,
+`CurrencyRegistry` or `rho:registry:lookup`.
 
 ## 8. Migration from v0.2
 

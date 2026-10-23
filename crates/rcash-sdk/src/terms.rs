@@ -375,7 +375,6 @@ mod tests {
             component_call(&uri, "pool:NGN/KES:fpmm", "\"reserves\"").unwrap(),
             rev_balance("1111abc").unwrap(),
             balances(&uri, &["REV".into(), "NGN".into()]).unwrap(),
-            account_call(&uri, "\"openVault\", *deployerId, \"NGN\""),
             deposit_rev(&uri, 1),
             withdraw_rev_to(&uri, 1, "1111abc").unwrap(),
             add_liquidity(&uri, &uri, "pool:NGN/KES:fpmm", 1, 1, 0).unwrap(),
