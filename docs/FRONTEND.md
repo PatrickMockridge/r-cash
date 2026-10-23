@@ -25,15 +25,19 @@ immediately before each freshness-gated step).
 
 | Route | What it does | Notes |
 |---|---|---|
-| `/` | Accounts: balances, address, faucet, refresh | One signed deploy reads all assets |
-| `/receive` | REV address, open a claim link | No stablecoin address exists in v0.1 |
-| `/convert` | Quote then convert with a minimum received | One atomic withdraw→swap→deposit deploy |
-| `/pay` | Send a claimable transfer | Shows the claim link and warns about the secret |
-| `/claim/:id/:secret` | Review and claim a transfer | Secret stays in the URL fragment |
-| `/liquidity` | Reserves, quote the KES side, add/remove | LP balance included |
-| `/batch` | Disabled | `sendBatch` is not in v0.1 |
+| `/` | Accounts: native REV, per-asset account purses, deposit REV, faucet, public key | Owner balance reads are signed; the REV balance gates them |
+| `/receive` | Public key, REV address, open a claim link | A sender needs the public key for a claimable transfer |
+| `/convert` | Discover the direct market, quote, then swap with a minimum received | One atomic withdraw→swap→deposit deploy; blocked while the market is not active |
+| `/pay` | Send a claimable transfer to a public key | Generates the 32-byte secret and its BLAKE2b hash in wasm; shows the link |
+| `/claim/:uri/:secret` | Review and claim a transfer by URI | Secret stays in the URL fragment |
+| `/liquidity` | Market slot, reserves, seed lock, add-and-lock, release | Add withdraws both sides and funds the lock; release returns both sides to the account |
+| `/batch` | Disabled | Batch payouts are not in the v0.4 protocol |
 | `/ramps` | Disabled | Off-chain licensed-partner boundary |
 | `/settings` | Node URL, manifest, export keystore, lock | Only non-secret config is stored |
+
+The manifest is `deployments/devnet-v4.json`, copied to `public/devnet.json` by
+`scripts/sync-manifest.mjs`; the wasm constructor recognises a v0.4 document by its
+`root_uri` field.
 
 No screen uses mock balances, quotes, partners or transactions. Disabled screens say why.
 

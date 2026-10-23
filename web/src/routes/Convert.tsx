@@ -1,31 +1,61 @@
 import { useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Unlock from "../components/Unlock";
 import { useWallet } from "../lib/store";
 import { formatUnits } from "../lib/format";
-import type { Quote, SwapResult } from "../lib/types";
+import type { V4Market, V4Quote, V4Slot } from "../lib/types";
+
+interface Pair {
+  market: V4Market;
+  direction: "b2q" | "q2b";
+}
 
 export default function Convert() {
   const { status, client } = useWallet();
   const queryClient = useQueryClient();
-  const [from, setFrom] = useState("NGN");
-  const [to, setTo] = useState("KES");
-  const [amount, setAmount] = useState("1");
+  const [from, setFrom] = useState("REV");
+  const [to, setTo] = useState("V4T");
+  const [amount, setAmount] = useState("0.1");
   const [minOut, setMinOut] = useState("0");
-  const [quote, setQuote] = useState<Quote | null>(null);
-  const [result, setResult] = useState<SwapResult | null>(null);
+  const [quote, setQuote] = useState<V4Quote | null>(null);
+  const [result, setResult] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const pair = useQuery({
+    queryKey: ["v4-pair", from, to],
+    enabled: status === "unlocked" && !!client && from !== to,
+    queryFn: async () => {
+      const direct = JSON.parse(await client!.v4_market(from, to)) as V4Market | null;
+      if (direct) return { market: direct, direction: "b2q" } as Pair;
+      const reverse = JSON.parse(await client!.v4_market(to, from)) as V4Market | null;
+      if (reverse) return { market: reverse, direction: "q2b" } as Pair;
+      return null;
+    },
+  });
+
+  const marketId = pair.data?.market.marketId;
+  const slot = useQuery({
+    queryKey: ["v4-slot", marketId],
+    enabled: !!marketId && status === "unlocked" && !!client,
+    queryFn: async () => JSON.parse(await client!.v4_slot(marketId!)) as V4Slot,
+  });
+
   if (status !== "unlocked") return <Unlock />;
 
+  const active = pair.data?.market.status === "active";
+
   const getQuote = async () => {
-    if (!client) return;
+    if (!client || !pair.data || !slot.data) return;
     setBusy(true);
     setError(null);
     setResult(null);
     try {
-      setQuote(JSON.parse(await client.pool_quote(from, amount)) as Quote);
+      setQuote(
+        JSON.parse(
+          await client.v4_quote(slot.data.pool, pair.data.direction, amount),
+        ) as V4Quote,
+      );
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -34,12 +64,15 @@ export default function Convert() {
   };
 
   const execute = async () => {
-    if (!client) return;
+    if (!client || !pair.data || !slot.data) return;
     setBusy(true);
     setError(null);
     try {
-      setResult(JSON.parse(await client.convert(from, to, amount, minOut)) as SwapResult);
-      await queryClient.invalidateQueries({ queryKey: ["balances"] });
+      const reply = JSON.parse(
+        await client.v4_swap(slot.data.pool, pair.data.direction, from, to, amount, minOut),
+      ) as { amountOut: number };
+      setResult(reply.amountOut);
+      await queryClient.invalidateQueries({ queryKey: ["v4-balances"] });
       setQuote(null);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
@@ -52,25 +85,19 @@ export default function Convert() {
     <section className="panel narrow">
       <h2>Convert</h2>
       <p className="muted">
-        One atomic deploy: withdraw the source currency, swap through the corridor pool, and
-        deposit the destination into your Account. The pool spread is the fee, and it goes to
-        liquidity providers.
+        One atomic deploy: withdraw the source asset from your account, swap through the
+        direct market, and deposit the destination back. The pool spread is the fee, and it
+        goes to liquidity providers.
       </p>
 
       <div className="row gap">
         <label className="field">
           From
-          <select value={from} onChange={(event) => setFrom(event.target.value)}>
-            <option value="NGN">NGN</option>
-            <option value="KES">KES</option>
-          </select>
+          <input value={from} onChange={(event) => setFrom(event.target.value.toUpperCase())} />
         </label>
         <label className="field">
           To
-          <select value={to} onChange={(event) => setTo(event.target.value)}>
-            <option value="KES">KES</option>
-            <option value="NGN">NGN</option>
-          </select>
+          <input value={to} onChange={(event) => setTo(event.target.value.toUpperCase())} />
         </label>
       </div>
       <label className="field">
@@ -82,47 +109,70 @@ export default function Convert() {
         <input value={minOut} onChange={(event) => setMinOut(event.target.value)} />
       </label>
 
+      {pair.isError && <p className="error">{String(pair.error)}</p>}
+      {pair.data === null && (
+        <p className="error">No market for this pair. Try REV/V4T.</p>
+      )}
+      {pair.data && !active && (
+        <p className="warn">
+          Market {pair.data.market.marketId} is {pair.data.market.status}; a staged pool has
+          no liquidity. Swap only when the market is active.
+        </p>
+      )}
+      {pair.data && slot.data && (
+        <p className="muted small mono">
+          {pair.data.market.marketId} · pool {slot.data.pool}
+        </p>
+      )}
       {error && <p className="error">{error}</p>}
 
       <div className="row gap">
-        <button className="ghost" onClick={getQuote} disabled={busy || from === to}>
+        <button
+          className="ghost"
+          onClick={getQuote}
+          disabled={busy || !active || from === to}
+        >
           {busy ? "Working…" : "Quote"}
         </button>
-        <button className="primary" onClick={execute} disabled={busy || from === to}>
+        <button
+          className="primary"
+          onClick={execute}
+          disabled={busy || !active || from === to}
+        >
           Convert
         </button>
       </div>
 
-      {from === to && <p className="error">Pick two different currencies.</p>}
+      {from === to && <p className="error">Pick two different assets.</p>}
       {quote && (
         <div className="result">
           <div>
             <span className="muted">Quoted</span>
-            <strong>{formatUnits(quote.amountOut)} {to}</strong>
+            <strong>
+              {formatUnits(quote.amountOut)} {to}
+            </strong>
           </div>
           <div>
-            <span className="muted">Fee (output units)</span>
-            <span>{formatUnits(quote.fee)}</span>
+            <span className="muted">Fee (bps)</span>
+            <span>{quote.fee}</span>
           </div>
           <div>
-            <span className="muted">Max trade</span>
-            <span>{formatUnits(quote.maxIn)} {from}</span>
+            <span className="muted">Oracle rate (1e8)</span>
+            <span>{quote.rate}</span>
           </div>
           <p className="muted small">
-            A quote is a separate signed read. The execution deploy re-quotes; the minimum
-            received is what protects you if it moved.
+            The quote is a signed read. Execution re-quotes; the minimum received protects
+            you if the pool moved.
           </p>
         </div>
       )}
-      {result && (
+      {result !== null && (
         <div className="result">
           <div>
             <span className="muted">Converted</span>
-            <strong>{formatUnits(result.amountOut)} {to}</strong>
-          </div>
-          <div>
-            <span className="muted">Fee</span>
-            <span>{formatUnits(result.fee)}</span>
+            <strong>
+              {formatUnits(result)} {to}
+            </strong>
           </div>
         </div>
       )}

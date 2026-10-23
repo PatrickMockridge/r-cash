@@ -52,6 +52,24 @@ pub struct V4Transfer {
     pub status: String,
 }
 
+/// A pool quote.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct V4Quote {
+    pub amount_out: i64,
+    pub fee: i64,
+    pub rate: i64,
+}
+
+/// The seed lock's state.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct V4Lock {
+    pub funded: bool,
+    pub released: bool,
+    pub cancelled: bool,
+    pub until_height: i64,
+    pub shares: i64,
+}
+
 /// A market's pool and seed-lock URIs.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct V4Slot {
@@ -246,6 +264,47 @@ impl Client {
         })
     }
 
+    /// A pool quote for a direction and input amount.
+    pub async fn v4_quote(
+        &self,
+        pool_uri: &str,
+        direction: &str,
+        amount: i64,
+    ) -> Result<V4Quote, ChainError> {
+        let reply = self
+            .v4_read(
+                pool_uri,
+                &format!("\"quote\", {}, {amount}", terms::s(direction)?),
+            )
+            .await?;
+        let values = reply.into_result()?;
+        Ok(V4Quote {
+            amount_out: int_at(&values, 0)?,
+            fee: int_at(&values, 1)?,
+            rate: int_at(&values, 2)?,
+        })
+    }
+
+    /// The seed lock's state.
+    pub async fn v4_lock_info(&self, lock_uri: &str) -> Result<V4Lock, ChainError> {
+        let reply = self.v4_read(lock_uri, "\"info\"").await?;
+        let values = reply.into_result()?;
+        let entry = map_at(&values, 0)?;
+        Ok(V4Lock {
+            funded: field(entry, "funded")?
+                .as_bool()
+                .ok_or_else(|| decode("funded is not a boolean"))?,
+            released: field(entry, "released")?
+                .as_bool()
+                .ok_or_else(|| decode("released is not a boolean"))?,
+            cancelled: field(entry, "cancelled")?
+                .as_bool()
+                .ok_or_else(|| decode("cancelled is not a boolean"))?,
+            until_height: field_int(entry, "untilHeight")?,
+            shares: field_int(entry, "shares")?,
+        })
+    }
+
     /// A stablecoin's total supply.
     pub async fn v4_supply(&self, stablecoin_uri: &str) -> Result<i64, ChainError> {
         let reply = self.v4_read(stablecoin_uri, "\"supply\"").await?;
@@ -437,6 +496,47 @@ impl Client {
                _ => {{ deployId!(r) }} }} }} }} }}",
             base_lit = terms::s(base_asset)?,
             quote_lit = terms::s(quote_asset)?,
+        );
+        let values = self.v4_tx(&body).await?.into_result()?;
+        int_at(&values, 0)
+    }
+
+    /// Add both sides of a market from the account and lock the seed LP.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn v4_add_liquidity(
+        &self,
+        pool_uri: &str,
+        lock_uri: &str,
+        base_asset: &str,
+        quote_asset: &str,
+        base_amount: i64,
+        quote_amount: i64,
+        until_height: i64,
+    ) -> Result<i64, ChainError> {
+        let body = format!(
+            "new wb, wq, pCh, aCh, lCh, fCh, d1, d2 in {{ \
+             @account!(\"withdraw\", *deployerId, {base_lit}, {base_amount}, *wb) | \
+             for (@(true, basePayment) <- wb) {{ \
+               @account!(\"withdraw\", *deployerId, {quote_lit}, {quote_amount}, *wq) | \
+               for (@(true, quotePayment) <- wq) {{ \
+                 rl!(`{pool_uri}`, *pCh) | for (FxPool <- pCh) {{ \
+                 FxPool!(\"addLiquidity\", basePayment, quotePayment, 0, *aCh) | \
+                 for (@a <- aCh) {{ match a {{ \
+                   (true, lpPayment, shares) => {{ \
+                     rl!(`{lock_uri}`, *lCh) | for (LiquidityLock <- lCh) {{ \
+                     LiquidityLock!(\"fund\", *deployerId, lpPayment, ownerId, \
+                                   {until_height}, *fCh) | \
+                     for (@f <- fCh) {{ match f {{ \
+                       (true, _) => deployId!((true, shares)) \
+                       _ => deployId!(f) }} }} }} }} \
+                   _ => deployId!(a) }} }} }} }} }} }}",
+            base_lit = terms::s(base_asset)?,
+            quote_lit = terms::s(quote_asset)?,
+            base_amount = base_amount,
+            quote_amount = quote_amount,
+            until_height = until_height,
+            pool_uri = pool_uri,
+            lock_uri = lock_uri,
         );
         let values = self.v4_tx(&body).await?.into_result()?;
         int_at(&values, 0)

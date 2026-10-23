@@ -18,7 +18,7 @@ mod writes;
 
 pub use rcash_chain::rho_expr::{Reply as ProtocolReply, RhoValue as ProtocolValue};
 pub use reads::{Balances, FxRate, PriceFeed, Quote, QuoteAdd, Reserves, TransferInfo};
-pub use v4::{V4Currency, V4Market, V4Reserves, V4Sent, V4Slot, V4Transfer};
+pub use v4::{V4Currency, V4Lock, V4Market, V4Quote, V4Reserves, V4Sent, V4Slot, V4Transfer};
 pub use writes::{SwapResult, TxResult};
 
 pub use rcash_chain;
@@ -195,6 +195,11 @@ impl Client {
     /// Wait for a previously submitted deploy id.
     pub async fn wait(&self, deploy_id: &str) -> Result<DeployStatus, ChainError> {
         self.node.wait_processed(deploy_id, self.poll).await
+    }
+
+    /// The current finalized tip height, for absolute transfer expiries.
+    pub async fn height(&self) -> Result<i64, ChainError> {
+        self.node.latest_block_number().await
     }
 
     /// Run a public read and decode the protocol reply it returns.

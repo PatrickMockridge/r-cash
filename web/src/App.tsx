@@ -24,14 +24,14 @@ export default function App() {
         <Route path="receive" element={<Receive />} />
         <Route path="convert" element={<Convert />} />
         <Route path="pay" element={<Pay />} />
-        <Route path="claim/:id/:secret" element={<Claim />} />
+        <Route path="claim/:uri/:secret" element={<Claim />} />
         <Route path="liquidity" element={<Liquidity />} />
         <Route
           path="batch"
           element={
             <Disabled
               title="Batch payouts"
-              reason="sendBatch is not in the v0.1 protocol. Paying several recipients today means several separate deploys, which is not atomic, so this screen does not pretend otherwise."
+              reason="Batch payouts are not in the v0.4 protocol. Paying several recipients today means several separate deploys, which is not atomic, so this screen does not pretend otherwise."
             />
           }
         />
@@ -40,7 +40,7 @@ export default function App() {
           element={
             <Disabled
               title="Local ramps"
-              reason="A live ramp is a licensed off-chain partner, not an on-chain contract. v0.1 has no RampRegistry; payouts happen off-chain with the recipient's key."
+              reason="A live ramp is a licensed off-chain partner, not an on-chain contract. v0.4 has no ramp registry; payouts happen off-chain with the recipient's key."
             />
           }
         />

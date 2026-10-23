@@ -1,29 +1,27 @@
 import { useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Unlock from "../components/Unlock";
 import { useWallet } from "../lib/store";
 import { formatUnits } from "../lib/format";
-import type { ClaimResult, TransferInfo } from "../lib/types";
+import type { V4Transfer } from "../lib/types";
 
 export default function Claim() {
   const params = useParams();
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { status, client } = useWallet();
-  const [dest, setDest] = useState("KES");
-  const [result, setResult] = useState<ClaimResult | null>(null);
+  const [credited, setCredited] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const id = Number.parseInt(params.id ?? "", 10);
+  const uri = params.uri ?? "";
   const secret = (params.secret ?? "").toLowerCase();
-  const valid = Number.isSafeInteger(id) && id >= 0 && /^[0-9a-f]{64}$/.test(secret);
+  const valid = uri.startsWith("rho:id:") && /^[0-9a-f]{64}$/.test(secret);
 
   const info = useQuery({
-    queryKey: ["transfer", id],
+    queryKey: ["v4-transfer", uri],
     enabled: valid && status === "unlocked" && !!client,
-    queryFn: async () => JSON.parse(await client!.transfer_info(BigInt(id))) as TransferInfo,
+    queryFn: async () => JSON.parse(await client!.v4_transfer_info(uri)) as V4Transfer,
   });
 
   if (!valid) {
@@ -40,7 +38,8 @@ export default function Claim() {
       <div className="stack">
         <section className="panel">
           <div className="badge">claim waiting</div>
-          <h2>Transfer #{id}</h2>
+          <h2>Transfer</h2>
+          <p className="muted mono small">{uri}</p>
           <p className="muted">
             Create or unlock a wallet to receive this transfer. The secret is in the link;
             it is not stored anywhere.
@@ -56,11 +55,12 @@ export default function Claim() {
     setBusy(true);
     setError(null);
     try {
-      setResult(
-        JSON.parse(await client.claim_transfer(BigInt(id), dest, secret)) as ClaimResult,
-      );
-      await queryClient.invalidateQueries({ queryKey: ["balances"] });
-      await queryClient.invalidateQueries({ queryKey: ["transfer", id] });
+      const reply = JSON.parse(
+        await client.v4_claim_transfer(uri, secret),
+      ) as { baseUnits: number };
+      setCredited(reply.baseUnits);
+      await queryClient.invalidateQueries({ queryKey: ["v4-balances"] });
+      await info.refetch();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -68,68 +68,54 @@ export default function Claim() {
     }
   };
 
+  const closed = info.data && info.data.status !== "open";
+
   return (
     <section className="panel narrow">
-      <h2>Claim transfer #{id}</h2>
+      <div className="badge">claim</div>
+      <h2>Transfer</h2>
+      <p className="muted mono small">{uri}</p>
+
       {info.isError && <p className="error">{String(info.error)}</p>}
       {info.data && (
-        <div className="result">
+        <div className="grid">
+          <div>
+            <span className="muted">Asset</span>
+            <strong>{info.data.asset}</strong>
+          </div>
           <div>
             <span className="muted">Amount</span>
-            <strong>
-              {formatUnits(info.data.amount)} {info.data.dest}
-            </strong>
+            <strong>{formatUnits(info.data.amount)}</strong>
+          </div>
+          <div>
+            <span className="muted">Expires at height</span>
+            <strong>{info.data.expiry}</strong>
           </div>
           <div>
             <span className="muted">Status</span>
-            <span>{info.data.status}</span>
-          </div>
-          <div>
-            <span className="muted">Expires at block</span>
-            <span>{info.data.expiry}</span>
-          </div>
-          <div>
-            <span className="muted">From</span>
-            <span className="mono small">{info.data.sender}</span>
+            <strong>{info.data.status}</strong>
           </div>
         </div>
       )}
 
-      {!result ? (
-        <>
-          <p className="muted small">
-            Claiming deposits the escrowed amount into this wallet's Account. The secret
-            becomes public in the deploy; after this, the link has no value.
-          </p>
-          <label className="field">
-            Receive asset
-            <select value={dest} onChange={(event) => setDest(event.target.value)}>
-              <option value={info.data?.dest ?? "KES"}>{info.data?.dest ?? "KES"}</option>
-            </select>
-          </label>
-          {error && <p className="error">{error}</p>}
-          <button
-            className="primary"
-            onClick={claim}
-            disabled={busy || info.data?.status !== "open"}
-          >
-            {busy ? "Claiming…" : "Claim"}
-          </button>
-          {info.data && info.data.status !== "open" && (
-            <p className="error">This transfer is {info.data.status}, not open.</p>
-          )}
-        </>
-      ) : (
-        <div className="result">
-          <div>
-            <span className="muted">Claimed</span>
-            <strong>{result.claimed}</strong>
-          </div>
-          <button className="primary" onClick={() => navigate("/", { replace: true })}>
-            Clear the link and open Accounts
-          </button>
-        </div>
+      {error && <p className="error">{error}</p>}
+      {credited !== null && (
+        <p className="ok">
+          Claimed {formatUnits(credited)} into your account.
+        </p>
       )}
+
+      <button
+        className="primary"
+        onClick={claim}
+        disabled={busy || closed || !info.data}
+      >
+        {busy ? "Claiming…" : closed ? "Already closed" : "Claim into my account"}
+      </button>
+      <p className="muted small">
+        The claim delivers the payment into this account's purse for the transfer's asset.
+        A wrong secret is refused on-chain; after expiry the sender can refund instead.
+      </p>
     </section>
   );
 }

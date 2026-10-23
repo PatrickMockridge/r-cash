@@ -1,5 +1,5 @@
 // The wasm module is generated into ./pkg by scripts/build-wasm.mjs.
-import init, { Rcash, node_commit, version } from "./pkg/rcash_wasm.js";
+import init, { Rcash, claim_hash, node_commit, version } from "./pkg/rcash_wasm.js";
 
 let ready: Promise<unknown> | null = null;
 
@@ -9,4 +9,4 @@ export async function initWasm(): Promise<void> {
   await ready;
 }
 
-export { Rcash, node_commit, version };
+export { Rcash, claim_hash, node_commit, version };

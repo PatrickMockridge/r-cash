@@ -5,21 +5,23 @@ import { useWallet } from "../lib/store";
 import { parseClaim } from "../lib/claim";
 
 export default function Receive() {
-  const { status, address } = useWallet();
+  const { status, client, address } = useWallet();
   const navigate = useNavigate();
   const [claim, setClaim] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   if (status !== "unlocked") return <Unlock />;
 
+  const publicKey = client?.public_key() ?? "";
+
   const openClaim = () => {
     const parsed = parseClaim(claim);
     if (!parsed) {
-      setError("That is not a claim link or #/claim/<id>/<secret> fragment.");
+      setError("That is not a claim link or #/claim/<uri>/<secret> fragment.");
       return;
     }
     setError(null);
-    navigate(`/claim/${parsed.id}/${parsed.secret}`);
+    navigate(`/claim/${parsed.uri}/${parsed.secret}`);
   };
 
   return (
@@ -27,9 +29,22 @@ export default function Receive() {
       <section className="panel">
         <h2>Receive</h2>
         <p className="muted">
-          Your REV address is shareable. Local currency arrives through a claim link: the
-          sender escrows KES or NGN against a secret, and you claim it here.
+          Share your public key with a sender. They create a claimable transfer to your
+          account, escrow the asset in a per-transfer cell, and send you the claim link. The
+          link's secret is bearer authority until it is claimed.
         </p>
+        <label className="field">
+          Public key
+          <div className="row gap">
+            <input readOnly value={publicKey} className="mono" />
+            <button
+              className="ghost"
+              onClick={() => publicKey && void navigator.clipboard.writeText(publicKey)}
+            >
+              Copy
+            </button>
+          </div>
+        </label>
         <label className="field">
           REV address
           <div className="row gap">
@@ -43,8 +58,8 @@ export default function Receive() {
           </div>
         </label>
         <p className="muted small">
-          There is no stablecoin address in v0.1: an Account's deposit facet is an
-          unforgeable name, not something that can be written down or shared.
+          The REV address is for native wallets and the faucet. Assets inside the account
+          move by claimable transfer, not by sending to an address.
         </p>
       </section>
 
@@ -59,7 +74,7 @@ export default function Receive() {
           <input
             value={claim}
             onChange={(event) => setClaim(event.target.value)}
-            placeholder="#/claim/12/…"
+            placeholder="#/claim/rho:id:…/…"
             className="mono"
           />
         </label>

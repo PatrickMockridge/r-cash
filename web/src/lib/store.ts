@@ -49,7 +49,7 @@ export const useWallet = create<WalletState>((set, get) => ({
         set({
           status: "error",
           error:
-            "No deployment manifest. Paste deployments/devnet.json in Settings (or run the devnet install).",
+            "No deployment manifest. Paste deployments/devnet-v4.json in Settings (or run the devnet install).",
         });
         return;
       }

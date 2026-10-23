@@ -212,3 +212,7 @@ was refused `closed`.
 
 Amounts accept decimals (`0.05` = 5,000,000 base units) or integers in base units where
 the command says `AMOUNT`; `parse_amount` is the one parser.
+
+The wasm facade exposes the same operations as `v4_*` methods on `Rcash`, plus
+`claim_hash(secret_hex)`, `public_key()` (needed by a sender) and `height()` (for absolute
+transfer expiries). The constructor detects a v0.4 manifest by its `root_uri` field.
