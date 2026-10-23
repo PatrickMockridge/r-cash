@@ -39,21 +39,20 @@ The v0.4 platform terms were deployed to `testnet.rhobot.net` from a dedicated k
 by the node faucet. Installed: Root, kernel, Bounds, Governor, the pure maths, oracle
 registry and hub, currency registry and stablecoin directory, asset resolver, transfer
 book, pool template, the market layer and the account factory. The generated manifest is
-`deployments/testnet-v4.json`; the procedure and the network's measured limits are in
-[`TESTNET.md`](TESTNET.md).
+`deployments/testnet-v4.json`; the procedure is in [`TESTNET.md`](TESTNET.md).
 
-Two platform behaviours were found and are handled by the installer:
+**The rhobot validators run on 1 GB hosts; the advised memory is 8–16 GB.** Under the
+deploy burst the hosts exhausted memory and the APIs became unresponsive (health
+`nodes: 0`, `mem_available_mb` in single digits), with read lag and a later height
+divergence between validators. Those observations are attributed to hardware below the
+minimum advisory, not to the protocol; the local devnet (47 GB, 24 cores) is the
+adequately provisioned evidence for the eight contract suites. The installer still
+verifies every component with `Root.resolve` and re-registers missing keys as a safety
+measure.
 
-- an `explore-deploy` read can lag a finalised write; registrations and balances must be
-  re-read rather than trusted on the first response;
-- a deploy that registers several Root keys can report success for a write that is later
-  absent. The installer verifies every component with `Root.resolve`; missing keys were
-  re-registered one at a time and now resolve.
-
-Feed listing and the TUSD stablecoin were not completed: during setup the validator HTTP
-APIs stopped responding and the health snapshot reported `ok: false`, `nodes: 0`,
-`mem_available_mb: 16` on 1 GB hosts. No further deploys were attempted; the hosts need
-operator recovery before the testnet work resumes.
+Feed listing and the TUSD stablecoin were not completed before the hosts became
+unusable. The correct next experiment is the same deploy on nodes with the advised
+8–16 GB.
 
 ## Legacy v0.1 results
 

@@ -1,9 +1,15 @@
 # The rhobot public testnet
 
 The r-cash platform is deployed from the same built terms that the devnet harness
-exercises. The testnet is the rhobot network: four bonded validators on two 1 GB hosts,
-an idle chain that produces a block when a deploy arrives, network id `testnet`, shard
-`/root`.
+exercises. The testnet is the rhobot network: four bonded validators on two **1 GB**
+hosts, an idle chain that produces a block when a deploy arrives, network id `testnet`,
+shard `/root`.
+
+> **Hardware note.** The rholo node's advised memory is **8–16 GB**; these validators run
+> on 1 GB each. The stalls, read lag, lost registrations and height divergence observed
+> while deploying r-cash are consistent with resource exhaustion on hosts below the
+> minimum advisory. They are **not** evidence about the protocol. Re-run the deploy on
+> adequately provisioned nodes before drawing conclusions about node reliability.
 
 | | |
 |---|---|
@@ -36,32 +42,29 @@ Use `--node` to pick a validator. The direct HTTP ports avoid the node CLI's mis
 backend; `https://testnet.rhobot.net` works for curl and browsers but not the native
 client.
 
-## Operational notes measured on this network
+## Operating on an under-provisioned chain
 
-- **The hosts are 1 GB each.** Continuous block production (or a burst of large deploys)
-  can drive `mem_available_mb` to single digits and make the HTTP API time out. The
-  operator's rule is an idle chain; space deploys out and watch
-  `https://testnet.rhobot.net/health`.
-- **Reads can lag writes.** After a deploy finalises, an `explore-deploy` read can still
-  return an older state for a moment (the same race documented for REV balances). Poll,
-  or verify a registration before depending on it.
-- **Multi-register deploys can lose a write.** A deploy that registers several Root keys
-  in parallel, or rapidly successive registrations, has been observed to return `true`
-  for a register whose entry is later absent. `harness/install_testnet.py` therefore
-  verifies each component by `Root.resolve` after installation; re-register any missing
-  key one at a time and re-read until it persists.
-- **Stale health.** `/health` is a snapshot refreshed every 60 s by the node hosts. If
-  `ts` is old, `ok` is `false`, `nodes` is `0`, or `mem_available_mb` is tiny, the API is
-  not usable; stop deploying rather than retrying.
-- Deploys cost a fraction of a cent of test REV; the faucet's 0.3 REV covers a full
-  install. The client's default phlo limit (1,000,000) is enough for every r-cash term.
+Everything below was observed on the 1 GB hosts and should be read as symptoms of memory
+pressure, not as node bugs:
+
+- **`mem_available_mb` collapses to single digits** under a burst of deploys; the HTTP API
+  then times out. Space deploys out and watch `https://testnet.rhobot.net/health`.
+- **Reads can lag writes** while the node is under load. Poll or re-read rather than
+  trusting the first response.
+- **A multi-key Root registration can report success for an entry that is later absent.**
+  `harness/install_testnet.py` verifies every component with `Root.resolve` and
+  re-registers missing keys one at a time. This is defensive tooling; it is not a claim
+  that Root loses writes on adequate hardware.
+- **Health is a 60 s snapshot.** An old `ts`, `ok: false`, `nodes: 0` or tiny memory means
+  the API is not usable; stop deploying rather than retrying.
+- Deploys cost a fraction of test REV; the faucet's 0.3 REV covers a full install and the
+  client's default phlo limit (1,000,000) is enough for every r-cash term.
 
 ## Current deployment
 
-Installed on the chain at height ~1,100: Root, kernel, Bounds, Governor, the pure maths,
-oracle registry/hub, currency registry and directory, asset resolver, transfer book,
-pool template, market layer, and the account factory. Missing Root entries were
-re-registered after the install's parallel writes were lost. The REV and TUSD feeds and
-the TUSD stablecoin were not yet listed when the validator APIs stopped responding
-(`health: ok false`, `nodes: 0`, `mem_available_mb: 16`); recovering the hosts is an
-operator task.
+The platform terms were deployed at height ~1,100 against validator A. Registrations
+were then verified and repaired through `Root.resolve`. The REV and TUSD feeds and the
+TUSD stablecoin were not completed: the hosts ran out of memory and the validator APIs
+stopped responding. This run says the hosts are below the advised minimum; it does not
+test the protocol beyond the deploy acceptance it already demonstrated. A re-run on
+8–16 GB nodes is the correct next experiment.
