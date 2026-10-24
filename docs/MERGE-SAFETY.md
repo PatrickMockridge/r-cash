@@ -128,6 +128,11 @@ Per currency and market, later steps are separate deploys (`31_feed` → registr
 `31_stablecoin` → currency register, `MarketFactory.createMarket`). They are listed in
 `docs/spec/30-WIRING.md`; each returns a value the caller can verify.
 
+The "resolve" in the last column is a **signed read at the current finalized state**, not
+`explore-deploy-by-block-hash`: on this node the explore endpoint cannot see the native
+registry (§8.2.1). The carrying block is still required to be finalized, so its post-state
+is canonical; the read is made after that check.
+
 `Root.register` duplicate rule: insert-only, existing key wins, `(false, "duplicate")` for a
 re-register, `(false, "frozen"|"not installer"|"bad version")` otherwise. A byte-identical
 resubmission is refused by the node before parse while pooled; after inclusion the same
@@ -153,6 +158,10 @@ signed-deploy cache (`deploy_term_cached`) used by `rcash deploy --op`.
 
 ## 7. What changed in v0.5
 
+The "Test" column names the test that would catch a regression. The merge arms referenced
+there were not reached on this host (§8.3); the Rust and harness unit tests and the install
+pass did run.
+
 | Finding | Change | Test |
 |---|---|---|
 | Global transfer-id counter (`bookState`) was a shared linear cell on every send | per-owner `accountState`; `TransferBook.send` takes `@id`; the counter is consumed and reposted before any await | unit transfer; T1-A/B |
@@ -165,29 +174,65 @@ signed-deploy cache (`deploy_term_cached`) used by `rcash deploy --op`.
 
 ## 8. Devnet evidence
 
-To be recorded after the arms run. Every result file records:
+Run of 2026-10-25 on a disposable devnet built from the fixed source:
 
-- node source `git rev-parse HEAD` (expected `ee72656ea…`);
-- `docker image inspect rnode:local --format '{{.Id}}'`;
-- the image's `GIT_HEAD_COMMIT` label;
-- `DEVNET_PREFIX=rcash`, validator count, memory limit, and timestamps.
+| Fact | Value |
+|---|---|
+| Node source | `ee72656eacb03d6656664c8f2b9b912ad7ad9cb4` |
+| Image | `rnode:local`, `sha256:25ee8040c00ce5caa61b16a2d8b46188235a2de1d042e2db1ee89ecf548d885c` |
+| Topology | `DEVNET_PREFIX=rcash`, four validators, `DEVNET_NODE_MEMORY=2g`, `--no-autopropose`, epoch length 10 |
+| Install target | `http://localhost:41403` (validator-1) |
 
-Arms:
+### 8.1 Install (pass)
 
-| Arm | What it proves | Result |
+All 17 install steps completed. Each step was accepted, processed, its block finalized, and
+every expected `Root` key resolved before the next dependent term was built. The rendered
+terms were minified and measured at 0.5–14.5 KiB, well under the 64 KiB parse bound. The
+manifest was written with no null fields. A second run found every key present at the
+finalized state and skipped all 17 steps, then rewrote the manifest: the install is
+chain-aware and re-runnable.
+
+### 8.2 Platform observations (recorded, not r-cash findings)
+
+1. **Exploratory deploys cannot see the native registry on this node.**
+   `rho:registry:lookup` inside `POST /api/v1/explore-deploy-by-block-hash` returns `Nil` for
+   a URI that a signed deploy resolves immediately. Root verification therefore uses a small
+   signed read at the current finalized state; `harness/chainclient.py` and the installers
+   document this. A pinned historical `Root` read is not available on `ee72656ea` with the
+   explore endpoint.
+2. **The devnet's partition/heal does not re-establish merge gossip.**
+   The arms split bootstrap+validator-1 from validator-2+validator-3 with
+   `docker network disconnect` (and a second bridge for the isolated pair). Each side can
+   propose, but after reconnect the nodes do not exchange the divergent tips: heights stay
+   apart and no multi-parent merge block appears. This is a property of the disposable
+   devnet/peer-discovery topology, not of the r-cash contracts. It is an upstream
+   rholo-devnet limitation and is not worked around here.
+
+### 8.3 Arms
+
+| Arm | Result | Reason / evidence |
 |---|---|---|
-| T1-A0 | the partition/merge harness itself (upstream distinct channels) | pending |
-| T1-A | two owners' transfers on divergent branches both survive; merge deterministic; common base has neither; restart reproduces | pending |
-| T1-B | same owner on both branches: exactly one deploy in `rejectedDeploys`, balance moves once, no half-transfer; retry succeeds | pending |
-| T2-a | 16 sequential registrations + interleaved work: all keys present, `keys(A) ⊆ keys(B)`, duplicate re-run changes nothing | pending |
-| T2-b | divergent registrations: accepted key present, rejected deploy named, retry succeeds | pending |
-| T3 | restart a validator and re-read the same block hash: identical keys, anchor present | pending |
-| T4 | 1 GiB pressure: refusals classified, retries idempotent, no OOM/restart, install completes or names the refused step | pending |
+| Install (17 steps) | **pass** | §8.1 |
+| T1-A0 (upstream distinct-channel control) | **not reached** | devnet partition/heal observation §8.2.2 |
+| T1-A (two owners, divergent sends) | **not reached** | same |
+| T1-B (same owner, stated conflict rule) | **not reached** | same |
+| T2-a (16 sequential registrations) | **not run** | requires the same partition harness for its second half |
+| T2-b (divergent registrations) | **not reached** | same |
+| T3 (restart read-back) | **not run** | depends on a merged anchor block from T1 |
+| T4 (1 GiB pressure) | **out of scope** | the node now gates admission on resources; 1 GiB is not a production target and the operator selected it out |
+
+No claim is made that the fork-point or restart acceptance criteria are met. The contract
+changes above stand on their own reasoning and the install evidence; the merge arms are a
+verification gap, not a green result.
 
 ## 9. Residual risks and non-claims
 
-- A green devnet is **not** a safety proof. It exercises one merge topology per arm and one
-  node build.
+- An install pass is **not** a safety proof. It exercises one node build and one linear
+  chain; the merge arms did not run (§8.3).
+- The partition/heal and merge arms remain unverified on this host because the disposable
+  devnet does not re-establish merge gossip after reconnect. That is an upstream
+  rholo-devnet limitation, not a finding about the r-cash contracts, and no contract
+  conclusion is drawn from it.
 - The live rhobot chain predates C336 and cannot be repaired by these changes. No live
   deploy was performed for this record.
 - Merge semantics and the Rholang runtime are the node's (laws 72/80, C336). This document
