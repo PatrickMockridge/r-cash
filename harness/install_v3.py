@@ -66,6 +66,28 @@ def walk(value, out: list[str]) -> list[str]:
     return out
 
 
+def root_resolve_many(root_uri: str, block_hash: str, keys: list[str]) -> list[str]:
+    """Resolve several Root keys at a pinned block. A missing key yields ``missing``."""
+    channels = ", ".join(f"c{i}" for i in range(len(keys)))
+    outs = ", ".join(f"o{i}" for i in range(len(keys)))
+    sends = " | ".join(
+        f'Root!("resolve", "{key}", 1, *c{i})' for i, key in enumerate(keys)
+    )
+    arms = " | ".join(
+        f'for (@a{i} <- c{i}) {{ match a{i} {{ (true, u, _) => o{i}!(u)\n _ => o{i}!("missing") }} }}'
+        for i in range(len(keys))
+    )
+    joins = "; ".join(f"@u{i} <- o{i}" for i in range(len(keys)))
+    values = ", ".join(f"u{i}" for i in range(len(keys)))
+    term = (
+        f"new rl(`rho:registry:lookup`), rCh, Root, out, {channels}, {outs} in {{"
+        f' rl!(`{root_uri}`, *rCh) | for (Root <- rCh) {{ {sends} | {arms} |'
+        f" for ({joins}) {{ out!([{values}]) }} }} }}"
+    )
+    doc = node.explore_at(term, block_hash)
+    return walk(doc.get("expr"), [])
+
+
 def deploy_step(name: str, replacements: dict[str, str], secret: str) -> dict:
     term = render(name, replacements)
     deploy_id = node.deploy(term, secret, phlo_limit=PHLO)
@@ -106,6 +128,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if not KEYS.is_file():
         raise SystemExit(f"missing {KEYS}; run make keys")
+    from install_testnet import STEP_KEYS
+
     keys = json.loads(KEYS.read_text())
     secret = keys["deployer"]["secret"]
     installer = keys["deployer"]["public"]
@@ -118,12 +142,23 @@ def main(argv: list[str] | None = None) -> int:
     if args.fresh:
         STATE.unlink(missing_ok=True)
 
-    def step(name: str, key: str, replacements: dict[str, str]) -> dict:
+    def step(name: str, key: str, replacements: dict[str, str],
+             expected: list[str]) -> dict:
         steps = state.setdefault("steps", {})
         if key in steps and steps[key].get("uris"):
             print(f"{name}: already installed")
             return steps[key]
         result = deploy_step(name, replacements, secret)
+        block_hash = result.get("block_hash")
+        if block_hash and state.get("root_uri"):
+            resolved = root_resolve_many(state["root_uri"], block_hash, expected)
+            if "missing" in resolved:
+                raise SystemExit(
+                    f"REFUSED step={name} detail=Root keys {expected} missing at {block_hash}"
+                )
+            result["uris"] = resolved + [
+                uri for uri in result["uris"] if uri not in resolved
+            ]
         steps[key] = result
         save(state)
         return result
@@ -131,35 +166,39 @@ def main(argv: list[str] | None = None) -> int:
     root = step("00_root", "root", {
         "__INSTALLER_PUB__": installer,
         "__ADMIN_KEYS__": admins,
-    })
+    }, [])
     root_uri = root["uris"][0]
     state["root_uri"] = root_uri
     save(state)
+    if root.get("block_hash"):
+        root_keys = root_resolve_many(root_uri, root["block_hash"], ["rcash:root"])
+        if "missing" in root_keys:
+            raise SystemExit(f"REFUSED step=root detail=rcash:root missing at {root['block_hash']}")
 
     common = {"__ROOT_URI__": root_uri}
-    admin = step("03_admin_guard", "admin_guard", common)
+    admin = step("03_admin_guard", "admin_guard", common, STEP_KEYS["admin_guard"])
     state["admin_guard_uri"] = admin["uris"][0]
     save(state)
 
-    kernel = step("01_kernel", "kernel", common)
+    kernel = step("01_kernel", "kernel", common, STEP_KEYS["kernel"])
     state["clock_uri"] = kernel["uris"][0]
     state["verifier_uri"] = kernel["uris"][1]
     state["codec_uri"] = kernel["uris"][2]
     save(state)
 
-    bounds = step("02_bounds", "bounds", common)
+    bounds = step("02_bounds", "bounds", common, STEP_KEYS["bounds"])
     state["bounds_uri"] = bounds["uris"][0]
     save(state)
 
     governor = step("04_governor", "governor", {
         "__ROOT_URI__": root_uri,
         "__ADMIN_KEYS__": admins,
-    })
+    }, STEP_KEYS["governor"])
     state["governor_uri"] = governor["uris"][0]
     save(state)
 
     for name in ["05_amm_math", "06_collateral_math", "07_oracle_math", "08_claim_code"]:
-        result = step(name, name, common)
+        result = step(name, name, common, STEP_KEYS[name])
         state[f"{name}_uri"] = result["uris"][0]
         save(state)
 
@@ -170,38 +209,38 @@ def main(argv: list[str] | None = None) -> int:
         "__ROOT_URI__": root_uri,
         "__ADMIN_KEYS__": admins,
         "__ALLOWLIST__": allowlist,
-    })
+    }, STEP_KEYS["oracle_registry"])
     state["oracle_registry_uri"] = registry["uris"][0]
     save(state)
 
-    hub = step("13_oracle_hub", "oracle_hub", common)
+    hub = step("13_oracle_hub", "oracle_hub", common, STEP_KEYS["oracle_hub"])
     state["oracle_hub_uri"] = hub["uris"][0]
     save(state)
 
-    currencies = step("32_currency_registry", "currency_registry", common)
+    currencies = step("32_currency_registry", "currency_registry", common, STEP_KEYS["currency_registry"])
     state["stablecoin_directory_uri"] = currencies["uris"][0]
     state["currency_registry_uri"] = currencies["uris"][1]
     save(state)
 
-    resolver = step("14_asset_resolver", "asset_resolver", common)
+    resolver = step("14_asset_resolver", "asset_resolver", common, STEP_KEYS["asset_resolver"])
     state["asset_resolver_uri"] = resolver["uris"][0]
     save(state)
 
-    transfer = step("40_transfer", "transfer", common)
+    transfer = step("40_transfer", "transfer", common, STEP_KEYS["transfer"])
     state["transfer_book_uri"] = transfer["uris"][0]
     save(state)
 
     pool_template = step("51_pool", "pool_template", {
         "__ROOT_URI__": root_uri,
         "__ASSET_RESOLVER_URI__": resolver["uris"][0],
-    })
+    }, STEP_KEYS["pool_template"])
     state["pool_template_uri"] = pool_template["uris"][0]
     save(state)
 
     market = step("50_market", "market", {
         "__ROOT_URI__": root_uri,
         "__ASSET_RESOLVER_URI__": resolver["uris"][0],
-    })
+    }, STEP_KEYS["market"])
     state["market_terms_uri"] = market["uris"][0]
     state["market_directory_uri"] = market["uris"][1]
     state["market_index_uri"] = market["uris"][2]
@@ -213,7 +252,7 @@ def main(argv: list[str] | None = None) -> int:
     identity = step("09_identity", "identity", {
         "__ROOT_URI__": root_uri,
         "__ASSET_RESOLVER_URI__": resolver["uris"][0],
-    })
+    }, STEP_KEYS["identity"])
     state["account_factory_uri"] = identity["uris"][0]
     save(state)
 

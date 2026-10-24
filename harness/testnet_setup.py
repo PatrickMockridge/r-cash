@@ -12,6 +12,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 import time
@@ -29,6 +30,9 @@ from unit_feed import blake2b256, canonical  # noqa: E402
 TESTNET_KEYS = ROOT / ".testnet" / "keys.json"
 DEVNET_KEYS = ROOT / ".devnet" / "keys.json"
 STATE = ROOT / ".testnet" / "install.json"
+MANIFEST = ROOT / "deployments" / "testnet-v4.json"
+NODE = "http://164.90.140.144:40403"
+INSTALLER: "net.Installer | None" = None
 CURRENCY = "TUSD"
 REPORTERS = ["reporter1", "reporter2", "reporter3"]
 PRICES = {"REV": 5_000_000, CURRENCY: 66_666}
@@ -37,7 +41,7 @@ PRICES = {"REV": 5_000_000, CURRENCY: 66_666}
 def http_json(method: str, path: str, body=None):
     data = None if body is None else json.dumps(body).encode()
     request = urllib.request.Request(
-        f"{net.NODE}{path}", data=data, method=method,
+        f"{NODE}{path}", data=data, method=method,
         headers={"content-type": "application/json"},
     )
     with urllib.request.urlopen(request, timeout=30) as response:
@@ -49,7 +53,12 @@ def height() -> int:
 
 
 def deploy_term(term: str, key: str = "deployer") -> dict:
-    return net.deploy(term, key)
+    """Deploy one setup term under a term-derived operation id and verify inclusion."""
+    assert INSTALLER is not None
+    op = "setup:" + hashlib.sha256(term.encode()).hexdigest()[:24]
+    doc = INSTALLER.deploy(term, op)
+    INSTALLER.chain.wait_included(doc["deployId"])
+    return doc
 
 
 def existing_feed(registry_uri: str, currency: str) -> str | None:
@@ -61,7 +70,7 @@ def existing_feed(registry_uri: str, currency: str) -> str | None:
         f"for (@x <- r) {{ return!(x) }} }} }}"
     )
     request = urllib.request.Request(
-        f"{net.NODE}/api/v1/explore-deploy", data=json.dumps(term).encode(),
+        f"{NODE}/api/v1/explore-deploy", data=json.dumps(term).encode(),
         headers={"content-type": "application/json"}, method="POST")
     with urllib.request.urlopen(request, timeout=30) as response:
         doc = json.loads(response.read())
@@ -205,15 +214,30 @@ def deploy_stablecoin(state: dict, sponsor: dict) -> list:
 
 
 def main(argv: list[str] | None = None) -> int:
+    global NODE, INSTALLER
     ap = argparse.ArgumentParser()
-    ap.add_argument("--node", default=net.NODE)
+    ap.add_argument("--node", default=NODE)
+    ap.add_argument("--allow-live", action="store_true")
+    ap.add_argument("--keys", type=Path, default=TESTNET_KEYS)
+    ap.add_argument("--state", type=Path, default=STATE)
+    ap.add_argument("--ops", type=Path, default=ROOT / ".testnet" / "ops")
+    ap.add_argument("--admin-keys", type=Path, default=DEVNET_KEYS)
     args = ap.parse_args(argv)
-    net.NODE = args.node
+    NODE = args.node
+    INSTALLER = net.Installer(
+        args.node, args.allow_live, args.keys, args.state, args.ops, args.admin_keys
+    )
 
-    keys = json.loads(TESTNET_KEYS.read_text())
-    reporters = json.loads(DEVNET_KEYS.read_text())
+    keys = json.loads(args.keys.read_text())
+    reporters = json.loads(args.admin_keys.read_text())
     sponsor = keys["deployer"]
-    state = json.loads(STATE.read_text())
+    state = json.loads(args.state.read_text()) if args.state.is_file() else {}
+    manifest = json.loads(MANIFEST.read_text()) if MANIFEST.is_file() else {}
+    for field in ("root_uri", "oracle_registry_uri", "currency_registry_uri"):
+        if not state.get(field):
+            state[field] = manifest.get(field)
+    if not state.get("root_uri") or not state.get("oracle_registry_uri"):
+        raise SystemExit("no installed platform: run harness/install_testnet.py first")
 
     for currency in ("REV", CURRENCY):
         bound = existing_feed(state["oracle_registry_uri"], currency)

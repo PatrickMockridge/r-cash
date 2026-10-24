@@ -29,17 +29,49 @@ class DevnetError(RuntimeError):
     pass
 
 
-def _json(method: str, path: str, body=None, base: str = HTTP, timeout: int = 30):
+class Refusal(DevnetError):
+    """A designed refusal: 429, 503, RESOURCE_EXHAUSTED, duplicate or pool-full."""
+
+    def __init__(self, code: str, detail: str, retry_after: int | None = None):
+        super().__init__(f"REFUSED code={code} retry_after={retry_after or 0} detail={detail}")
+        self.code = code
+        self.retry_after = retry_after
+
+
+def _json(method: str, path: str, body=None, base: str = HTTP, timeout: int = 30,
+          attempts: int = 6):
     url = f"{base}{path}"
-    if method == "GET":
-        resp = requests.get(url, timeout=timeout)
-    else:
-        resp = requests.post(url, json=body, timeout=timeout)
-    if resp.status_code >= 400:
-        raise DevnetError(f"{method} {url} -> {resp.status_code}: {resp.text[:500]}")
-    if not resp.text.strip():
+    last = "no attempt"
+    for attempt in range(attempts):
+        retry_after = None
+        try:
+            if method == "GET":
+                resp = requests.get(url, timeout=timeout)
+            else:
+                resp = requests.post(url, json=body, timeout=timeout)
+        except requests.RequestException as error:
+            last = str(error)
+        else:
+            if resp.status_code < 400:
+                return None if not resp.text.strip() else resp.json()
+            if resp.status_code in (408, 425, 429, 503):
+                retry_after = _retry_after(resp)
+                last = f"{resp.status_code}: {resp.text[:300]}"
+            else:
+                raise DevnetError(f"{method} {url} -> {resp.status_code}: {resp.text[:500]}")
+        time.sleep(min(0.25 * (2**attempt), 8.0) / 2 + 0.125)
+        if retry_after:
+            time.sleep(retry_after)
+    code = "503" if "503" in last else ("429" if "429" in last else "transport")
+    raise Refusal(code, last)
+
+
+def _retry_after(response) -> int | None:
+    raw = response.headers.get("retry-after")
+    try:
+        return int(str(raw).strip()) if raw is not None else None
+    except ValueError:
         return None
-    return resp.json()
 
 
 def height(base: str = HTTP) -> int:
@@ -77,6 +109,13 @@ def deploy(term: str, secret: str, phlo_limit: int = 2_000_000, phlo_price: int 
     if not match:
         # rnode prints a large jemalloc dump on exit; the useful error is before it.
         clean = out.split("___ Begin jemalloc statistics ___")[0].strip()
+        lowered = clean.lower()
+        if "429" in lowered:
+            raise Refusal("429", clean[:2000])
+        if "503" in lowered or "resource_exhausted" in lowered:
+            raise Refusal("503", clean[:2000])
+        if "duplicate" in lowered or "deploy pool is full" in lowered:
+            raise Refusal("duplicate", clean[:2000])
         raise DevnetError(f"deploy failed (rc={proc.returncode}):\n{clean[:3000]}")
     return match.group(1)
 
@@ -101,7 +140,9 @@ def wait_processed(deploy_id: str, timeout: float = 120.0, base: str = HTTP) -> 
             variant, payload = _variant(last)
             if variant != "notprocessed" and variant != "unknown":
                 return variant, payload
-        except Exception as e:  # transient while the block is being produced
+        except Refusal as e:
+            if e.code not in ("429", "503", "transport"):
+                raise
             last = {"error": str(e)}
         time.sleep(0.5)
     raise DevnetError(f"deploy {deploy_id} not processed within {timeout}s: {last}")
@@ -159,6 +200,16 @@ def cost_of(deploy_id: str, base: str = HTTP) -> int | None:
 
 def explore(term: str, base: str = HTTP):
     return _json("POST", "/api/v1/explore-deploy", body=term, base=base)
+
+
+def explore_at(term: str, block_hash: str, base: str = HTTP, use_pre_state: bool = False):
+    """Read state at a pinned block; the body must be camelCase."""
+    return _json(
+        "POST",
+        "/api/v1/explore-deploy-by-block-hash",
+        body={"term": term, "blockHash": block_hash, "usePreStateHash": use_pre_state},
+        base=base,
+    )
 
 
 def data_at_name(name: str, block_hash: str = "", base: str = HTTP):
