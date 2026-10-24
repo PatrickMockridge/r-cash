@@ -223,7 +223,8 @@ chain-aware and re-runnable.
 
 No claim is made that the fork-point or restart acceptance criteria are met. The contract
 changes above stand on their own reasoning and the install evidence; the merge arms are a
-verification gap, not a green result.
+verification gap, not a green result. The public-testnet version of these arms is proposed
+upstream in [rhovision-org/rholo#447](https://github.com/rhovision-org/rholo/issues/447).
 
 ## 9. Residual risks and non-claims
 
