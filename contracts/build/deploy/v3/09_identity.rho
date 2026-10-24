@@ -25,7 +25,7 @@ in {
               for (@s2 <- factoryState) {
                 match s2.get("accounts").get(ownerId) {
                   Nil => {
-                    new proof, account, PurseStore, purseState, AccountGate in {
+                    new proof, account, PurseStore, purseState, accountState, AccountGate in {
 
                       contract AccountGate(@"verify", dId, ret2) = {
                         new pkCh, aCh in {
@@ -185,6 +185,7 @@ in {
                       } |
 
                       purseState!({"purses": {}, "rev": 0}) |
+                      accountState!({"nextTransferId": 0}) |
 
                       contract account(@"vaultOpen", dId, @vaultUri, ret2) = {
                         new vCh in {
@@ -253,6 +254,8 @@ in {
                         PurseStore!("facet", assetId, *ret2)
                       } |
 
+                      // The transfer id is per owner: consume and re-post the counter
+                      // before any await, so a blocked branch cannot lose the cell.
                       contract account(@"sendTransfer", dId, @assetId, recipientFacet,
                                        @amount, @secretHash, @expiry, ret2) = {
                         new vCh in {
@@ -260,38 +263,50 @@ in {
                           for (@v <- vCh) {
                             match v {
                               (true, Nil) => {
-                                new fCh, wCh in {
-                                  PurseStore!("facet", assetId, *fCh) |
-                                  for (@f <- fCh) {
-                                    match f {
-                                      (true, refundFacet) => {
-                                        PurseStore!("withdraw", assetId, amount, *wCh) |
-                                        for (@w <- wCh) {
-                                          match w {
-                                            (true, payment) => {
-                                              new rCh, bCh in {
-                                                rl!(`__ROOT_URI__`, *rCh) |
-                                                for (Root <- rCh) {
-                                                  Root!("resolve", "component:transfer-book", 1, *bCh) |
-                                                  for (@(true, bookUri, _) <- bCh) {
-                                                    new bc in {
-                                                      rl!(bookUri, *bc) |
-                                                      for (TransferBook <- bc) {
-                                                        TransferBook!("send", ownerId,
-                                                          *recipientFacet, refundFacet,
-                                                          assetId, amount, payment,
-                                                          secretHash, expiry, *ret2)
+                                new idCh in {
+                                  for (@as <- accountState) {
+                                    match as.get("nextTransferId") {
+                                      id => {
+                                        accountState!(as.set("nextTransferId", id + 1)) |
+                                        idCh!(id)
+                                      }
+                                    }
+                                  } |
+                                  for (@id <- idCh) {
+                                    new fCh, wCh in {
+                                      PurseStore!("facet", assetId, *fCh) |
+                                      for (@f <- fCh) {
+                                        match f {
+                                          (true, refundFacet) => {
+                                            PurseStore!("withdraw", assetId, amount, *wCh) |
+                                            for (@w <- wCh) {
+                                              match w {
+                                                (true, payment) => {
+                                                  new rCh, bCh in {
+                                                    rl!(`__ROOT_URI__`, *rCh) |
+                                                    for (Root <- rCh) {
+                                                      Root!("resolve", "component:transfer-book", 1, *bCh) |
+                                                      for (@(true, bookUri, _) <- bCh) {
+                                                        new bc in {
+                                                          rl!(bookUri, *bc) |
+                                                          for (TransferBook <- bc) {
+                                                            TransferBook!("send", ownerId, id,
+                                                              *recipientFacet, refundFacet,
+                                                              assetId, amount, payment,
+                                                              secretHash, expiry, *ret2)
+                                                          }
+                                                        }
                                                       }
                                                     }
                                                   }
                                                 }
+                                                _ => { ret2!(w) }
                                               }
                                             }
-                                            _ => { ret2!(w) }
                                           }
+                                          _ => { ret2!(f) }
                                         }
                                       }
-                                      _ => { ret2!(f) }
                                     }
                                   }
                                 }

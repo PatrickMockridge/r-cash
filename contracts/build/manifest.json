@@ -82,13 +82,13 @@
       "source_bytes": 729
     },
     "contracts/build/deploy/v3/09_identity.rho": {
-      "brace_depth": 30,
+      "brace_depth": 31,
       "contracts": 17,
-      "grammar_depth": 52,
-      "minified_bytes": 7024,
+      "grammar_depth": 56,
+      "minified_bytes": 7256,
       "operator_run": 3,
-      "sha256": "72d81ce68c52590cc8a5239ab9c8030591879eb70e22733556f31a537338d22f",
-      "source_bytes": 17918
+      "sha256": "d491c453ba6f692a9d05c2b485ffb5a3423ad9d6c4a38a6f211d85db4c32a6fb",
+      "source_bytes": 18912
     },
     "contracts/build/deploy/v3/12_oracle_registry.rho": {
       "brace_depth": 20,
@@ -130,10 +130,10 @@
       "brace_depth": 41,
       "contracts": 35,
       "grammar_depth": 66,
-      "minified_bytes": 22361,
+      "minified_bytes": 22580,
       "operator_run": 5,
-      "sha256": "766bcc0885f19855bd4b345473e7c8cb5fbeeeb8d8ca59873e842391bf05b92c",
-      "source_bytes": 43762
+      "sha256": "7712a54eeb894755057847edb16a919b64786801b5e6a685d7311a1887b43d64",
+      "source_bytes": 44299
     },
     "contracts/build/deploy/v3/32_currency_registry.rho": {
       "brace_depth": 32,
@@ -145,13 +145,13 @@
       "source_bytes": 9563
     },
     "contracts/build/deploy/v3/40_transfer.rho": {
-      "brace_depth": 28,
+      "brace_depth": 25,
       "contracts": 5,
-      "grammar_depth": 48,
-      "minified_bytes": 3214,
+      "grammar_depth": 43,
+      "minified_bytes": 3080,
       "operator_run": 3,
-      "sha256": "18e3598bbda628cc9adfbcb72dab2d4912b058e0631f2c28c25a1f04bd46b59a",
-      "source_bytes": 7337
+      "sha256": "67162eee327a0134ef150943ab3d036955e44bf99c2a683a6521167467fe7b0f",
+      "source_bytes": 7154
     },
     "contracts/build/deploy/v3/50_market.rho": {
       "brace_depth": 39,
@@ -166,10 +166,10 @@
       "brace_depth": 37,
       "contracts": 19,
       "grammar_depth": 62,
-      "minified_bytes": 13731,
+      "minified_bytes": 14101,
       "operator_run": 3,
-      "sha256": "31234e1cb7f02b753d7600bbad63d117ee69b91216eb99bb7694d6e867264f11",
-      "source_bytes": 24899
+      "sha256": "192cd2c9c91bc6f57555fae44054cb2938537d29abe245570a9e1afb5d8af7da",
+      "source_bytes": 25584
     }
   },
   "schema": "rcash:contract-metrics:v1"

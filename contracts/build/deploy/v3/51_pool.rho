@@ -419,7 +419,9 @@ in {
     } |
     poolState!({"rb": 0, "rq": 0, "totalShares": 0,
                 "seeded": false, "paused": false, "rev": 0}) |
-    new LiquidityLock, lockState, uLock in {
+    new LiquidityLock, lockState, lockPurse, uLock, lpPurseCh in {
+      @lpIssuer!("makeEmptyPurse", *lpPurseCh) |
+      for (@(true, lockPurse) <- lpPurseCh) {
       contract LiquidityLock(@"fund", dId, lpPayment, @beneficiaryId,
                              @untilHeight, ret2) = {
         for (@s <- lockState) {
@@ -432,14 +434,13 @@ in {
                 for (@pk <- pkCh) {
                   revAddress!("fromPublicKey", pk, *aCh) |
                   for (@funder <- aCh) {
-                    @lpIssuer!("getAmountOf", *lpPayment, *amtCh) |
+                    @lockPurse!("deposit", *lpPayment, *amtCh) |
                     for (@amt <- amtCh) {
                       match amt {
                         (true, shares) => {
                           lockState!(s.set("funded", true).set("untilHeight", untilHeight)
                                        .set("beneficiary", beneficiaryId)
-                                       .set("funder", funder).set("shares", shares)
-                                       .set("payment", *lpPayment)) |
+                                       .set("funder", funder).set("shares", shares)) |
                           ret2!((true, shares))
                         }
                         _ => { lockState!(s) | ret2!((false, "not LP")) }
@@ -460,7 +461,7 @@ in {
             if (s.get("released") || s.get("cancelled")) {
               lockState!(s) | ret2!((false, "closed"))
             } else {
-              new nowCh, pkCh, aCh in {
+              new nowCh, pkCh, aCh, payCh in {
                 poolNow!(*nowCh) |
                 for (@now <- nowCh) {
                   if (now < s.get("untilHeight")) { lockState!(s) | ret2!((false, "locked")) }
@@ -472,10 +473,16 @@ in {
                         if (addr != s.get("beneficiary")) {
                           lockState!(s) | ret2!((false, "not beneficiary"))
                         } else {
-                          match s.get("payment") { p => {
-                            lockState!(s.set("released", true)) |
-                            ret2!((true, p, s.get("shares")))
-                          } }
+                          @lockPurse!("withdraw", (lpBrand, s.get("shares")), *payCh) |
+                          for (@p <- payCh) {
+                            match p {
+                              (true, payment) => {
+                                lockState!(s.set("released", true)) |
+                                ret2!((true, payment, s.get("shares")))
+                              }
+                              _ => { lockState!(s) | ret2!((false, "payment")) }
+                            }
+                          }
                         }
                       }
                     }
@@ -488,7 +495,7 @@ in {
       } |
 
       contract LiquidityLock(@"cancel", @nonce, @sigs, ret2) = {
-        new gCh, vCh in {
+        new gCh, vCh, payCh in {
           poolGovernor!(*gCh) |
           for (Governor <- gCh) {
             Governor!("authorize", "liquidity-lock", nonce, "cancel",
@@ -500,10 +507,16 @@ in {
                     if (s.get("funded") == false || s.get("released") || s.get("cancelled")) {
                       lockState!(s) | ret2!((false, "closed"))
                     } else {
-                      match s.get("payment") { p => {
-                        lockState!(s.set("cancelled", true)) |
-                        ret2!((true, p, s.get("shares")))
-                      } }
+                      @lockPurse!("withdraw", (lpBrand, s.get("shares")), *payCh) |
+                      for (@p <- payCh) {
+                        match p {
+                          (true, payment) => {
+                            lockState!(s.set("cancelled", true)) |
+                            ret2!((true, payment, s.get("shares")))
+                          }
+                          _ => { lockState!(s) | ret2!((false, "payment")) }
+                        }
+                      }
                     }
                   }
                 }
@@ -533,6 +546,7 @@ in {
       for (@poolUri <- uPool) {
         rs!(bundle+{*LiquidityLock}, *uLock) |
         for (@lockUri <- uLock) { ret!((true, poolUri, lockUri)) }
+      }
       }
     }
 

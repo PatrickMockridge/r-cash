@@ -195,7 +195,7 @@ in {
   contract vaultLiquidateCommit(@s, @v, @ownerId, @now2, @accrued, @amount,
                                 @seized, @writeOff, payment, ret2) = {
     new burnCh, wdCh, nsCh in {
-      for (@s2 <- vaultState) {
+      for (@s2 <<- vaultState) {
         match s2.get("vaults").get(ownerId) {
           Nil => { ret2!(1 / 0) }
           v2 => {
@@ -222,12 +222,17 @@ in {
                             s2.get("badDebt") + (accrued - amount),
                             s2.get("rev") + 1, *nsCh) |
                             for (@ns <- nsCh) {
-                              vaultState!(ns) |
-                              ret2!((true, paymentOut, {
-                                "repaid": amount,
-                                "seized": seized,
-                                "badDebt": accrued - amount
-                              }))
+                              for (@s3 <- vaultState) {
+                                if (s3.get("rev") != s2.get("rev")) { ret2!(1 / 0) }
+                                else {
+                                  vaultState!(ns) |
+                                  ret2!((true, paymentOut, {
+                                    "repaid": amount,
+                                    "seized": seized,
+                                    "badDebt": accrued - amount
+                                  }))
+                                }
+                              }
                             }
                           } else {
                             vaultUpdate!(s2, ownerId, {
@@ -241,12 +246,17 @@ in {
                             s2.get("badDebt"),
                             s2.get("rev") + 1, *nsCh) |
                             for (@ns <- nsCh) {
-                              vaultState!(ns) |
-                              ret2!((true, paymentOut, {
-                                "repaid": amount,
-                                "seized": seized,
-                                "badDebt": 0
-                              }))
+                              for (@s3 <- vaultState) {
+                                if (s3.get("rev") != s2.get("rev")) { ret2!(1 / 0) }
+                                else {
+                                  vaultState!(ns) |
+                                  ret2!((true, paymentOut, {
+                                    "repaid": amount,
+                                    "seized": seized,
+                                    "badDebt": 0
+                                  }))
+                                }
+                              }
                             }
                           }
                         }
@@ -310,7 +320,7 @@ in {
           } else {
             for (@s2 <- issuerState) {
               if (s2.get("totalPrincipal") != s.get("totalPrincipal")) {
-                ret2!((false, "changed"))
+                issuerState!(s2) | ret2!((false, "changed"))
               } else {
                 new payCh in {
                   @mint!("mintPayment", (brand, amount), *payCh) |
@@ -349,7 +359,7 @@ in {
                   } else {
                     for (@s2 <- issuerState) {
                       if (s2.get("totalPrincipal") != s.get("totalPrincipal")) {
-                        ret2!((false, "changed"))
+                        issuerState!(s2) | ret2!((false, "changed"))
                       } else {
                         new depCh in {
                           @burnFacet!("deposit", *payment, *depCh) |
@@ -620,11 +630,11 @@ in {
                                                     s2.get("badDebt"),
                                                     s2.get("rev") + 1, *nsCh) |
                                                     for (@ns <- nsCh) {
-                                                      vaultState!(ns) |
                                                       Stablecoin!("mint", amount, *mintAuth, *payCh) |
                                                       for (@p <- payCh) {
                                                         match p {
                                                           (true, payment, supply) => {
+                                                            vaultState!(ns) |
                                                             ret2!((true, payment, accrued + amount))
                                                           }
                                                           _ => { ret2!(1 / 0) }
@@ -706,11 +716,10 @@ in {
                                               s2.get("badDebt"),
                                               s2.get("rev") + 1, *nsCh) |
                                               for (@ns <- nsCh) {
-                                                vaultState!(ns) |
                                                 CollateralCustody!("withdraw", amount, *custodyAuth, *payCh) |
                                                 for (@p <- payCh) {
                                                   match p {
-                                                    (true, payment) => { ret2!((true, payment)) }
+                                                    (true, payment) => { vaultState!(ns) | ret2!((true, payment)) }
                                                     _ => { ret2!(1 / 0) }
                                                   }
                                                 }

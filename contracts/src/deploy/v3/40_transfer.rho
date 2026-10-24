@@ -1,10 +1,11 @@
 // v0.4 TransferBook: one escrow contract per transfer, no shared escrow purse.
-// The book only allocates ids. Each TransferContract is the authoritative cell
-// for its own payment, claim hash, expiry and terminal status: claim and refund
-// consume the same cell, so exactly one of them can win.
+// The caller supplies the per-owner transfer id; the book holds no counter, so
+// the send path has no shared state cell. Each TransferContract is the
+// authoritative cell for its own payment, claim hash, expiry and terminal
+// status: claim and refund consume the same cell, so exactly one of them wins.
 // Placeholders: __ROOT_URI__.
 new
-  TransferBook, bookState,
+  TransferBook,
   TransferContract,
   transferNow,
   rl(`rho:registry:lookup`),
@@ -31,7 +32,7 @@ in {
     }
   } |
 
-  contract TransferBook(@"send", @senderId, recipientFacet, refundFacet,
+  contract TransferBook(@"send", @senderId, @id, recipientFacet, refundFacet,
                         @assetId, @amount, payment, @secretHash, @expiry, ret) = {
     if (amount <= 0) { ret!((false, "amount")) }
     else {
@@ -40,10 +41,7 @@ in {
         for (@now <- nowCh) {
           if (expiry <= now) { ret!((false, "expiry")) }
           else {
-            for (@s <- bookState) {
-              match s.get("nextId") {
-                id => {
-                  new TransferContract, transferState, uCh in {
+            new TransferContract, transferState, uCh in {
                     contract TransferContract(@"claim", @secret, ret2) = {
                       for (@ts <- transferState) {
                         match ts.get("status") {
@@ -144,21 +142,15 @@ in {
                       }
                     } |
 
-                    transferState!({"status": "open"}) |
-                    bookState!(s.set("nextId", id + 1)) |
-                    rs!(bundle+{*TransferContract}, *uCh) |
-                    for (@uri <- uCh) { ret!((true, id, uri)) }
-                  }
-                }
-              }
+              transferState!({"status": "open"}) |
+              rs!(bundle+{*TransferContract}, *uCh) |
+              for (@uri <- uCh) { ret!((true, id, uri)) }
             }
           }
         }
       }
     }
   } |
-
-  bookState!({"nextId": 0}) |
 
   rl!(`__ROOT_URI__`, *rootCh) |
   for (Root <- rootCh) {
