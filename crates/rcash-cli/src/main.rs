@@ -71,6 +71,12 @@ enum Command {
         /// Submit without waiting for processing and finality.
         #[arg(long)]
         no_wait: bool,
+        /// Operation id for an idempotent, cached deploy.
+        #[arg(long)]
+        op: Option<String>,
+        /// Directory holding write-ahead signed deploys.
+        #[arg(long, default_value = ".rcash-ops")]
+        op_cache: PathBuf,
     },
     /// Run a term without signing or charging phlo.
     Explore {
@@ -293,6 +299,18 @@ enum TransferCmd {
     },
 }
 
+/// The refusal class a shell script can branch on, if this is a designed refusal.
+fn refusal_code(error: &ChainError) -> Option<(&'static str, Option<u64>)> {
+    match error {
+        ChainError::RateLimited { retry_after, .. } => Some(("429", *retry_after)),
+        ChainError::Unavailable { retry_after, .. } => Some(("503", *retry_after)),
+        ChainError::AdmissionRefused { .. } => Some(("admission", None)),
+        ChainError::Duplicate { .. } => Some(("duplicate", None)),
+        ChainError::TermTooLarge { .. } => Some(("term-too-large", None)),
+        _ => None,
+    }
+}
+
 fn main() -> ExitCode {
     let cli = Cli::parse();
     let runtime = match tokio::runtime::Builder::new_multi_thread()
@@ -311,10 +329,19 @@ fn main() -> ExitCode {
             eprintln!("rcash: {message}");
             ExitCode::from(2)
         }
-        Err(CliError::Chain(e)) => {
-            eprintln!("rcash: {e}");
-            ExitCode::from(3)
-        }
+        Err(CliError::Chain(e)) => match refusal_code(&e) {
+            Some((code, retry_after)) => {
+                eprintln!(
+                    "REFUSED code={code} retry_after={} detail={e}",
+                    retry_after.unwrap_or(0)
+                );
+                ExitCode::from(4)
+            }
+            None => {
+                eprintln!("rcash: {e}");
+                ExitCode::from(3)
+            }
+        },
     }
 }
 
@@ -395,11 +422,13 @@ async fn run(cli: Cli) -> Result<ExitCode> {
             file,
             term,
             no_wait,
+            op,
+            op_cache,
         } => {
             let term = read_term(file, term)?;
             let key = load_key_from(&cli.keys, cli.key.as_deref())?;
             let client = Client::new(cli.node.clone(), key)?;
-            if no_wait {
+            if no_wait && op.is_none() {
                 let id = client.submit_term(&term).await?;
                 if cli.json {
                     println!("{}", serde_json::json!({ "deployId": id }));
@@ -408,7 +437,10 @@ async fn run(cli: Cli) -> Result<ExitCode> {
                 }
                 return Ok(ExitCode::SUCCESS);
             }
-            let outcome = client.deploy_term(&term).await?;
+            let outcome = match op {
+                Some(op) => client.deploy_term_cached(&term, &op, &op_cache).await?,
+                None => client.deploy_term(&term).await?,
+            };
             if cli.json {
                 println!(
                     "{}",

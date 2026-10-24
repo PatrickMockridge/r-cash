@@ -28,6 +28,8 @@ pub struct HttpRequest {
 pub struct HttpResponse {
     pub status: u16,
     pub body: String,
+    /// `Retry-After` in seconds, when the node sent one.
+    pub retry_after: Option<u64>,
 }
 
 /// A transport. `?Send` because the browser's fetch future is not `Send`.
@@ -72,11 +74,20 @@ impl Transport for NativeTransport {
             .await
             .map_err(|e| ChainError::Transport(e.to_string()))?;
         let status = response.status().as_u16();
+        let retry_after = response
+            .headers()
+            .get("retry-after")
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.trim().parse().ok());
         let body = response
             .text()
             .await
             .map_err(|e| ChainError::Transport(e.to_string()))?;
-        Ok(HttpResponse { status, body })
+        Ok(HttpResponse {
+            status,
+            body,
+            retry_after,
+        })
     }
 }
 
@@ -106,10 +117,20 @@ impl Transport for WasmTransport {
                 .map_err(|e| ChainError::Transport(e.to_string()))?,
         };
         let status = response.status();
+        let retry_after = response
+            .headers()
+            .get("retry-after")
+            .ok()
+            .flatten()
+            .and_then(|value| value.trim().parse().ok());
         let body = response
             .text()
             .await
             .map_err(|e| ChainError::Transport(e.to_string()))?;
-        Ok(HttpResponse { status, body })
+        Ok(HttpResponse {
+            status,
+            body,
+            retry_after,
+        })
     }
 }

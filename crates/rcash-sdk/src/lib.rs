@@ -23,6 +23,15 @@ pub use writes::{SwapResult, TxResult};
 
 pub use rcash_chain;
 
+/// A write-ahead signed deploy used for idempotent retries.
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(serde::Serialize, serde::Deserialize)]
+struct CachedDeploy {
+    term: String,
+    deploy_id: String,
+    body: String,
+}
+
 /// A connected, signing client.
 pub struct Client {
     node: NodeClient,
@@ -170,6 +179,132 @@ impl Client {
         let signed = self.sign_term(term, tip)?;
         let deploy_id = self.node.deploy(&signed).await?;
         let status = self.node.wait_processed(&deploy_id, self.poll).await?;
+        let mut finalized = false;
+        if let Some(block) = status.block() {
+            finalized = self
+                .node
+                .wait_finalized(&block.block_hash, self.poll)
+                .await
+                .is_ok();
+        }
+        Ok(DeployOutcome {
+            deploy_id,
+            status,
+            finalized,
+        })
+    }
+
+    /// Submit a term under an operation id, reusing the exact signed bytes on retry.
+    ///
+    /// The cache is a write-ahead record: the request body and deploy id are written
+    /// before the POST. A retry checks `deploy-status` first and only resubmits when the
+    /// deploy is still pooled or unknown; a duplicate is treated as already accepted.
+    /// A cached entry signed for a different term is a hard error.
+    ///
+    /// A deploy rejected by a merge cannot be re-included. The caller must prove the
+    /// effect absent at a finalized block, then delete the entry and use a **new**
+    /// operation id so a fresh deploy is signed.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub async fn deploy_term_cached(
+        &self,
+        term: &str,
+        op: &str,
+        cache_dir: &std::path::Path,
+    ) -> Result<DeployOutcome, ChainError> {
+        let safe: String = op
+            .chars()
+            .map(|c| {
+                if c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.') {
+                    c
+                } else {
+                    '_'
+                }
+            })
+            .collect();
+        if safe.is_empty() {
+            return Err(ChainError::Decode("empty operation id".into()));
+        }
+        std::fs::create_dir_all(cache_dir)
+            .map_err(|e| ChainError::Transport(format!("op cache: {e}")))?;
+        let path = cache_dir.join(format!("{safe}.json"));
+        let cached: Option<CachedDeploy> = match std::fs::read(&path) {
+            Ok(bytes) => Some(
+                serde_json::from_slice(&bytes)
+                    .map_err(|e| ChainError::Decode(format!("op cache: {e}")))?,
+            ),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+            Err(e) => return Err(ChainError::Transport(format!("op cache: {e}"))),
+        };
+
+        let deploy_id = match cached {
+            Some(entry) => {
+                if entry.term != term {
+                    return Err(ChainError::Decode(format!(
+                        "operation '{op}' was signed for a different term; refusing to reuse it"
+                    )));
+                }
+                match self.node.deploy_status(&entry.deploy_id).await {
+                    Ok(status) if status.is_processed() => {
+                        return self.finish_outcome(entry.deploy_id, status).await;
+                    }
+                    Ok(_) | Err(ChainError::Decode(_)) => {
+                        match self
+                            .node
+                            .deploy_body(&entry.body, &entry.deploy_id, entry.term.len())
+                            .await
+                        {
+                            Ok(()) | Err(ChainError::Duplicate { .. }) => {}
+                            Err(e) => return Err(e),
+                        }
+                    }
+                    Err(ChainError::Transport(_))
+                    | Err(ChainError::RateLimited { .. })
+                    | Err(ChainError::Unavailable { .. }) => {
+                        return Err(ChainError::Transport(
+                            "op cache: node status unavailable; retry the operation".into(),
+                        ));
+                    }
+                    Err(e) => return Err(e),
+                }
+                entry.deploy_id
+            }
+            None => {
+                let tip = self.node.latest_block_number().await?;
+                let signed = self.sign_term(term, tip)?;
+                let body = serde_json::to_string(&signed.request_body())?;
+                let entry = CachedDeploy {
+                    term: term.to_string(),
+                    deploy_id: signed.deploy_id.clone(),
+                    body: body.clone(),
+                };
+                let bytes = serde_json::to_vec(&entry)?;
+                let tmp = path.with_extension("json.tmp");
+                std::fs::write(&tmp, bytes)
+                    .map_err(|e| ChainError::Transport(format!("op cache: {e}")))?;
+                std::fs::rename(&tmp, &path)
+                    .map_err(|e| ChainError::Transport(format!("op cache: {e}")))?;
+                match self
+                    .node
+                    .deploy_body(&body, &signed.deploy_id, term.len())
+                    .await
+                {
+                    Ok(()) | Err(ChainError::Duplicate { .. }) => {}
+                    Err(e) => return Err(e),
+                }
+                signed.deploy_id
+            }
+        };
+
+        let status = self.node.wait_processed(&deploy_id, self.poll).await?;
+        self.finish_outcome(deploy_id, status).await
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    async fn finish_outcome(
+        &self,
+        deploy_id: String,
+        status: DeployStatus,
+    ) -> Result<DeployOutcome, ChainError> {
         let mut finalized = false;
         if let Some(block) = status.block() {
             finalized = self

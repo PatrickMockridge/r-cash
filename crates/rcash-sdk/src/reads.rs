@@ -263,14 +263,12 @@ impl Client {
         })
     }
 
-    /// `book.nextId()`.
+    /// Deprecated: transfers carry a per-owner id; the book has no shared counter.
+    ///
+    /// Kept so existing callers compile. It returns 0 instead of reading a cell that no
+    /// longer exists.
     pub async fn transfer_next_id(&self) -> Result<i64, ChainError> {
-        let components = self.require_manifest()?.components_uri.clone();
-        let values = self
-            .explore_reply(&terms::component_call(&components, BOOK_KEY, "\"nextId\"")?)
-            .await?
-            .into_result()?;
-        int_at(&values, 0)
+        Ok(0)
     }
 
     /// `book.quote(source, dest, amount)`.

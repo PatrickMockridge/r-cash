@@ -22,6 +22,26 @@ pub enum ChainError {
     Transport(String),
     #[error("node returned HTTP {status}: {body}")]
     Http { status: u16, body: String },
+    /// The node's per-peer rate limit. Safe to retry after the named delay.
+    #[error("node rate-limited the request (retry after {retry_after:?}): {body}")]
+    RateLimited {
+        retry_after: Option<u64>,
+        body: String,
+    },
+    /// The node shed work under pressure before decoding the body. Safe to retry.
+    #[error("node refused work under pressure (retry after {retry_after:?}): {body}")]
+    Unavailable {
+        retry_after: Option<u64>,
+        body: String,
+    },
+    /// Admission refused the work for a reason that will not change by retrying the same bytes.
+    #[error("node admission refused the work: HTTP {status}: {body}")]
+    AdmissionRefused { status: u16, body: String },
+    /// A byte-identical deploy is already known to the node.
+    #[error("the deploy is already known to the node: {deploy_id}")]
+    Duplicate { deploy_id: String },
+    #[error("the deploy term is {bytes} bytes; the node parses at most {limit}")]
+    TermTooLarge { bytes: usize, limit: usize },
     #[error("could not decode the node response: {0}")]
     Decode(String),
     #[error("the node rejected the deploy: {0}")]

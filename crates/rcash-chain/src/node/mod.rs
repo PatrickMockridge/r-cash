@@ -26,6 +26,18 @@ pub mod transport;
 
 use transport::{HttpRequest, Method, Transport};
 
+/// Map a non-2xx response to the retry class the caller must act on.
+fn classify_http(status: u16, body: String, retry_after: Option<u64>) -> ChainError {
+    match status {
+        429 => ChainError::RateLimited { retry_after, body },
+        503 => ChainError::Unavailable { retry_after, body },
+        400 if body.to_ascii_lowercase().contains("admission") => {
+            ChainError::AdmissionRefused { status, body }
+        }
+        _ => ChainError::Http { status, body },
+    }
+}
+
 /// A block summary, reduced to the fields a client needs.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -164,10 +176,11 @@ impl NodeClient {
             })
             .await?;
         if !(200..300).contains(&response.status) {
-            return Err(ChainError::Http {
-                status: response.status,
-                body: response.body,
-            });
+            return Err(classify_http(
+                response.status,
+                response.body,
+                response.retry_after,
+            ));
         }
         Ok(response.body)
     }
@@ -193,18 +206,52 @@ impl NodeClient {
     /// Submit a signed deploy. Returns its locally computed deploy id.
     pub async fn deploy(&self, signed: &SignedDeploy) -> Result<String, ChainError> {
         let body = serde_json::to_string(&signed.request_body())?;
+        self.deploy_body(&body, &signed.deploy_id, signed.data.term.len())
+            .await?;
+        Ok(signed.deploy_id.clone())
+    }
+
+    /// Submit an exact request body. Used by the signed-deploy cache so a retry
+    /// sends the same bytes and is refused before parse while the deploy is pooled.
+    pub async fn deploy_body(
+        &self,
+        body: &str,
+        deploy_id: &str,
+        term_len: usize,
+    ) -> Result<(), ChainError> {
         let response = self
             .transport
             .send(HttpRequest {
                 method: Method::Post,
                 url: format!("{}/api/v1/deploy", self.base),
-                body: Some(body),
+                body: Some(body.to_string()),
             })
             .await?;
         if !(200..300).contains(&response.status) {
+            let lower = response.body.to_ascii_lowercase();
+            if lower.contains("duplicate")
+                || (lower.contains("already") && lower.contains("deploy"))
+            {
+                return Err(ChainError::Duplicate {
+                    deploy_id: deploy_id.to_string(),
+                });
+            }
+            if lower.contains("term is") && lower.contains("bytes") {
+                return Err(ChainError::TermTooLarge {
+                    bytes: term_len,
+                    limit: 64 * 1024,
+                });
+            }
+            if response.status == 429 || response.status == 503 {
+                return Err(classify_http(
+                    response.status,
+                    response.body,
+                    response.retry_after,
+                ));
+            }
             return Err(ChainError::DeployRejected(response.body));
         }
-        Ok(signed.deploy_id.clone())
+        Ok(())
     }
 
     /// `GET /api/v1/deploy-status/{signature}`.
@@ -227,6 +274,7 @@ impl NodeClient {
     ) -> Result<DeployStatus, ChainError> {
         let start = Instant::now();
         let mut last = "no status yet".to_string();
+        let mut attempt = 0u32;
         loop {
             if start.elapsed() >= policy.timeout {
                 return Err(ChainError::StillUnknown {
@@ -234,14 +282,32 @@ impl NodeClient {
                     last,
                 });
             }
+            let mut retry_after = None;
             match self.deploy_status(deploy_id).await {
                 Ok(status) if status.is_processed() => return Ok(status),
                 Ok(DeployStatus::NotProcessed { status }) => last = status,
                 Ok(_) => unreachable!("is_processed covers every other variant"),
                 Err(ChainError::Transport(e)) => last = e,
+                Err(ChainError::RateLimited {
+                    retry_after: after,
+                    body,
+                })
+                | Err(ChainError::Unavailable {
+                    retry_after: after,
+                    body,
+                }) => {
+                    retry_after = after;
+                    last = body;
+                }
                 Err(e) => return Err(e),
             }
-            sleep(policy.interval).await;
+            let delay = policy.delay(attempt, deploy_id);
+            let delay = match retry_after {
+                Some(seconds) => delay.max(Duration::from_secs(seconds)),
+                None => delay,
+            };
+            attempt = attempt.saturating_add(1);
+            sleep(delay).await;
         }
     }
 
@@ -265,6 +331,7 @@ impl NodeClient {
     ) -> Result<(), ChainError> {
         let start = Instant::now();
         let mut last = "not final".to_string();
+        let mut attempt = 0u32;
         loop {
             if start.elapsed() >= policy.timeout {
                 return Err(ChainError::StillUnknown {
@@ -272,13 +339,31 @@ impl NodeClient {
                     last,
                 });
             }
+            let mut retry_after = None;
             match self.is_finalized(block_hash).await {
                 Ok(true) => return Ok(()),
                 Ok(false) => last = "not final".to_string(),
                 Err(ChainError::Transport(e)) => last = e,
+                Err(ChainError::RateLimited {
+                    retry_after: after,
+                    body,
+                })
+                | Err(ChainError::Unavailable {
+                    retry_after: after,
+                    body,
+                }) => {
+                    retry_after = after;
+                    last = body;
+                }
                 Err(e) => return Err(e),
             }
-            sleep(policy.interval).await;
+            let delay = policy.delay(attempt, block_hash);
+            let delay = match retry_after {
+                Some(seconds) => delay.max(Duration::from_secs(seconds)),
+                None => delay,
+            };
+            attempt = attempt.saturating_add(1);
+            sleep(delay).await;
         }
     }
 
@@ -296,10 +381,44 @@ impl NodeClient {
             })
             .await?;
         if !(200..300).contains(&response.status) {
-            return Err(ChainError::Http {
-                status: response.status,
-                body: response.body,
-            });
+            return Err(classify_http(
+                response.status,
+                response.body,
+                response.retry_after,
+            ));
+        }
+        serde_json::from_str(&response.body).map_err(Into::into)
+    }
+
+    /// `POST /api/v1/explore-deploy-by-block-hash`.
+    ///
+    /// The body is camelCase (`term`, `blockHash`, `usePreStateHash`); snake_case is
+    /// refused with 422. `use_pre_state=false` reads the block's post-state.
+    pub async fn explore_at(
+        &self,
+        term: &str,
+        block_hash: &str,
+        use_pre_state: bool,
+    ) -> Result<ExploreResponse, ChainError> {
+        let body = serde_json::to_string(&serde_json::json!({
+            "term": term,
+            "blockHash": block_hash,
+            "usePreStateHash": use_pre_state,
+        }))?;
+        let response = self
+            .transport
+            .send(HttpRequest {
+                method: Method::Post,
+                url: format!("{}/api/v1/explore-deploy-by-block-hash", self.base),
+                body: Some(body),
+            })
+            .await?;
+        if !(200..300).contains(&response.status) {
+            return Err(classify_http(
+                response.status,
+                response.body,
+                response.retry_after,
+            ));
         }
         serde_json::from_str(&response.body).map_err(Into::into)
     }
@@ -316,10 +435,11 @@ impl NodeClient {
             })
             .await?;
         if !(200..300).contains(&response.status) {
-            return Err(ChainError::Http {
-                status: response.status,
-                body: response.body,
-            });
+            return Err(classify_http(
+                response.status,
+                response.body,
+                response.retry_after,
+            ));
         }
         serde_json::from_str(&response.body).map_err(Into::into)
     }
@@ -353,4 +473,80 @@ async fn sleep(duration: Duration) {
     gloo_timers::future::TimeoutFuture::new(duration.as_millis() as u32).await;
     #[cfg(not(target_arch = "wasm32"))]
     tokio::time::sleep(duration).await;
+}
+
+#[cfg(test)]
+mod refusal_tests {
+    use super::*;
+    use async_trait::async_trait;
+    use std::sync::Arc;
+    use transport::{HttpRequest, HttpResponse, Transport};
+
+    struct Fixed(Result<HttpResponse, ChainError>);
+
+    #[async_trait(?Send)]
+    impl Transport for Fixed {
+        async fn send(&self, _request: HttpRequest) -> Result<HttpResponse, ChainError> {
+            self.0.clone()
+        }
+    }
+
+    fn client(status: u16, body: &str, retry_after: Option<u64>) -> NodeClient {
+        let response = HttpResponse {
+            status,
+            body: body.to_string(),
+            retry_after,
+        };
+        NodeClient::with_transport("http://node", Arc::new(Fixed(Ok(response)))).unwrap()
+    }
+
+    #[tokio::test]
+    async fn a_429_is_a_rate_limit_not_a_generic_error() {
+        let error = client(429, "too many", Some(2))
+            .deploy_body("{}", "deadbeef", 10)
+            .await
+            .unwrap_err();
+        assert!(matches!(
+            error,
+            ChainError::RateLimited {
+                retry_after: Some(2),
+                ..
+            }
+        ));
+    }
+
+    #[tokio::test]
+    async fn a_503_is_shed_work_not_a_rejection() {
+        let error = client(503, "throttled", Some(1))
+            .deploy_body("{}", "deadbeef", 10)
+            .await
+            .unwrap_err();
+        assert!(matches!(
+            error,
+            ChainError::Unavailable {
+                retry_after: Some(1),
+                ..
+            }
+        ));
+    }
+
+    #[tokio::test]
+    async fn a_duplicate_body_names_the_deploy_id() {
+        let error = client(400, "deploy already exists: duplicate", None)
+            .deploy_body("{}", "deadbeef", 10)
+            .await
+            .unwrap_err();
+        match error {
+            ChainError::Duplicate { deploy_id } => assert_eq!(deploy_id, "deadbeef"),
+            other => panic!("expected duplicate, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn a_200_is_accepted() {
+        client(200, "{}", None)
+            .deploy_body("{}", "deadbeef", 10)
+            .await
+            .unwrap();
+    }
 }
