@@ -1,7 +1,8 @@
 VENV := .venv
 PY := $(VENV)/bin/python
-RCHAIN_RUST_DIR ?= ../RNodeRust
-export RCHAIN_RUST_DIR
+# The upstream project is rholo. The old RCHAIN_RUST_DIR name is still accepted.
+RHOLO_DIR ?= $(or $(RCHAIN_RUST_DIR),../rholo)
+export RHOLO_DIR
 
 .PHONY: venv image devnet down status keys build probes deploy logs clean demo client-test web-build check-languages test-wasm measure measure-check check-arch check-captures spec-check tla-check install-v3 unit-v3 unit-feed unit-hub unit-stablecoin unit-liquidation unit-accounts unit-transfer unit-market unit-all
 
@@ -10,13 +11,13 @@ venv:
 	$(VENV)/bin/pip -q install -r harness/requirements.txt
 
 image:
-	cd $(RCHAIN_RUST_DIR) && tools/devnet.sh build
+	cd $(RHOLO_DIR) && tools/devnet.sh build
 
 devnet:
-	cd $(RCHAIN_RUST_DIR) && tools/devnet.sh up --validators 1
+	cd $(RHOLO_DIR) && tools/devnet.sh up --validators 1
 
 down:
-	cd $(RCHAIN_RUST_DIR) && tools/devnet.sh down -v
+	cd $(RHOLO_DIR) && tools/devnet.sh down -v
 
 status:
 	@curl -s http://localhost:40403/api/v1/status | $(PY) -m json.tool || echo "devnet not running"
@@ -92,7 +93,7 @@ deploy: build
 	$(PY) harness/rcash.py deploy "$(FILE)"
 
 logs:
-	cd $(RCHAIN_RUST_DIR) && tools/devnet.sh logs devnet-bootstrap
+	cd $(RHOLO_DIR) && tools/devnet.sh logs devnet-bootstrap
 
 clean:
 	rm -rf contracts/build harness/__pycache__ tools/__pycache__

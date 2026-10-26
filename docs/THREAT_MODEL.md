@@ -51,4 +51,4 @@
 - REV price volatility can produce bad debt; there is no backstop.
 - Claim mode hides the recipient on-chain, but the ramp learns payout details; amounts are public.
 - The protocol has no KYC/AML; regulated partners are the compliance boundary.
-- rchain-rust is pre-testnet; consensus residuals are an external risk.
+- rholo is pre-testnet; consensus residuals are an external risk.

@@ -1,4 +1,4 @@
-//! Chain integration: deploy data, signing, REV addresses and the rnode HTTP API.
+//! Chain integration: deploy data, signing, REV addresses and the rholo node HTTP API.
 //!
 //! The signing path deliberately calls the node's own crates
 //! (the `DeployData` protobuf shape and `rchain_crypto`'s hash/signature functions)

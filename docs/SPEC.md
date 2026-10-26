@@ -4,7 +4,7 @@
 > payment-first core specification is in [`spec/`](spec/README.md).
 
 **Status:** devnet prototype; normative for v0.1. **Intent:** [`INTENT.md`](INTENT.md).
-**Platform:** rchain-rust at commit `e2d073dcd02f1e560ccb84749937138a1e184b0b`; the Rholang
+**Platform:** rholo at commit `e2d073dcd02f1e560ccb84749937138a1e184b0b`; the Rholang
 Mercury interpreter documented in [`PLATFORM.md`](PLATFORM.md). The key words MUST, MUST NOT,
 SHOULD, SHOULD NOT and MAY are used as in RFC 2119.
 
@@ -94,7 +94,7 @@ or signatures instead.
   claimant/ramp.
 - **A6** REV has a market price that the oracle committee can report; the chain's native vault and
   ERTP ledger are sound.
-- **A7** The rchain-rust node is not Byzantine beyond its pre-testnet assumptions; v0.1 is devnet-only.
+- **A7** The rholo node is not Byzantine beyond its pre-testnet assumptions; v0.1 is devnet-only.
 - **A8** Users understand that the stablecoin is a market instrument, not a bank deposit.
 - **A9** A deployer key is not shared; a leaked `deployerId` is a REV-spending capability.
 - **A10** Off-chain systems (ramps, wallets, KYC) are outside this specification.
@@ -471,7 +471,7 @@ v0.1. A ramp's fiat payout fee is off-chain and outside this specification.
 ### 14.3 What is not machine-proven
 
 The v0.1 invariants are exercised by scenario tests and property-style checks; they are **not**
-mechanically proved. The rchain-rust node carries its own Lean/Coq laws for the interpreter and
+mechanically proved. The rholo node carries its own Lean/Coq laws for the interpreter and
 consensus; R-Cash does not yet have a machine-checked model. A future formalization should encode
 §10.3, §11.3 and §12's escrow/exclusivity invariants as reachability properties over the reducer.
 

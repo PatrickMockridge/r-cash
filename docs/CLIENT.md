@@ -15,18 +15,18 @@ HTTP to the devnet node on port 40403. Public deployments terminate HTTPS at a p
 | Crate | Responsibility |
 |---|---|
 | `crates/rcash-core` | Amounts (1e8 base units), validated asset/currency/URI newtypes, Rholang string quoting, the deployment manifest. No I/O. |
-| `crates/rcash-chain` | DeployData, signing, REV addresses, devnet key files, the rnode HTTP client, deploy-status polling. |
+| `crates/rcash-chain` | DeployData, signing, REV addresses, devnet key files, the rholo node HTTP client, deploy-status polling. |
 | `crates/rcash-sdk` | Connected client and deploy lifecycle; protocol operations land here in R1/R2. |
 | `crates/rcash-cli` | The `rcash` binary. |
 | `crates/rcash-wasm` | wasm-bindgen facade; R0a exports the parity signer. |
 
 The node crates are pinned by git revision in `Cargo.toml`
-(`e2d073dcd02f1e560ccb84749937138a1e184b0b`). To hack against a local `../RNodeRust`
+(`e2d073dcd02f1e560ccb84749937138a1e184b0b`). To hack against a local `../rholo`
 checkout without changing the manifest:
 
 ```sh
-cargo --config 'patch."https://github.com/rhovision-org/rholo".rchain-crypto.path="../RNodeRust/crypto"' \
-      --config 'patch."https://github.com/rhovision-org/rholo".rchain-shared.path="../RNodeRust/shared"' \
+cargo --config 'patch."https://github.com/rhovision-org/rholo".rchain-crypto.path="../rholo/crypto"' \
+      --config 'patch."https://github.com/rhovision-org/rholo".rchain-shared.path="../rholo/shared"' \
       build
 ```
 

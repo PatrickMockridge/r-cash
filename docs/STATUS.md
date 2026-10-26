@@ -146,4 +146,4 @@ is `contracts/components.json`.
   separate future workstream.
 - Ramps are off-chain and unbonded; local fiat payout is a trust decision.
 - Claim secrets are bearer authority; loss is unrecoverable before expiry.
-- The chain is pre-testnet (rchain-rust #242); this is not safe for real value.
+- The chain is pre-testnet (rholo #242); this is not safe for real value.

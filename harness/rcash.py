@@ -383,7 +383,12 @@ def cmd_probes() -> int:
 
 
 def node_commit() -> str:
-    repo = Path(os.environ.get("RCHAIN_RUST_DIR", ROOT.parent / "RNodeRust"))
+    repo = Path(
+        os.environ.get(
+            "RHOLO_DIR",
+            os.environ.get("RCHAIN_RUST_DIR", ROOT.parent / "rholo"),
+        )
+    )
     try:
         import subprocess
         return subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"],

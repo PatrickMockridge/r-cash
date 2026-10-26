@@ -98,7 +98,7 @@ jobs:
       - name: no drift
         run: git diff --exit-code contracts/build
 
-  # The browser journey needs a running rchain-rust devnet (Docker). It is manual
+  # The browser journey needs a running rholo devnet (Docker). It is manual
   # for now; the protocol demo and all unit gates run without Docker.
   e2e:
     if: github.event_name == 'workflow_dispatch'

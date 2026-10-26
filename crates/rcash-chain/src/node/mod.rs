@@ -1,4 +1,4 @@
-//! The rnode HTTP client.
+//! The rholo node HTTP client.
 //!
 //! Verified against `node/src/web/http.rs` and `node/src/api/dto.rs`:
 //! - `POST /api/v1/deploy` takes `{data, deployer, signature, sigAlgorithm}`.
@@ -118,7 +118,7 @@ pub struct ExploreResponse {
     pub reply_source: String,
 }
 
-/// A client for one rnode's public HTTP API.
+/// A client for one rholo node's public HTTP API.
 #[derive(Clone)]
 pub struct NodeClient {
     base: String,

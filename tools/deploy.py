@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Deploy and read Rholang on the local rchain-rust devnet.
+"""Deploy and read Rholang on the local rholo devnet.
 
 Deploys go through the node's own CLI inside the devnet container, so no deploy bytes are
 reimplemented here.  Reads use the public HTTP API.

@@ -1,5 +1,5 @@
 # `getrandom` 0.4 refuses to compile for wasm32-unknown-unknown without a backend. The
 # node crates themselves enable the `wasm_js` feature; this cfg is the other half of that
-# contract (see rchain-rust crypto/Cargo.toml, issue #98).
+# contract (see rholo's `crypto/Cargo.toml`, issue #98).
 [target.wasm32-unknown-unknown]
 rustflags = ['--cfg', 'getrandom_backend="wasm_js"']

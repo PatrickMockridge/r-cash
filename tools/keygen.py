@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate secp256k1 keys and REV addresses for the R-Cash devnet.
 
-The derivation matches rchain-rust's `rholang/src/util/rev_address.rs`:
+The derivation matches rholo's `rholang/src/util/rev_address.rs`:
     eth_address = keccak256(uncompressed_pubkey[1:])[-20:]
     key_hash    = keccak256(eth_address)
     payload     = 0x00000000 || key_hash
@@ -27,7 +27,7 @@ from Crypto.Hash import keccak
 
 ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
 
-# The funded deployer baked into RNodeRust/tools/devnet.sh (public there). Used only for installs.
+# The funded deployer baked into rholo's `tools/devnet.sh` (public there). Used only for installs.
 DEPLOYER_KEY = "a68a6e6cca30f81bd24a719f3145d20e8424bd7b396309b0708a16c7d8000b76"
 DEPLOYER_ADDR = "11112VYAt8rUGNRRZX3eJdgagaAhtWTK8Js7F7X5iqddMVqyDTtYau"
 

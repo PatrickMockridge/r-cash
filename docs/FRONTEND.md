@@ -10,7 +10,7 @@ implementation of the protocol.
 ## Run
 
 ```sh
-make devnet                      # local rchain-rust devnet
+make devnet                      # local rholo devnet
 make install                     # once, to install the contracts and write the manifest
 cd web
 npm install

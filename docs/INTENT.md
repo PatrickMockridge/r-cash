@@ -76,7 +76,7 @@ for platforms. R-Cash targets the payments core on-chain:
 8. **Honesty about boundaries.** Local fiat payout, KYC/AML, cards and licensing are partner and
    legal boundaries, not on-chain claims. The protocol does not pretend otherwise.
 
-## 6. Why RChain / rchain-rust
+## 6. Why RChain / rholo
 
 - **Native REV** is the collateral asset, with a native vault and an ERTP brand, so a collateralised issuer can custody
   REV without a bridge or a wrapped token.
@@ -132,7 +132,7 @@ committee, ramps, bootstrap window, pre-testnet chain) are documented and visibl
 | Oracle | Allowlisted 3-reporter committee |
 | Governance | 2-of-3 admin keys, fixed at deploy |
 | Bootstrap | Trusted deployer installs the Directory/zones/pool/book and locks the registries |
-| Platform | rchain-rust pre-testnet; local devnet only |
+| Platform | rholo pre-testnet; local devnet only |
 
 ## 10. Roadmap
 
@@ -153,7 +153,7 @@ existing stablecoin issuer.
 
 ## 12. Status and legal
 
-Devnet-only prototype. The node is pre-testnet (rchain-rust issue #242); no real funds, no fiat
+Devnet-only prototype. The node is pre-testnet (rholo issue #242); no real funds, no fiat
 custody, no production use. Stablecoin issuance, FX and payment services are regulated activities in
 the target markets; production requires local counsel, licensed ramp partners and a compliance model.
 See `STATUS.md`, `THREAT_MODEL.md` and `LEGAL.md`.

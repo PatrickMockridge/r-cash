@@ -11,7 +11,7 @@ Read in this order:
    topology, contract states and operations, invariants, economic formulas, governance,
    conformance evidence and planned work.
 4. [`NETWORK.md`](NETWORK.md) — currencies, corridors and how a corridor is added.
-5. [`PLATFORM.md`](PLATFORM.md) — the pinned rchain-rust node, hard platform limits, measured costs,
+5. [`PLATFORM.md`](PLATFORM.md) — the pinned rholo node, hard platform limits, measured costs,
    finality and the build constraints the contracts are shaped by.
 6. [`CLIENT.md`](CLIENT.md) — the Rust SDK and CLI: signing, term encoding, node API, reads vs
    writes, failure taxonomy and the parity gates.

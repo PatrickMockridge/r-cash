@@ -2,7 +2,7 @@
 
 ## Pinned node
 
-- Repository: the `rchain-rust` checkout (default `../RNodeRust`, override `RCHAIN_RUST_DIR`)
+- Repository: the `rholo` checkout (default `../rholo`, override `RHOLO_DIR`)
 - Commit at the start of this build: `e2d073dcd02f1e560ccb84749937138a1e184b0b`
 - The local image is built from the checked-out working tree; pin the commit when reproducing.
 - Local image: `rnode:local` (built by `tools/devnet.sh build`).
@@ -10,8 +10,8 @@
 ## Devnet
 
 ```sh
-cd $RCHAIN_RUST_DIR && tools/devnet.sh build
-cd $RCHAIN_RUST_DIR && tools/devnet.sh up --validators 1
+cd $RHOLO_DIR && tools/devnet.sh build
+cd $RHOLO_DIR && tools/devnet.sh up --validators 1
 ```
 
 - Container `devnet-bootstrap`; public HTTP 40403; admin HTTP 40405; deploy gRPC 40402.

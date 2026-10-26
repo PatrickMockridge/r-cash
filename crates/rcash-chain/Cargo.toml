@@ -1,6 +1,6 @@
 [package]
 name = "rcash-chain"
-description = "R-Cash deploy encoding, secp256k1 signing, REV addresses and the rnode HTTP client"
+description = "R-Cash deploy encoding, secp256k1 signing, REV addresses and the rholo node HTTP client"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

@@ -1,7 +1,7 @@
 # R-Cash
 
 A permissionless multi-currency account and cross-border payments network on
-[rchain-rust](https://github.com/rhovision-org/rholo).
+[rholo](https://github.com/rhovision-org/rholo).
 
 R-Cash is the on-chain payments core of a Wise-shaped product: hold local-currency balances,
 receive as if local, convert directly between currencies, pay anyone with a wallet or claim link,
@@ -28,7 +28,7 @@ value; the chain is pre-mainnet.
 The client is Rust, shared by a native CLI and a browser WASM module:
 
 - `crates/rcash-core` — amounts, validated identifiers, Rholang quoting, the manifest.
-- `crates/rcash-chain` — deploy encoding, secp256k1 signing, REV addresses, rnode HTTP.
+- `crates/rcash-chain` — deploy encoding, secp256k1 signing, REV addresses, rholo node HTTP.
 - `crates/rcash-sdk` — connected client and protocol operations.
 - `crates/rcash-cli` — the `rcash` binary.
 - `crates/rcash-wasm` — wasm-bindgen facade for the React + Vite + TypeScript UI (R3).
@@ -66,7 +66,7 @@ The Python harness below is legacy: `make demo` now runs the Rust client journey
 
 ## Quickstart (legacy harness)
 
-Prerequisites: Docker, Python 3.12, and rchain-rust at `../RNodeRust` (override `RCHAIN_RUST_DIR`).
+Prerequisites: Docker, Python 3.12, and the rholo checkout at `../rholo` (override `RHOLO_DIR`).
 
 ```sh
 make venv                 # .venv + harness deps
