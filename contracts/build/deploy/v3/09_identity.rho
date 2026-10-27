@@ -216,8 +216,12 @@ in {
                             }
                             entry => {
                               match entry.get("uri") {
-                                Nil => { ret2!((false, "pending", entry.get("id"))) }
-                                uri => { ret2!((true, entry.get("id"), uri)) }
+                                Nil => {
+                                  accountState!(as) | ret2!((false, "pending", entry.get("id")))
+                                }
+                                uri => {
+                                  accountState!(as) | ret2!((true, entry.get("id"), uri))
+                                }
                               }
                             }
                           }

@@ -186,7 +186,10 @@ def main() -> int:
         "__QUOTE_AMT__": str(QUOTE_AMT),
     })
         seeded = one(seed_term, keys["deployer"]["secret"])
-        shares, seeded_reserves, lock_shares = seeded[1], seeded[2][1], seeded[3]
+        if isinstance(seeded[2], dict):
+            shares, seeded_reserves, lock_shares = seeded[1], seeded[2], seeded[3]
+        else:
+            shares, seeded_reserves, lock_shares = seeded[1], seeded[2][1], seeded[3]
         check("seed locked", lock_shares, shares)
         deposit_value = (BASE_AMT * rate) // 100_000_000 + QUOTE_AMT
         check("initial shares", shares, deposit_value - 100_000_000)

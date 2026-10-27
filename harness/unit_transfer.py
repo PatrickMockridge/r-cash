@@ -68,7 +68,7 @@ def main() -> int:
 
     height = node.height()
     expiry_a = height + 100
-    expiry_b = height + 4
+    expiry_b = height + 30
     send_term = render_scenario("transfer_send.rho", {
         "__ROOT_URI__": root,
         "__SENDER_PUB__": sender["public"],

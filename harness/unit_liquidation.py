@@ -246,6 +246,7 @@ def main() -> int:
     check_invariant("write-off", keys, sc_uri, vault_uri)
 
     # Mint halt: a healthy vault cannot create debt while sin > surplus.
+    faucet_top_up(recap["address"])
     halt = one(render_scenario("stablecoin_mint_extra.rho", {
         "__ROOT_URI__": root,
         "__VAULT_URI__": vault_uri,

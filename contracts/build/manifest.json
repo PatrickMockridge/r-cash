@@ -85,10 +85,10 @@
       "brace_depth": 37,
       "contracts": 22,
       "grammar_depth": 65,
-      "minified_bytes": 9681,
+      "minified_bytes": 9721,
       "operator_run": 3,
-      "sha256": "335a032f30cbe39fc3c89b6d9f92beedcf97b9c934f9e7f159992146f3c0f04a",
-      "source_bytes": 26267
+      "sha256": "5d553ca78dd11355bcdf9bad19b815c122391fe66d5f8dab63e3133ca615ef19",
+      "source_bytes": 26439
     },
     "contracts/build/deploy/v3/12_oracle_registry.rho": {
       "brace_depth": 20,

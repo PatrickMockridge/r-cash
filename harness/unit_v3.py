@@ -57,6 +57,8 @@ def decode(value):
             }
         if "ExprByteArray" in value:
             return bytes.fromhex(value["ExprByteArray"]["data"])
+        if "ExprBytes" in value:
+            return bytes.fromhex(value["ExprBytes"]["data"])
         return {key: decode(item) for key, item in value.items()}
     return value
 
