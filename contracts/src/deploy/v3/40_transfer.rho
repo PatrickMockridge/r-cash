@@ -5,7 +5,7 @@
 // status: claim and refund consume the same cell, so exactly one of them wins.
 // Placeholders: __ROOT_URI__.
 new
-  TransferBook,
+  TransferBook, bookParamsState,
   TransferContract,
   transferNow, bookAmount,
   rl(`rho:registry:lookup`),
@@ -55,12 +55,13 @@ in {
 
   contract TransferBook(@"send", @senderId, @id, recipientFacet, refundFacet,
                         @assetId, @amount, payment, @secretHash, @expiry, ret) = {
-    if (amount <= 0) { ret!((false, "amount")) }
+    for (@bp <<- bookParamsState) {
+    if (amount <= 0 || amount < bp.get("minAmount")) { ret!((false, "amount")) }
     else {
       new nowCh in {
         transferNow!(*nowCh) |
         for (@now <- nowCh) {
-          if (expiry <= now) { ret!((false, "expiry")) }
+          if (expiry <= now || expiry > now + bp.get("maxExpiryBlocks")) { ret!((false, "expiry")) }
           else {
             new amtCh in {
             bookAmount!(assetId, *payment, *amtCh) |
@@ -193,7 +194,10 @@ in {
         }
       }
     }
+    }
   } |
+
+  bookParamsState!(__BOOK_PARAMS__) |
 
   rl!(`__ROOT_URI__`, *rootCh) |
   for (Root <- rootCh) {

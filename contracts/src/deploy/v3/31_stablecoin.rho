@@ -329,7 +329,10 @@ in {
     else {
       if (amount <= 0) { ret2!((false, "amount")) }
       else {
-        for (@s <<- issuerState) {
+        for (@s <<- issuerState; @b <<- bufferState) {
+          if (b.get("sin") > b.get("surplus")) {
+            ret2!((false, "recapitalise"))
+          } else {
           if (s.get("totalPrincipal") + amount > s.get("maxSupply")) {
             ret2!((false, "max supply"))
           } else {
@@ -352,6 +355,7 @@ in {
                 }
               }
             }
+          }
           }
         }
       }

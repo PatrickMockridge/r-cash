@@ -340,8 +340,11 @@ class Installer:
                   STEP_KEYS["currency_registry"], tip)
         resolver = self.step("14_asset_resolver", "testnet:asset_resolver", common,
                              STEP_KEYS["asset_resolver"], tip)
-        self.step("40_transfer", "testnet:transfer", common,
-                  STEP_KEYS["transfer"], tip)
+        self.step(
+            "40_transfer", "testnet:transfer",
+            {**common, "__BOOK_PARAMS__": '{"minAmount": 1, "defaultExpiryBlocks": 720, "maxExpiryBlocks": 1296000}'},
+            STEP_KEYS["transfer"], tip,
+        )
         self.step(
             "51_pool", "testnet:pool_template",
             {"__ROOT_URI__": self.root_uri, "__ASSET_RESOLVER_URI__": resolver[0]},

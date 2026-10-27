@@ -226,7 +226,8 @@ def main(argv: list[str] | None = None) -> int:
     state["asset_resolver_uri"] = resolver["uris"][0]
     save(state)
 
-    transfer = step("40_transfer", "transfer", common, STEP_KEYS["transfer"])
+    transfer = step("40_transfer", "transfer", {
+        **common, "__BOOK_PARAMS__": '{"minAmount": 1, "defaultExpiryBlocks": 720, "maxExpiryBlocks": 1296000}'}, STEP_KEYS["transfer"])
     state["transfer_book_uri"] = transfer["uris"][0]
     save(state)
 
