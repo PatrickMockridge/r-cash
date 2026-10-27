@@ -1,0 +1,369 @@
+# Flow specification.
+# Arm keys, source lines, access modes and refusal sets are checked against
+# contracts/build/arm_inventory.json by tools/check_flows.py. Guards, effects,
+# invariants and status are the authored content; status is not a synonym for
+# tested. See README.md for the schema and protocol labels.
+
+schema: rcash.flows/v1
+subsystem: identity
+source_globs:
+- contracts/src/deploy/v3/09_identity.rho
+invariants: {}
+components:
+- name: AccountFactory
+  lean_module: Rholphin.Model.Identity
+  arms:
+  - arm: AccountFactory@"getOrCreate"
+    transition: identity.AccountFactory.getOrCreate
+    lean: Rholphin.Model.Identity.accountFactory_getOrCreate
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/09_identity.rho, line: 19}
+    guards:
+    - {id: owner, expr: ownerId = revAddress(pubKeyBytes), refusal: {reason: verify failed, phase: pre}}
+    - {id: new, expr: 'accounts[ownerId] = Nil or return existing', refusal: {reason: exists, phase: pre}}
+    effects:
+    - {target: 'accounts[ownerId]', formula: '{account: bundle, proof: proof}'}
+    - {target: purseState, formula: '{purses: {}, rev: 0}'}
+    - {target: accountState, formula: '{nextTransferId: 0, ops: {}, rev: 0}'}
+    access:
+    - {cell: factoryState, mode: peek, actor: arm, phase: pre}
+    - {cell: factoryState, mode: consume, actor: arm, phase: commit}
+    - {cell: accountState, mode: post, actor: arm, phase: commit}
+    - {cell: factoryState, mode: post, actor: arm, phase: commit}
+    - {cell: purseState, mode: post, actor: arm, phase: commit}
+    nested_calls: []
+    refusals: []
+    invariants:
+    - I21
+    status: verified
+  - arm: AccountFactory@"verify"
+    transition: identity.AccountFactory.verify
+    lean: Rholphin.Model.Identity.accountFactory_verify
+    kind: read
+    source: {file: contracts/src/deploy/v3/09_identity.rho, line: 515}
+    guards: []
+    effects:
+    - {target: reply, formula: '(true, stored.proof = proof)'}
+    access:
+    - {cell: factoryState, mode: peek, actor: arm, phase: pre}
+    nested_calls: []
+    refusals: []
+    invariants:
+    - I21
+    status: verified
+  - arm: AccountFactory@"accountOf"
+    transition: identity.AccountFactory.accountOf
+    lean: Rholphin.Model.Identity.accountFactory_accountOf
+    kind: read
+    source: {file: contracts/src/deploy/v3/09_identity.rho, line: 524}
+    guards:
+    - {id: exists, expr: 'accounts[ownerId] != Nil', refusal: {reason: no account, phase: pre}}
+    effects:
+    - {target: reply, formula: '(true, account)'}
+    access:
+    - {cell: factoryState, mode: peek, actor: arm, phase: pre}
+    nested_calls: []
+    refusals:
+    - {reason: no account, phase: pre, reposts: false, fail: false}
+    invariants:
+    - I21
+    status: verified
+  states:
+  - Live
+  initial: Live
+- name: AccountGate
+  lean_module: Rholphin.Model.Identity
+  arms:
+  - arm: AccountGate@"verify"
+    transition: identity.AccountGate.verify
+    lean: Rholphin.Model.Identity.accountGate_verify
+    kind: read
+    source: {file: contracts/src/deploy/v3/09_identity.rho, line: 32}
+    guards:
+    - {id: owner, expr: revAddress(deployerId.pubKey) = ownerId, refusal: {reason: not owner, phase: pre}}
+    effects:
+    - {target: reply, formula: '(true, Nil)'}
+    access: []
+    nested_calls: []
+    refusals:
+    - {reason: not owner, phase: pre, reposts: false, fail: false}
+    invariants:
+    - I21
+    status: verified
+  states:
+  - Live
+  initial: Live
+- name: PurseStore
+  lean_module: Rholphin.Model.Identity
+  arms:
+  - arm: PurseStore@"ensure"
+    transition: identity.PurseStore.ensure
+    lean: Rholphin.Model.Identity.purseStore_ensure
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/09_identity.rho, line: 45}
+    guards:
+    - {id: asset, expr: AssetResolver.issuer(assetId) ok, refusal: {reason: no purse, phase: pre}}
+    effects:
+    - {target: 'purses[assetId]', formula: 'existing or {purse: makeEmptyPurse(issuer), brand: brand}'}
+    - {target: rev, formula: rev + 1}
+    access:
+    - {cell: purseState, mode: peek, actor: arm, phase: pre}
+    - {cell: purseState, mode: consume, actor: arm, phase: commit}
+    - {cell: purseState, mode: post, actor: arm, phase: commit}
+    nested_calls: []
+    refusals: []
+    invariants:
+    - S7
+    status: verified
+    from: Empty
+    to: Ready
+  - arm: PurseStore@"deposit"
+    transition: identity.PurseStore.deposit
+    lean: Rholphin.Model.Identity.purseStore_deposit
+    kind: read
+    source: {file: contracts/src/deploy/v3/09_identity.rho, line: 92}
+    guards:
+    - {id: purse, expr: 'purses[assetId] != Nil', refusal: {reason: no purse, phase: pre}}
+    - {id: deposit, expr: purse.deposit ok, refusal: {reason: deposit, phase: pre}}
+    effects:
+    - {target: purse.balance, formula: balance + amount}
+    access:
+    - {cell: purseState, mode: peek, actor: arm, phase: pre}
+    nested_calls: []
+    refusals:
+    - {reason: no purse, phase: pre, reposts: false, fail: false}
+    invariants:
+    - S7
+    status: verified
+  - arm: PurseStore@"withdraw"
+    transition: identity.PurseStore.withdraw
+    lean: Rholphin.Model.Identity.purseStore_withdraw
+    kind: read
+    source: {file: contracts/src/deploy/v3/09_identity.rho, line: 115}
+    guards:
+    - {id: amount, expr: amount > 0, refusal: {reason: amount, phase: pre}}
+    - {id: purse, expr: 'purses[assetId] != Nil', refusal: {reason: no purse, phase: pre}}
+    - {id: withdraw, expr: purse.withdraw ok, refusal: {reason: payment, phase: pre}}
+    effects:
+    - {target: purse.balance, formula: balance - amount}
+    - {target: caller, formula: payment amount}
+    access:
+    - {cell: purseState, mode: peek, actor: arm, phase: pre}
+    nested_calls: []
+    refusals:
+    - {reason: amount, phase: pre, reposts: false, fail: false}
+    - {reason: no purse, phase: pre, reposts: false, fail: false}
+    invariants:
+    - S7
+    status: verified
+  - arm: PurseStore@"balance"
+    transition: identity.PurseStore.balance
+    lean: Rholphin.Model.Identity.purseStore_balance
+    kind: read
+    source: {file: contracts/src/deploy/v3/09_identity.rho, line: 143}
+    guards:
+    - {id: purse, expr: 'purses[assetId] != Nil', refusal: {reason: no purse, phase: pre}}
+    effects:
+    - {target: reply, formula: purse.balance}
+    access:
+    - {cell: purseState, mode: peek, actor: arm, phase: pre}
+    nested_calls: []
+    refusals:
+    - {reason: no purse, phase: pre, reposts: false, fail: false}
+    invariants:
+    - S7
+    status: verified
+  - arm: PurseStore@"facet"
+    transition: identity.PurseStore.facet
+    lean: Rholphin.Model.Identity.purseStore_facet
+    kind: read
+    source: {file: contracts/src/deploy/v3/09_identity.rho, line: 166}
+    guards:
+    - {id: purse, expr: 'purses[assetId] != Nil', refusal: {reason: no purse, phase: pre}}
+    effects:
+    - {target: reply, formula: purse.depositFacet}
+    access:
+    - {cell: purseState, mode: peek, actor: arm, phase: pre}
+    nested_calls: []
+    refusals:
+    - {reason: no purse, phase: pre, reposts: false, fail: false}
+    invariants:
+    - S7
+    status: verified
+  states:
+  - Empty
+  - Ready
+  initial: Empty
+- name: account
+  lean_module: Rholphin.Model.Identity
+  arms:
+  - arm: account@"vaultOpen"
+    transition: identity.account.vaultOpen
+    lean: Rholphin.Model.Identity.account_vaultOpen
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/09_identity.rho, line: 279}
+    guards:
+    - {id: owner, expr: AccountGate.verify ok, refusal: {reason: not owner, phase: pre}}
+    effects:
+    - {target: delegate, formula: 'VaultBook.open(ownerId, proof)'}
+    access: []
+    nested_calls:
+    - {callee: VaultBook@"open", protocol: P4, internal: true}
+    refusals:
+    - {reason: not owner, phase: pre, reposts: false, fail: false}
+    invariants:
+    - I21
+    status: verified
+  - arm: account@"deposit"
+    transition: identity.account.deposit
+    lean: Rholphin.Model.Identity.account_deposit
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/09_identity.rho, line: 298}
+    guards:
+    - {id: owner, expr: AccountGate.verify ok, refusal: {reason: not owner, phase: pre}}
+    effects:
+    - {target: delegate, formula: 'PurseStore.deposit(assetId, payment)'}
+    access: []
+    nested_calls:
+    - {callee: PurseStore@"deposit", protocol: P4, internal: true}
+    refusals:
+    - {reason: not owner, phase: pre, reposts: false, fail: false}
+    invariants:
+    - S7
+    status: verified
+  - arm: account@"withdraw"
+    transition: identity.account.withdraw
+    lean: Rholphin.Model.Identity.account_withdraw
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/09_identity.rho, line: 312}
+    guards:
+    - {id: owner, expr: AccountGate.verify ok, refusal: {reason: not owner, phase: pre}}
+    effects:
+    - {target: delegate, formula: 'PurseStore.withdraw(assetId, amount)'}
+    access: []
+    nested_calls:
+    - {callee: PurseStore@"withdraw", protocol: P4, internal: true}
+    refusals:
+    - {reason: not owner, phase: pre, reposts: false, fail: false}
+    invariants:
+    - S7
+    status: verified
+  - arm: account@"balance"
+    transition: identity.account.balance
+    lean: Rholphin.Model.Identity.account_balance
+    kind: read
+    source: {file: contracts/src/deploy/v3/09_identity.rho, line: 326}
+    guards:
+    - {id: owner, expr: AccountGate.verify ok, refusal: {reason: not owner, phase: pre}}
+    effects:
+    - {target: delegate, formula: PurseStore.balance(assetId)}
+    access: []
+    nested_calls: []
+    refusals:
+    - {reason: not owner, phase: pre, reposts: false, fail: false}
+    invariants:
+    - S7
+    status: verified
+  - arm: account@"depositFacet"
+    transition: identity.account.depositFacet
+    lean: Rholphin.Model.Identity.account_depositFacet
+    kind: read
+    source: {file: contracts/src/deploy/v3/09_identity.rho, line: 342}
+    guards: []
+    effects:
+    - {target: delegate, formula: PurseStore.facet(assetId)}
+    access: []
+    nested_calls: []
+    refusals: []
+    invariants:
+    - S7
+    status: verified
+  - arm: account@"sendTransfer"
+    transition: identity.account.sendTransfer
+    lean: Rholphin.Model.Identity.account_sendTransfer
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/09_identity.rho, line: 348}
+    guards:
+    - {id: owner, expr: AccountGate.verify ok, refusal: {reason: not owner, phase: pre}}
+    - {id: reserve, expr: reserveSend ok, refusal: {reason: pending, phase: pre}}
+    - {id: facet, expr: refund facet ok, refusal: {reason: no purse, phase: pre}}
+    - {id: withdraw, expr: purse withdraw ok, refusal: {reason: payment, phase: pre}}
+    - {id: book, expr: TransferBook.send ok, refusal: {reason: asset, phase: pre}}
+    effects:
+    - {target: accountState.nextTransferId, formula: id + 1}
+    - {target: 'accountState.ops[opId]', formula: '{id, uri}'}
+    - {target: accountState.rev, formula: rev + 1}
+    - {target: stipend, formula: native REV transferred to recipientPub}
+    access:
+    - {cell: accountState, mode: consume, actor: 'helper:dropReserve', phase: commit}
+    - {cell: accountState, mode: consume, actor: 'helper:reserveSend', phase: commit}
+    - {cell: accountState, mode: consume, actor: 'helper:sendCommit', phase: commit}
+    - {cell: accountState, mode: post, actor: 'helper:dropReserve', phase: commit}
+    - {cell: accountState, mode: post, actor: 'helper:reserveSend', phase: commit}
+    - {cell: accountState, mode: post, actor: 'helper:sendCommit', phase: commit}
+    nested_calls:
+    - {callee: dropReserve, protocol: H2b, takes: [accountState], puts: [accountState], post_owner: helper}
+    - {callee: reserveSend, protocol: H2b, takes: [accountState], puts: [accountState], post_owner: helper}
+    - {callee: sendCommit, protocol: P0, takes: [], puts: [], post_owner: helper}
+    refusals:
+    - {reason: not owner, phase: pre, reposts: false, fail: false}
+    - {reason: pending, phase: pre, reposts: false, fail: false}
+    invariants:
+    - I14
+    - I15
+    - I21
+    status: verified
+  - arm: account@"claimTransfer"
+    transition: identity.account.claimTransfer
+    lean: Rholphin.Model.Identity.account_claimTransfer
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/09_identity.rho, line: 437}
+    guards:
+    - {id: owner, expr: AccountGate.verify ok, refusal: {reason: not owner, phase: pre}}
+    effects:
+    - {target: delegate, formula: TransferContract.claim(secret)}
+    access: []
+    nested_calls:
+    - {callee: TransferContract@"claim", protocol: P4, internal: true}
+    refusals:
+    - {reason: not owner, phase: pre, reposts: false, fail: false}
+    invariants:
+    - I14
+    status: verified
+  - arm: account@"refundTransfer"
+    transition: identity.account.refundTransfer
+    lean: Rholphin.Model.Identity.account_refundTransfer
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/09_identity.rho, line: 456}
+    guards:
+    - {id: owner, expr: AccountGate.verify ok, refusal: {reason: not owner, phase: pre}}
+    effects:
+    - {target: delegate, formula: TransferContract.refund(deployerId)}
+    access: []
+    nested_calls:
+    - {callee: TransferContract@"refund", protocol: P4, internal: true}
+    refusals:
+    - {reason: not owner, phase: pre, reposts: false, fail: false}
+    invariants:
+    - I14
+    status: verified
+  - arm: account@"transfers"
+    transition: identity.account.transfers
+    lean: Rholphin.Model.Identity.account_transfers
+    kind: read
+    source: {file: contracts/src/deploy/v3/09_identity.rho, line: 475}
+    guards:
+    - {id: owner, expr: AccountGate.verify ok, refusal: {reason: not owner, phase: pre}}
+    effects:
+    - {target: reply, formula: '(true, accountState.ops)'}
+    access:
+    - {cell: accountState, mode: peek, actor: arm, phase: pre}
+    nested_calls: []
+    refusals:
+    - {reason: not owner, phase: pre, reposts: false, fail: false}
+    invariants:
+    - I14
+    status: verified
+  states:
+  - Live
+  initial: Live

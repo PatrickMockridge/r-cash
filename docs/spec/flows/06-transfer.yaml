@@ -1,0 +1,131 @@
+# Flow specification.
+# Arm keys, source lines, access modes and refusal sets are checked against
+# contracts/build/arm_inventory.json by tools/check_flows.py. Guards, effects,
+# invariants and status are the authored content; status is not a synonym for
+# tested. See README.md for the schema and protocol labels.
+
+schema: rcash.flows/v1
+subsystem: transfer
+source_globs:
+- contracts/src/deploy/v3/40_transfer.rho
+invariants: {}
+defects:
+- {id: D5.1, subject: 40_transfer.rho outer new, defect: dead TransferContract binder shadowed inside send, fix: remove the outer binder,
+  status: fixed}
+components:
+- name: TransferBook
+  lean_module: Rholphin.Model.Transfer
+  arms:
+  - arm: TransferBook@"send"
+    transition: transfer.TransferBook.send
+    lean: Rholphin.Model.Transfer.transferBook_send
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/40_transfer.rho, line: 84}
+    guards:
+    - {id: amount, expr: amount >= minAmount and amount > 0, refusal: {reason: amount, phase: pre}}
+    - {id: expiry, expr: now < expiry <= now + maxExpiryBlocks, refusal: {reason: expiry, phase: pre}}
+    - {id: memo, expr: len(memo) <= maxMemoBytes, refusal: {reason: memo, phase: pre}}
+    - {id: opId, expr: len(opId) <= maxOpIdBytes, refusal: {reason: opId, phase: pre}}
+    - {id: stipend, expr: 0 <= stipend <= maxStipend, refusal: {reason: stipend, phase: pre}}
+    - {id: measured, expr: actual = amount, refusal: {reason: amount mismatch, phase: pre}}
+    - {id: asset, expr: asset resolves, refusal: {reason: asset, phase: pre}}
+    effects:
+    - {target: transferState, formula: '{status: open, memo: memo, opId: opId, stipend: stipend}'}
+    - {target: reply, formula: '(true, id, transferUri)'}
+    access:
+    - {cell: bookParamsState, mode: peek, actor: arm, phase: pre}
+    - {cell: transferState, mode: post, actor: arm, phase: commit}
+    nested_calls:
+    - {callee: bookAmount, protocol: P0, takes: [], puts: [], post_owner: helper}
+    - {callee: bookSendCheck, protocol: P0, takes: [], puts: [], post_owner: helper}
+    refusals:
+    - {reason: amount, phase: pre, reposts: false, fail: false}
+    - {reason: amount mismatch, phase: pre, reposts: false, fail: false}
+    - {reason: asset, phase: pre, reposts: false, fail: false}
+    - {reason: expiry, phase: pre, reposts: false, fail: false}
+    - {reason: memo, phase: pre, reposts: false, fail: false}
+    - {reason: opId, phase: pre, reposts: false, fail: false}
+    - {reason: stipend, phase: pre, reposts: false, fail: false}
+    invariants:
+    - I14
+    - I15
+    status: verified
+  states:
+  - Live
+  initial: Live
+- name: TransferContract
+  lean_module: Rholphin.Model.Transfer
+  arms:
+  - arm: TransferContract@"claim"
+    transition: transfer.TransferContract.claim
+    lean: Rholphin.Model.Transfer.transferContract_claim
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/40_transfer.rho, line: 102}
+    guards:
+    - {id: open, expr: status = "open", refusal: {reason: closed, phase: pre}}
+    - {id: not_expired, expr: now < expiry, refusal: {reason: expired, phase: pre}}
+    - {id: secret, expr: H(secret) = secretHash, refusal: {reason: bad secret, phase: pre}}
+    effects:
+    - {target: status, formula: claimed}
+    - {target: recipient, formula: payment amount}
+    access:
+    - {cell: transferState, mode: consume, actor: arm, phase: commit}
+    - {cell: transferState, mode: post, actor: arm, phase: commit}
+    nested_calls:
+    - {callee: transferNow, protocol: P0, takes: [], puts: [], post_owner: helper}
+    refusals:
+    - {reason: bad secret, phase: pre, reposts: false, fail: false}
+    - {reason: closed, phase: pre, reposts: false, fail: false}
+    - {reason: expired, phase: pre, reposts: false, fail: false}
+    invariants:
+    - I14
+    - I15
+    status: verified
+    from: Open
+    to: Claimed
+  - arm: TransferContract@"refund"
+    transition: transfer.TransferContract.refund
+    lean: Rholphin.Model.Transfer.transferContract_refund
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/40_transfer.rho, line: 150}
+    guards:
+    - {id: open, expr: status = "open", refusal: {reason: closed, phase: pre}}
+    - {id: expired, expr: now >= expiry, refusal: {reason: not expired, phase: pre}}
+    - {id: sender, expr: caller = senderId, refusal: {reason: not sender, phase: pre}}
+    effects:
+    - {target: status, formula: refunded}
+    - {target: refund, formula: payment amount}
+    access:
+    - {cell: transferState, mode: consume, actor: arm, phase: commit}
+    - {cell: transferState, mode: post, actor: arm, phase: commit}
+    nested_calls: []
+    refusals:
+    - {reason: closed, phase: pre, reposts: false, fail: false}
+    - {reason: not expired, phase: pre, reposts: false, fail: false}
+    - {reason: not sender, phase: pre, reposts: false, fail: false}
+    invariants:
+    - I14
+    - I15
+    status: verified
+    from: Open
+    to: Refunded
+  - arm: TransferContract@"info"
+    transition: transfer.TransferContract.info
+    lean: Rholphin.Model.Transfer.transferContract_info
+    kind: read
+    source: {file: contracts/src/deploy/v3/40_transfer.rho, line: 201}
+    guards: []
+    effects:
+    - {target: reply, formula: '(true, {sender, asset, amount, secretHash, expiry, status, memo, opId, stipend})'}
+    access:
+    - {cell: transferState, mode: peek, actor: arm, phase: pre}
+    nested_calls: []
+    refusals: []
+    invariants:
+    - I14
+    status: verified
+  states:
+  - Open
+  - Claimed
+  - Refunded
+  initial: Open

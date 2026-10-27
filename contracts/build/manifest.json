@@ -130,28 +130,28 @@
       "brace_depth": 40,
       "contracts": 68,
       "grammar_depth": 65,
-      "minified_bytes": 45263,
+      "minified_bytes": 45434,
       "operator_run": 5,
-      "sha256": "ea5454f15fdf282d0b520026e290e43a72f07a7eca5ccab9e9b5dd881f50c718",
-      "source_bytes": 82174
+      "sha256": "36636fbc42ddc76ee98e2b557940dc8247f710a3746ee8d8792daedbf2523352",
+      "source_bytes": 82418
     },
     "contracts/build/deploy/v3/32_currency_registry.rho": {
       "brace_depth": 32,
       "contracts": 9,
       "grammar_depth": 53,
-      "minified_bytes": 5354,
+      "minified_bytes": 5334,
       "operator_run": 6,
-      "sha256": "62db34a90f2d03f084747c19e08d1fc0f2fae91a198ad09bf07161a484eaac4b",
-      "source_bytes": 10301
+      "sha256": "df82b5b99d3583d281ee0fd3bc3be6ec9851fd53da9f693df4d1f2a228b1cd6a",
+      "source_bytes": 10281
     },
     "contracts/build/deploy/v3/40_transfer.rho": {
       "brace_depth": 31,
       "contracts": 7,
       "grammar_depth": 54,
-      "minified_bytes": 4966,
+      "minified_bytes": 4948,
       "operator_run": 4,
-      "sha256": "ccbe75dad6fd6d3ae754ec3d451d0304788706fd42ffb45281d721df378ee69d",
-      "source_bytes": 10397
+      "sha256": "343de9fc81eac4a5270cdbe6868ae56e23201be57e76d2857a53d77c3348b973",
+      "source_bytes": 10377
     },
     "contracts/build/deploy/v3/50_market.rho": {
       "brace_depth": 42,
@@ -166,10 +166,10 @@
       "brace_depth": 39,
       "contracts": 24,
       "grammar_depth": 67,
-      "minified_bytes": 16516,
+      "minified_bytes": 16707,
       "operator_run": 3,
-      "sha256": "621daa2cbeab834cf4d61814a1e4012d8db52ebccddb484ebffe45d660358a45",
-      "source_bytes": 29713
+      "sha256": "d2d0a6a59c4a2d3b66d0da23cde73160d6eb8c94933940f97b85d21923b01e4f",
+      "source_bytes": 30176
     }
   },
   "schema": "rcash:contract-metrics:v1"

@@ -192,7 +192,7 @@ in {
   contract CurrencyRegistry(@"setPaused", @code, @paused, @nonce, @sigs, ret) = {
     for (@s <<- currencyState) {
       match s.get("currencies").get(code) {
-        Nil => { currencyState!(s) | ret!((false, "no currency")) }
+        Nil => { ret!((false, "no currency")) }
         entry => {
           new vCh, pCh, stCh in {
             rl!(entry.get("vaultUri"), *vCh) |

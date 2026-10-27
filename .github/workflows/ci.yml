@@ -22,6 +22,25 @@ jobs:
       - name: language policy
         run: python3 tools/check_languages.py
 
+  formal:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: python deps
+        run: pip install pyyaml
+      - uses: leanprover/lean-action@v1
+        with:
+          lake-package-directory: spec/lean
+      - name: flow specification and Lean audit
+        run: |
+          python3 tools/rho_inventory.py --check
+          python3 tools/check_flows.py --check --strict
+          python3 tools/render_flows.py --check
+          python3 tools/check_lean.py
+
   rust:
     runs-on: ubuntu-latest
     steps:

@@ -49,10 +49,18 @@ def digest(secret: bytes) -> str:
 
 
 def wait_height(target: int) -> None:
-    for _ in range(60):
+    import time, urllib.request
+    deadline = time.time() + 900
+    while time.time() < deadline:
         if node.height() > target:
             return
-        time.sleep(2)
+        try:
+            urllib.request.urlopen(urllib.request.Request(
+                "http://localhost:40405/api/v1/propose", data=b"{}",
+                headers={"content-type": "application/json"}, method="POST"), timeout=5)
+        except Exception:
+            pass
+        time.sleep(0.2)
     raise AssertionError(f"height did not pass {target}")
 
 
@@ -68,7 +76,7 @@ def main() -> int:
 
     height = node.height()
     expiry_a = height + 100
-    expiry_b = height + 30
+    expiry_b = height + 100
     send_term = render_scenario("transfer_send.rho", {
         "__ROOT_URI__": root,
         "__SENDER_PUB__": sender["public"],

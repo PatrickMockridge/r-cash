@@ -54,6 +54,7 @@ def main() -> int:
 
     owner = keys["business"]
     faucet_top_up(owner["address"])
+    faucet_top_up(keys["ramp"]["address"])
     owner_term = render_scenario("account_purse.rho", {
         "__ROOT_URI__": root,
         "__PUBKEY__": owner["public"],

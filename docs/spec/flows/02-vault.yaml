@@ -1,0 +1,421 @@
+# Flow specification.
+# Arm keys, source lines, access modes and refusal sets are checked against
+# contracts/build/arm_inventory.json by tools/check_flows.py. Guards, effects,
+# invariants and status are the authored content; status is not a synonym for
+# tested. See README.md for the schema and protocol labels.
+
+schema: rcash.flows/v1
+subsystem: vault
+source_globs:
+- contracts/src/deploy/v3/31_stablecoin.rho
+invariants: {}
+defects:
+- {id: D2.1, subject: VaultBook@"mint" via vaultMintCommit, defect: 'takes vaultState and returns (false, recapitalise) without reposting',
+  fix: vaultState!(s2) before the refusal, status: fixed}
+components:
+- name: VaultBook
+  lean_module: Rholphin.Model.Vault
+  arms:
+  - arm: VaultBook@"open"
+    transition: vault.VaultBook.open
+    lean: Rholphin.Model.Vault.vaultBook_open
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 932}
+    guards:
+    - {id: proof, expr: 'AccountFactory.verify(ownerId, proof)', refusal: {reason: verify failed, phase: pre}}
+    effects:
+    - {target: 'vaults[ownerId]', formula: '{auth: fresh, collateral: 0, debt: 0, lastHeight: now}'}
+    - {target: reply, formula: '(true, auth)'}
+    access:
+    - {cell: vaultState, mode: peek, actor: arm, phase: pre}
+    - {cell: vaultState, mode: consume, actor: arm, phase: commit}
+    - {cell: vaultState, mode: post, actor: arm, phase: commit}
+    nested_calls:
+    - {callee: vaultAccountFactory, protocol: P0, takes: [], puts: [], post_owner: helper}
+    - {callee: vaultNow, protocol: P0, takes: [], puts: [], post_owner: helper}
+    refusals:
+    - {reason: not owner, phase: pre, reposts: false, fail: false}
+    - {reason: verify failed, phase: pre, reposts: false, fail: false}
+    invariants: []
+    status: verified
+    to: Open
+  - arm: VaultBook@"deposit"
+    transition: vault.VaultBook.deposit
+    lean: Rholphin.Model.Vault.vaultBook_deposit
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 981}
+    guards:
+    - {id: exists, expr: 'vaults[ownerId] != Nil', refusal: {reason: no vault, phase: pre}}
+    - {id: auth, expr: 'vaults[ownerId].auth = auth', refusal: {reason: bad vault auth, phase: pre}}
+    - {id: custody, expr: CollateralCustody.deposit ok, refusal: {reason: custody, phase: pre}}
+    effects:
+    - {target: 'vaults[ownerId].collateral', formula: c + amount}
+    - {target: 'vaults[ownerId].debt', formula: 'accrue(d, lastHeight, now, ratePerBlock)'}
+    - {target: 'vaults[ownerId].lastHeight', formula: now}
+    - {target: totalCollateral, formula: totalCollateral + amount}
+    - {target: totalDebt, formula: totalDebt + (accrued - d)}
+    - {target: totalAccruedInterest, formula: totalAccruedInterest + (accrued - d)}
+    - {target: vaults.rev, formula: rev + 1}
+    access:
+    - {cell: paramsState, mode: peek, actor: arm, phase: pre}
+    - {cell: vaultState, mode: peek, actor: arm, phase: pre}
+    - {cell: vaultState, mode: consume, actor: arm, phase: commit}
+    - {cell: vaultState, mode: post, actor: arm, phase: commit}
+    nested_calls:
+    - {callee: vaultMath, protocol: P0, takes: [], puts: [], post_owner: helper}
+    - {callee: vaultNow, protocol: P0, takes: [], puts: [], post_owner: helper}
+    - {callee: vaultUpdate, protocol: P0, takes: [], puts: [], post_owner: helper}
+    refusals:
+    - {reason: bad vault auth, phase: pre, reposts: false, fail: false}
+    - {reason: custody, phase: pre, reposts: false, fail: false}
+    - {reason: no vault, phase: pre, reposts: false, fail: false}
+    invariants:
+    - S2
+    - S3
+    - S4
+    status: verified
+  - arm: VaultBook@"mint"
+    transition: vault.VaultBook.mint
+    lean: Rholphin.Model.Vault.vaultBook_mint
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1043}
+    guards:
+    - {id: amount_pos, expr: amount > 0, refusal: {reason: amount, phase: pre}}
+    - {id: exists, expr: 'vaults[ownerId] != Nil', refusal: {reason: no vault, phase: pre}}
+    - {id: auth, expr: 'vaults[ownerId].auth = auth', refusal: {reason: bad vault auth, phase: pre}}
+    - {id: not_paused, expr: not paused, refusal: {reason: paused, phase: pre}}
+    - {id: fresh_feed, expr: fresh, refusal: {reason: stale feed, phase: pre}}
+    - {id: rate_pos, expr: rate > 0, refusal: {reason: no rate, phase: pre}}
+    - {id: min_debt, expr: accrued + amount >= minDebt, refusal: {reason: min debt, phase: pre}}
+    - {id: max_debt, expr: accrued + amount <= maxDebt, refusal: {reason: max debt, phase: pre}}
+    - {id: ceiling, expr: totalDebt + (accrued - d) + amount <= debtCeiling, refusal: {reason: ceiling, phase: pre}}
+    - {id: health, expr: 'health(c, accrued + amount, rate, mcrBps)', refusal: {reason: below MCR, phase: pre}}
+    - {id: solvency, expr: not (sin > surplus), refusal: {reason: recapitalise, phase: after_consume}}
+    effects:
+    - {target: 'vaults[ownerId].debt', formula: accrued + amount}
+    - {target: 'vaults[ownerId].lastHeight', formula: now}
+    - {target: totalDebt, formula: totalDebt + (accrued - d) + amount}
+    - {target: totalAccruedInterest, formula: totalAccruedInterest + (accrued - d)}
+    - {target: supply, formula: totalPrincipal + amount}
+    - {target: vaults.rev, formula: rev + 1}
+    access:
+    - {cell: bufferState, mode: peek, actor: 'helper:vaultMintCommit', phase: pre}
+    - {cell: paramsState, mode: peek, actor: arm, phase: pre}
+    - {cell: vaultState, mode: peek, actor: arm, phase: pre}
+    - {cell: vaultState, mode: consume, actor: 'helper:vaultMintCommit', phase: commit}
+    - {cell: vaultState, mode: post, actor: 'helper:vaultMintCommit', phase: commit}
+    nested_calls:
+    - {callee: vaultMath, protocol: P0, takes: [], puts: [], post_owner: helper}
+    - {callee: vaultMintCommit, protocol: H2b, takes: [vaultState], puts: [vaultState], post_owner: helper}
+    - {callee: vaultNow, protocol: P0, takes: [], puts: [], post_owner: helper}
+    - {callee: vaultPrice, protocol: P0, takes: [], puts: [], post_owner: helper}
+    refusals:
+    - {reason: amount, phase: pre, reposts: false, fail: false}
+    - {reason: bad vault auth, phase: pre, reposts: false, fail: false}
+    - {reason: below MCR, phase: pre, reposts: false, fail: false}
+    - {reason: ceiling, phase: pre, reposts: false, fail: false}
+    - {reason: max debt, phase: pre, reposts: false, fail: false}
+    - {reason: min debt, phase: pre, reposts: false, fail: false}
+    - {reason: no rate, phase: pre, reposts: false, fail: false}
+    - {reason: no vault, phase: pre, reposts: false, fail: false}
+    - {reason: paused, phase: pre, reposts: false, fail: false}
+    - {reason: recapitalise, phase: after_consume, reposts: true, fail: false}
+    - {reason: stale feed, phase: pre, reposts: false, fail: false}
+    invariants:
+    - S1
+    - S2
+    - S3
+    - S4
+    - S9
+    status: verified
+  - arm: VaultBook@"withdraw"
+    transition: vault.VaultBook.withdraw
+    lean: Rholphin.Model.Vault.vaultBook_withdraw
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1107}
+    guards:
+    - {id: amount_pos, expr: amount > 0, refusal: {reason: amount, phase: pre}}
+    - {id: exists, expr: 'vaults[ownerId] != Nil', refusal: {reason: no vault, phase: pre}}
+    - {id: not_paused, expr: not paused, refusal: {reason: paused, phase: pre}}
+    - {id: auth, expr: 'vaults[ownerId].auth = auth', refusal: {reason: bad vault auth, phase: pre}}
+    - {id: collateral_floor, expr: c >= amount, refusal: {reason: amount, phase: pre}}
+    - {id: fresh_feed, expr: fresh, refusal: {reason: stale feed, phase: pre}}
+    - {id: rate_pos, expr: rate > 0, refusal: {reason: no rate, phase: pre}}
+    - {id: health, expr: 'health(c - amount, accrued, rate, mcrBps)', refusal: {reason: below MCR, phase: pre}}
+    effects:
+    - {target: 'vaults[ownerId].collateral', formula: c - amount}
+    - {target: 'vaults[ownerId].debt', formula: accrued}
+    - {target: 'vaults[ownerId].lastHeight', formula: now}
+    - {target: totalCollateral, formula: totalCollateral - amount}
+    - {target: totalDebt, formula: totalDebt + (accrued - d)}
+    - {target: totalAccruedInterest, formula: totalAccruedInterest + (accrued - d)}
+    - {target: custody.rev, formula: custody.rev - amount}
+    - {target: vaults.rev, formula: rev + 1}
+    access:
+    - {cell: paramsState, mode: peek, actor: arm, phase: pre}
+    - {cell: vaultState, mode: peek, actor: arm, phase: pre}
+    - {cell: vaultState, mode: consume, actor: arm, phase: commit}
+    - {cell: vaultState, mode: post, actor: arm, phase: commit}
+    nested_calls:
+    - {callee: vaultMath, protocol: P0, takes: [], puts: [], post_owner: helper}
+    - {callee: vaultNow, protocol: P0, takes: [], puts: [], post_owner: helper}
+    - {callee: vaultPrice, protocol: P0, takes: [], puts: [], post_owner: helper}
+    - {callee: vaultUpdate, protocol: P0, takes: [], puts: [], post_owner: helper}
+    refusals:
+    - {reason: amount, phase: pre, reposts: false, fail: false}
+    - {reason: bad vault auth, phase: pre, reposts: false, fail: false}
+    - {reason: below MCR, phase: pre, reposts: false, fail: false}
+    - {reason: no rate, phase: pre, reposts: false, fail: false}
+    - {reason: no vault, phase: pre, reposts: false, fail: false}
+    - {reason: paused, phase: pre, reposts: false, fail: false}
+    - {reason: stale feed, phase: pre, reposts: false, fail: false}
+    invariants:
+    - S2
+    - S3
+    - S4
+    - S7
+    status: verified
+  - arm: VaultBook@"repay"
+    transition: vault.VaultBook.repay
+    lean: Rholphin.Model.Vault.vaultBook_repay
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1191}
+    guards:
+    - {id: exists, expr: 'vaults[ownerId] != Nil', refusal: {reason: no vault, phase: pre}}
+    - {id: auth, expr: 'vaults[ownerId].auth = auth', refusal: {reason: bad vault auth, phase: pre}}
+    - {id: amount_pos, expr: amount > 0, refusal: {reason: amount, phase: pre}}
+    - {id: amount_le_debt, expr: amount <= accrued, refusal: {reason: amount, phase: pre}}
+    - {id: min_debt_residual, expr: accrued - amount = 0 or accrued - amount >= minDebt, refusal: {reason: min debt, phase: pre}}
+    - {id: payment_asset, expr: isStablecoinPayment(payment), refusal: {reason: asset, phase: pre}}
+    effects:
+    - {target: interestPaid, formula: 'min(amount, accrued - d)'}
+    - {target: principalPaid, formula: amount - interestPaid}
+    - {target: cancelled, formula: 'min(surplus, sin)'}
+    - {target: move, formula: floor((surplus - cancelled) * savingsShareBps / 10000)}
+    - {target: 'vaults[ownerId].debt', formula: accrued - amount}
+    - {target: 'vaults[ownerId].lastHeight', formula: now}
+    - {target: totalDebt, formula: totalDebt + (accrued - d) - amount}
+    - {target: totalAccruedInterest, formula: totalAccruedInterest + (accrued - d) - interestPaid}
+    - {target: supply, formula: supply - principalPaid - cancelled}
+    - {target: sin, formula: sin - cancelled}
+    - {target: surplus, formula: surplus - cancelled - move}
+    - {target: savings.totalAssets, formula: totalAssets + move}
+    - {target: vaults.rev, formula: rev + 1}
+    access:
+    - {cell: paramsState, mode: peek, actor: arm, phase: pre}
+    - {cell: vaultState, mode: peek, actor: arm, phase: pre}
+    - {cell: vaultState, mode: consume, actor: 'helper:repayCommit', phase: commit}
+    - {cell: vaultState, mode: post, actor: 'helper:repayCommit', phase: commit}
+    nested_calls:
+    - {callee: repayCommit, protocol: H2b, takes: [vaultState], puts: [vaultState], post_owner: helper}
+    - {callee: vaultMath, protocol: P0, takes: [], puts: [], post_owner: helper}
+    - {callee: vaultNow, protocol: P0, takes: [], puts: [], post_owner: helper}
+    refusals:
+    - {reason: amount, phase: pre, reposts: false, fail: false}
+    - {reason: asset, phase: pre, reposts: false, fail: false}
+    - {reason: bad vault auth, phase: pre, reposts: false, fail: false}
+    - {reason: min debt, phase: pre, reposts: false, fail: false}
+    - {reason: no vault, phase: pre, reposts: false, fail: false}
+    invariants:
+    - S3
+    - S7
+    - S9
+    - S10
+    status: verified
+  - arm: VaultBook@"liquidate"
+    transition: vault.VaultBook.liquidate
+    lean: Rholphin.Model.Vault.vaultBook_liquidate
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1253}
+    guards:
+    - {id: auth_liquidation, expr: auth = liquidationAuth, refusal: {reason: bad liquidation authority, phase: pre}}
+    - {id: payment_asset, expr: isStablecoinPayment(payment), refusal: {reason: not a stablecoin payment, phase: pre}}
+    - {id: amount_pos, expr: amount > 0, refusal: {reason: amount, phase: pre}}
+    - {id: exists, expr: 'vaults[ownerId] != Nil', refusal: {reason: no vault, phase: pre}}
+    - {id: fresh_feed, expr: fresh, refusal: {reason: stale feed, phase: pre}}
+    - {id: rate_pos, expr: rate > 0, refusal: {reason: no rate, phase: pre}}
+    - {id: unhealthy, expr: 'not health(c, accrued, rate, mcrBps)', refusal: {reason: healthy, phase: pre}}
+    - {id: close_factor, expr: amount <= ceil(accrued * closeFactorBps / 10000), refusal: {reason: close factor, phase: pre}}
+    - {id: covered, expr: 'payout(amount, bonusBps, rate) <= c or amount * 1e8 >= c * rate', refusal: {reason: underwater repayment,
+        phase: pre}}
+    - {id: slippage, expr: seized >= minCollateral, refusal: {reason: slippage, phase: pre}}
+    effects:
+    - {target: supply, formula: supply - amount}
+    - {target: custody.rev, formula: custody.rev - seized}
+    - {target: 'vaults[ownerId].collateral', formula: c - seized}
+    - {target: 'vaults[ownerId].debt', formula: 0 if writeOff else accrued - amount}
+    - {target: 'vaults[ownerId].lastHeight', formula: now}
+    - {target: totalCollateral, formula: totalCollateral - seized}
+    - {target: totalDebt, formula: totalDebt + (accrued - d) - amount}
+    - {target: totalAccruedInterest, formula: totalAccruedInterest + (accrued - d)}
+    - {target: badDebt, formula: badDebt + (accrued - amount if writeOff else 0)}
+    - {target: sin, formula: sin + (accrued - amount if writeOff else 0) - cancelled}
+    - {target: surplus, formula: surplus - cancelled}
+    - {target: vaults.rev, formula: rev + 1}
+    access:
+    - {cell: paramsState, mode: peek, actor: arm, phase: pre}
+    - {cell: vaultState, mode: peek, actor: arm, phase: pre}
+    - {cell: vaultState, mode: peek, actor: 'helper:vaultLiquidateCommit', phase: pre}
+    - {cell: vaultState, mode: consume, actor: 'helper:vaultLiquidateCommit', phase: commit}
+    - {cell: vaultState, mode: post, actor: 'helper:vaultLiquidateCommit', phase: commit}
+    nested_calls:
+    - {callee: vaultLiquidateCommit, protocol: H2b, takes: [vaultState], puts: [vaultState], post_owner: helper}
+    - {callee: vaultMath, protocol: P0, takes: [], puts: [], post_owner: helper}
+    - {callee: vaultNow, protocol: P0, takes: [], puts: [], post_owner: helper}
+    - {callee: vaultPrice, protocol: P0, takes: [], puts: [], post_owner: helper}
+    refusals:
+    - {reason: amount, phase: pre, reposts: false, fail: false}
+    - {reason: bad liquidation authority, phase: pre, reposts: false, fail: false}
+    - {reason: close factor, phase: pre, reposts: false, fail: false}
+    - {reason: healthy, phase: pre, reposts: false, fail: false}
+    - {reason: no rate, phase: pre, reposts: false, fail: false}
+    - {reason: no vault, phase: pre, reposts: false, fail: false}
+    - {reason: not a stablecoin payment, phase: pre, reposts: false, fail: false}
+    - {reason: slippage, phase: pre, reposts: false, fail: false}
+    - {reason: stale feed, phase: pre, reposts: false, fail: false}
+    - {reason: underwater repayment, phase: pre, reposts: false, fail: false}
+    invariants:
+    - S3
+    - S5
+    - S6
+    - S7
+    - S9
+    status: verified
+  - arm: VaultBook@"vault"
+    transition: vault.VaultBook.vault
+    lean: Rholphin.Model.Vault.vaultBook_vault
+    kind: read
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1345}
+    guards:
+    - {id: exists, expr: 'vaults[ownerId] != Nil', refusal: {reason: no vault, phase: pre}}
+    effects:
+    - {target: reply, formula: '(true, {collateral, debt: accrued, health, fresh, rate})'}
+    access:
+    - {cell: paramsState, mode: peek, actor: arm, phase: pre}
+    - {cell: vaultState, mode: peek, actor: arm, phase: pre}
+    nested_calls:
+    - {callee: vaultMath, protocol: P0, takes: [], puts: [], post_owner: helper}
+    - {callee: vaultNow, protocol: P0, takes: [], puts: [], post_owner: helper}
+    - {callee: vaultPrice, protocol: P0, takes: [], puts: [], post_owner: helper}
+    refusals:
+    - {reason: no vault, phase: pre, reposts: false, fail: false}
+    invariants:
+    - S2
+    status: verified
+  - arm: VaultBook@"vaults"
+    transition: vault.VaultBook.vaults
+    lean: Rholphin.Model.Vault.vaultBook_vaults
+    kind: read
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1387}
+    guards: []
+    effects:
+    - {target: reply, formula: '(true, keys(vaults))'}
+    access:
+    - {cell: vaultState, mode: peek, actor: arm, phase: pre}
+    nested_calls: []
+    refusals: []
+    invariants: []
+    status: verified
+  - arm: VaultBook@"totals"
+    transition: vault.VaultBook.totals
+    lean: Rholphin.Model.Vault.vaultBook_totals
+    kind: read
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1391}
+    guards: []
+    effects:
+    - {target: reply, formula: '(true, {totalDebt, totalAccruedInterest, totalCollateral, badDebt, sin, psmDebt, paused, rev})'}
+    access:
+    - {cell: bufferState, mode: peek, actor: arm, phase: pre}
+    - {cell: psmState, mode: peek, actor: arm, phase: pre}
+    - {cell: vaultState, mode: peek, actor: arm, phase: pre}
+    nested_calls: []
+    refusals: []
+    invariants:
+    - S3
+    status: verified
+  - arm: VaultBook@"params"
+    transition: vault.VaultBook.params
+    lean: Rholphin.Model.Vault.vaultBook_params
+    kind: read
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1406}
+    guards: []
+    effects:
+    - {target: reply, formula: '(true, params)'}
+    access:
+    - {cell: paramsState, mode: peek, actor: arm, phase: pre}
+    nested_calls: []
+    refusals: []
+    invariants: []
+    status: verified
+  - arm: VaultBook@"pause"
+    transition: vault.VaultBook.pause
+    lean: Rholphin.Model.Vault.vaultBook_pause
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1410}
+    guards:
+    - {id: governor, expr: 'Governor.authorize(setPaused, paused.toString())', refusal: {reason: authorize, phase: pre}}
+    effects:
+    - {target: vaultState.paused, formula: paused}
+    - {target: vaultState.rev, formula: rev + 1}
+    access:
+    - {cell: vaultState, mode: peek, actor: arm, phase: pre}
+    - {cell: vaultState, mode: consume, actor: arm, phase: commit}
+    - {cell: vaultState, mode: post, actor: arm, phase: commit}
+    nested_calls:
+    - {callee: vaultGovernor, protocol: P0, takes: [], puts: [], post_owner: helper}
+    refusals: []
+    invariants:
+    - S12
+    status: verified
+  - arm: VaultBook@"attest"
+    transition: vault.VaultBook.attest
+    lean: Rholphin.Model.Vault.vaultBook_attest
+    kind: read
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1433}
+    guards: []
+    effects:
+    - {target: reply, formula: '(true, {currency, paramsHash, sponsor, template})'}
+    access: []
+    nested_calls: []
+    refusals: []
+    invariants: []
+    status: verified
+  states:
+  - Open
+  - Paused
+  initial: Open
+- name: LiquidationEngine
+  lean_module: Rholphin.Model.Vault
+  arms:
+  - arm: LiquidationEngine@"liquidate"
+    transition: vault.LiquidationEngine.liquidate
+    lean: Rholphin.Model.Vault.liquidationEngine_liquidate
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1444}
+    guards: []
+    effects:
+    - {target: delegate, formula: 'VaultBook.liquidate(ownerId, liquidationAuth, payment, minCollateral)'}
+    access: []
+    nested_calls:
+    - {callee: VaultBook@"liquidate", protocol: P4, internal: true}
+    refusals: []
+    invariants:
+    - S5
+    - S7
+    status: verified
+  - arm: LiquidationEngine@"attest"
+    transition: vault.LiquidationEngine.attest
+    lean: Rholphin.Model.Vault.liquidationEngine_attest
+    kind: read
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1448}
+    guards: []
+    effects:
+    - {target: reply, formula: '(true, {currency, template})'}
+    access: []
+    nested_calls: []
+    refusals: []
+    invariants: []
+    status: verified
+  states:
+  - Open
+  initial: Open

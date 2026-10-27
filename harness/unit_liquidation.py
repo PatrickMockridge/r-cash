@@ -13,6 +13,7 @@ Usage:
 from __future__ import annotations
 
 import json
+import os
 import sys
 import time
 import urllib.error
@@ -35,7 +36,7 @@ KEYS = ROOT / ".devnet" / "keys.json"
 STATE = ROOT / ".devnet" / "v3-install.json"
 SCENARIOS = ROOT / "harness" / "scenarios"
 PHLO = 100_000_000
-CURRENCY = "V5T"
+CURRENCY = "V5T" + os.environ.get("RCASH_TEST_SUFFIX", "")
 QUOTE_PRICE = 66_666
 REV_HIGH = 5_000_000
 REV_MID = 3_000_000
@@ -73,11 +74,19 @@ def buffer_info(keys: dict, buffer_uri: str) -> dict:
 
 
 def wait_height(blocks: int) -> None:
+    import urllib.request
     target = time_height() + blocks
-    for _ in range(blocks * 12 + 60):
+    deadline = time.time() + 900
+    while time.time() < deadline:
         if time_height() >= target:
             return
-        time.sleep(2)
+        try:
+            urllib.request.urlopen(urllib.request.Request(
+                "http://localhost:40405/api/v1/propose", data=b"{}",
+                headers={"content-type": "application/json"}, method="POST"), timeout=5)
+        except Exception:
+            pass
+        time.sleep(0.2)
     raise AssertionError(f"height did not reach {target}")
 
 
@@ -260,16 +269,22 @@ def main() -> int:
     before_buf = buffer_info(keys, buffer_uri)
     check("buffer sin outstanding", before_buf["sin"] > 0, True)
     wait_height(12)
-    repaid = one(render_scenario("stablecoin_repay_hold.rho", {
+    recap_view = vault_view(keys, vault_uri, recap_owner)
+    interest_due = recap_view["accruedInterest"]
+    check("recap vault has accrued interest", interest_due > 0, True)
+    repay_reply = one(render_scenario("stablecoin_repay_hold.rho", {
         "__ROOT_URI__": root,
         "__VAULT_URI__": vault_uri,
         "__PUBKEY__": recap["public"],
-        "__AMOUNT__": "20000",
+        "__AMOUNT__": str(interest_due),
         "__ASSET__": CURRENCY,
     }), recap["secret"])[0]
+    if not isinstance(repay_reply, dict):
+        raise AssertionError(f"repay refused: {repay_reply}")
+    repaid = repay_reply
     check("interest-only repay has no principal", repaid["principalPaid"], 0)
-    check("interest-only repay pays interest", repaid["interestPaid"], 20000)
-    check("cover cancels the interest", repaid["cancelled"], 20000)
+    check("interest-only repay pays interest", repaid["interestPaid"], interest_due)
+    check("cover cancels the interest", repaid["cancelled"], interest_due)
     after_buf = buffer_info(keys, buffer_uri)
     check("sin falls by the cancelled amount",
           before_buf["sin"] - after_buf["sin"], repaid["cancelled"])

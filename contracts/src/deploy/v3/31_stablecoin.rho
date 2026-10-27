@@ -198,7 +198,10 @@ in {
 
   // PSM sell commit: burn the stablecoin, pay the net REV, then update the
   // signed debt. The fee stays in the REV purse because only revOut leaves.
-  contract psmSellCommit(@amount, @revOut, @feeRev, @st, @psmRevPurse, @revBrand, payment, revFacet, ret2) = {
+  contract psmSellCommit(@amount, @revOut, @feeRev, @st, @maxSupply, @psmRevPurse, @revBrand, payment, revFacet, ret2) = {
+    if (st.get("stableDebt") - amount + maxSupply < 0) {
+      ret2!((false, "psm floor", *payment))
+    } else {
     new bCh, wCh, depCh in {
       Stablecoin!("burn", *payment, amount, *psmBurnAuth, *bCh) |
       for (@b <- bCh) {
@@ -233,6 +236,7 @@ in {
           _ => { ret2!((false, "burn", *payment)) }
         }
       }
+    }
     }
   } |
 
@@ -526,7 +530,7 @@ in {
               ret2!(1 / 0)
             } else {
               if (b2.get("sin") > b2.get("surplus")) {
-                ret2!((false, "recapitalise"))
+                vaultState!(s2) | ret2!((false, "recapitalise"))
               } else {
                 vaultUpdate!(s2, ownerId, {
                   "auth": v2.get("auth"),
@@ -1716,7 +1720,7 @@ in {
                               }
                             }
                           }
-                          _ => { bufferState!(s) | ret2!((false, "payment")) }
+                          _ => { ret2!((false, "payment")) }
                         }
                       }
                     }
@@ -1813,7 +1817,7 @@ in {
       for (@a <- amtCh) {
         match a {
           (true, amount) => {
-            for (@ps <<- paramsState; @st <<- psmState) {
+            for (@ps <<- paramsState; @st <<- psmState; @is <<- issuerState) {
               vaultPrice!(currency, ps.get("params").get("maxOracleAge"), *rateCh) |
               for (@rr <- rateCh) {
                 match rr {
@@ -1838,7 +1842,8 @@ in {
                                         ret2!((false, "buffer", *payment))
                                       } else {
                                         psmSellCommit!(amount, revOut, feeRev, st,
-                                                       psmRevPurse, revBrand, *payment, *revFacet, *ret2)
+                                                       is.get("maxSupply"), psmRevPurse, revBrand,
+                                                       *payment, *revFacet, *ret2)
                                       }
                                     }
                                   }
@@ -1957,7 +1962,7 @@ in {
                             } else {
                               for (@s <- psmState) {
                                 if (ceiling < s.get("stableDebt")) {
-                                  ret2!((false, "ceiling"))
+                                  psmState!(s) | ret2!((false, "ceiling"))
                                 } else {
                                   psmState!(s.set("feeBps", feeBps)
                                     .set("ceiling", ceiling)

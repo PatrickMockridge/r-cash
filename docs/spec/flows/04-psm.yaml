@@ -1,0 +1,203 @@
+# Flow specification.
+# Arm keys, source lines, access modes and refusal sets are checked against
+# contracts/build/arm_inventory.json by tools/check_flows.py. Guards, effects,
+# invariants and status are the authored content; status is not a synonym for
+# tested. See README.md for the schema and protocol labels.
+
+schema: rcash.flows/v1
+subsystem: psm
+source_globs:
+- contracts/src/deploy/v3/31_stablecoin.rho
+invariants: {}
+defects:
+- {id: D2.2, subject: PegStabilityModule@"applyPolicy", defect: 'takes psmState and returns (false, ceiling) without reposting', fix: psmState!(s)
+    before the refusal, status: fixed}
+- {id: P1, subject: PegStabilityModule@"sellStable", defect: no -maxSupply lower bound on signed stableDebt despite SPEC §11, fix: enforce
+    the floor or withdraw the claim in the same commit, status: fixed}
+components:
+- name: PegStabilityModule
+  lean_module: Rholphin.Model.Psm
+  arms:
+  - arm: PegStabilityModule@"fundRev"
+    transition: psm.PegStabilityModule.fundRev
+    lean: Rholphin.Model.Psm.pegStabilityModule_fundRev
+    kind: read
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1794}
+    guards:
+    - {id: payment_asset, expr: isRevPayment(payment), refusal: {reason: asset, phase: pre}}
+    - {id: deposit_ok, expr: psmRevPurse.deposit ok, refusal: {reason: deposit, phase: pre}}
+    effects:
+    - {target: psmRev, formula: psmRev + amount}
+    access: []
+    nested_calls: []
+    refusals:
+    - {reason: asset, phase: pre, reposts: false, fail: false}
+    - {reason: deposit, phase: pre, reposts: false, fail: false}
+    invariants: []
+    status: verified
+    to: Active
+  - arm: PegStabilityModule@"sellStable"
+    transition: psm.PegStabilityModule.sellStable
+    lean: Rholphin.Model.Psm.pegStabilityModule_sellStable
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1814}
+    guards:
+    - {id: payment_asset, expr: isStablecoinPayment(payment), refusal: {reason: asset, phase: pre}}
+    - {id: fresh, expr: fresh and rate > 0, refusal: {reason: stale feed, phase: pre}}
+    - {id: gross, expr: gross = floor(amount * 1e8 / rate), refusal: {reason: asset, phase: pre}}
+    - {id: fee, expr: fee = ceil(gross * feeBps / 10000), refusal: {reason: asset, phase: pre}}
+    - {id: out_pos, expr: gross - fee > 0, refusal: {reason: min rev, phase: pre}}
+    - {id: slippage_floor, expr: gross - fee >= minRev, refusal: {reason: min rev, phase: pre}}
+    - {id: available, expr: gross - fee <= psmRev, refusal: {reason: buffer, phase: pre}}
+    - {id: psm_floor, expr: stableDebt - amount + maxSupply >= 0, refusal: {reason: psm floor, phase: pre}}
+    effects:
+    - {target: supply, formula: supply - amount}
+    - {target: stableDebt, formula: stableDebt - amount}
+    - {target: psmRev, formula: psmRev - (gross - fee)}
+    - {target: caller, formula: REV payment (gross - fee)}
+    access:
+    - {cell: paramsState, mode: peek, actor: arm, phase: pre}
+    - {cell: psmState, mode: peek, actor: arm, phase: pre}
+    - {cell: psmState, mode: consume, actor: 'helper:psmSellCommit', phase: commit}
+    - {cell: psmState, mode: post, actor: 'helper:psmSellCommit', phase: commit}
+    - {cell: issuerState, mode: peek, actor: arm, phase: pre}
+    nested_calls:
+    - {callee: feeCeil, protocol: P0, takes: [], puts: [], post_owner: helper}
+    - {callee: psmSellCommit, protocol: H2b, takes: [psmState], puts: [psmState], post_owner: helper}
+    - {callee: vaultPrice, protocol: P0, takes: [], puts: [], post_owner: helper}
+    refusals:
+    - {reason: asset, phase: pre, reposts: false, fail: false}
+    - {reason: balance, phase: pre, reposts: false, fail: false}
+    - {reason: buffer, phase: pre, reposts: false, fail: false}
+    - {reason: burn, phase: pre, reposts: false, fail: false}
+    - {reason: min rev, phase: pre, reposts: false, fail: false}
+    - {reason: stale feed, phase: pre, reposts: false, fail: false}
+    - {reason: psm floor, phase: pre, reposts: false, fail: false}
+    invariants:
+    - S3
+    - S11
+    status: verified
+  - arm: PegStabilityModule@"buyStable"
+    transition: psm.PegStabilityModule.buyStable
+    lean: Rholphin.Model.Psm.pegStabilityModule_buyStable
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1869}
+    guards:
+    - {id: payment_asset, expr: isRevPayment(payment), refusal: {reason: asset, phase: pre}}
+    - {id: not_paused, expr: not vault.paused, refusal: {reason: paused, phase: pre}}
+    - {id: fresh, expr: fresh and rate > 0, refusal: {reason: stale feed, phase: pre}}
+    - {id: gross, expr: gross = floor(amount * rate / 1e8), refusal: {reason: asset, phase: pre}}
+    - {id: fee, expr: fee = ceil(gross * feeBps / 10000), refusal: {reason: asset, phase: pre}}
+    - {id: out_pos, expr: gross - fee > 0, refusal: {reason: min stable, phase: pre}}
+    - {id: slippage_floor, expr: gross - fee >= minStable, refusal: {reason: min stable, phase: pre}}
+    - {id: ceiling, expr: stableDebt + (gross - fee) <= ceiling, refusal: {reason: ceiling, phase: pre}}
+    effects:
+    - {target: psmRev, formula: psmRev + amount}
+    - {target: supply, formula: totalPrincipal + (gross - fee)}
+    - {target: stableDebt, formula: stableDebt + (gross - fee)}
+    - {target: caller, formula: stablecoin payment (gross - fee)}
+    access:
+    - {cell: paramsState, mode: peek, actor: arm, phase: pre}
+    - {cell: psmState, mode: peek, actor: arm, phase: pre}
+    - {cell: vaultState, mode: peek, actor: arm, phase: pre}
+    - {cell: psmState, mode: consume, actor: 'helper:psmBuyCommit', phase: commit}
+    - {cell: psmState, mode: post, actor: 'helper:psmBuyCommit', phase: commit}
+    nested_calls:
+    - {callee: feeCeil, protocol: P0, takes: [], puts: [], post_owner: helper}
+    - {callee: psmBuyCommit, protocol: H2b, takes: [psmState], puts: [psmState], post_owner: helper}
+    - {callee: vaultPrice, protocol: P0, takes: [], puts: [], post_owner: helper}
+    refusals:
+    - {reason: asset, phase: pre, reposts: false, fail: false}
+    - {reason: ceiling, phase: pre, reposts: false, fail: false}
+    - {reason: deposit, phase: pre, reposts: false, fail: false}
+    - {reason: min stable, phase: pre, reposts: false, fail: false}
+    - {reason: paused, phase: pre, reposts: false, fail: false}
+    - {reason: stale feed, phase: pre, reposts: false, fail: false}
+    invariants:
+    - S3
+    - S11
+    status: verified
+    to: Active
+  - arm: PegStabilityModule@"schedulePolicy"
+    transition: psm.PegStabilityModule.schedulePolicy
+    lean: Rholphin.Model.Psm.pegStabilityModule_schedulePolicy
+    kind: create
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1919}
+    guards:
+    - {id: fee_range, expr: 0 <= feeBps <= 1000, refusal: {reason: psm fee, phase: pre}}
+    - {id: ceiling_nonneg, expr: ceiling >= 0, refusal: {reason: ceiling, phase: pre}}
+    effects:
+    - {target: governor.pending, formula: 'pending[stablecoin:currency, nonce] = {action: setPsmPolicy, argsHash: feeBps.toString()
+        ++ ''|'' ++ ceiling.toString()}'}
+    access: []
+    nested_calls:
+    - {callee: vaultGovernor, protocol: P0, takes: [], puts: [], post_owner: helper}
+    refusals:
+    - {reason: ceiling, phase: pre, reposts: false, fail: false}
+    - {reason: psm fee, phase: pre, reposts: false, fail: false}
+    invariants:
+    - S12
+    status: verified
+  - arm: PegStabilityModule@"applyPolicy"
+    transition: psm.PegStabilityModule.applyPolicy
+    lean: Rholphin.Model.Psm.pegStabilityModule_applyPolicy
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1942}
+    guards:
+    - {id: action, expr: action = "setPsmPolicy", refusal: {reason: action, phase: pre}}
+    - {id: fee_range, expr: 0 <= feeBps <= 1000, refusal: {reason: psm fee, phase: pre}}
+    - {id: ceiling_nonneg, expr: ceiling >= 0, refusal: {reason: ceiling, phase: pre}}
+    - {id: hash, expr: argsHash = feeBps.toString() ++ '|' ++ ceiling.toString(), refusal: {reason: params hash, phase: pre}}
+    - {id: ceiling_floor, expr: ceiling >= stableDebt, refusal: {reason: ceiling, phase: after_consume}}
+    effects:
+    - {target: feeBps, formula: feeBps}
+    - {target: ceiling, formula: ceiling}
+    - {target: rev, formula: rev + 1}
+    access:
+    - {cell: psmState, mode: consume, actor: arm, phase: commit}
+    - {cell: psmState, mode: post, actor: arm, phase: commit}
+    nested_calls:
+    - {callee: vaultGovernor, protocol: P0, takes: [], puts: [], post_owner: helper}
+    refusals:
+    - {reason: action, phase: pre, reposts: false, fail: false}
+    - {reason: ceiling, phase: after_consume, reposts: true, fail: false}
+    - {reason: params hash, phase: pre, reposts: false, fail: false}
+    - {reason: psm fee, phase: pre, reposts: false, fail: false}
+    invariants:
+    - S12
+    status: verified
+  - arm: PegStabilityModule@"info"
+    transition: psm.PegStabilityModule.info
+    lean: Rholphin.Model.Psm.pegStabilityModule_info
+    kind: read
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1989}
+    guards: []
+    effects:
+    - {target: reply, formula: '(true, {stableDebt, feeBps, ceiling, revBalance, rev})'}
+    access:
+    - {cell: psmState, mode: peek, actor: arm, phase: pre}
+    nested_calls: []
+    refusals:
+    - {reason: balance, phase: pre, reposts: false, fail: false}
+    invariants:
+    - S11
+    status: verified
+  - arm: PegStabilityModule@"debt"
+    transition: psm.PegStabilityModule.debt
+    lean: Rholphin.Model.Psm.pegStabilityModule_debt
+    kind: read
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 2007}
+    guards: []
+    effects:
+    - {target: reply, formula: '(true, stableDebt)'}
+    access:
+    - {cell: psmState, mode: peek, actor: arm, phase: pre}
+    nested_calls: []
+    refusals: []
+    invariants:
+    - S11
+    status: verified
+  states:
+  - Idle
+  - Active
+  initial: Idle

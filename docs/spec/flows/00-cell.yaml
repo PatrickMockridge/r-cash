@@ -1,0 +1,74 @@
+# The linear-cell calculus. This file is normative for every transition in the
+# other flow documents: an arm that violates a rule here is not conformant even
+# if its arithmetic is correct. The Lean model Rholphin.Linear.Cell proves the
+# rejection theorems named below.
+schema: rcash.flows/v1
+subsystem: cell
+source_globs: []
+invariants:
+  I1:
+    statement: "One Full in every state cell at every quiescent point."
+    lean: Rholphin.Linear.Cell.wf_quiescent
+components: []
+rules:
+  - id: C-peek
+    name: peek
+    rule: "s c = v :: rest required; s unchanged; c not held"
+    rejects: []
+  - id: C-take
+    name: take
+    rule: "s c = [v] required; s c := []; c added to held"
+    rejects: []
+  - id: C-put
+    name: put
+    rule: "s c = [] and c in held required; s c := [v]; c removed from held"
+    rejects: [D1, D2]
+  - id: C-call
+    name: nested call
+    rule: "the callee's cell set is disjoint from held; the callee leaves the store unchanged"
+    rejects: [D3]
+  - id: C-wf
+    name: well formed
+    rule: "a trace is WF when it finishes with held = []"
+    rejects: [D2]
+  - id: D1
+    name: duplicate cell
+    rule: "posting a cell that was never taken (or was peeked) leaves two live cells"
+    rejects: [C-put]
+    lean: Rholphin.Linear.Cell.peek_then_put_rejected
+  - id: D2
+    name: lost cell
+    rule: "a graceful refusal after a take without a repost leaves held non-empty"
+    rejects: [C-wf]
+    lean: Rholphin.Linear.Cell.take_without_put_rejected
+  - id: D3
+    name: nested take
+    rule: "a nested call touches a cell the caller holds: the callee blocks"
+    rejects: [C-call]
+    lean: Rholphin.Linear.Cell.nested_take_deadlock
+  - id: D4
+    name: lost update
+    rule: "a peek followed by a later post is a duplicate, not an update"
+    rejects: [C-put]
+    lean: Rholphin.Linear.Cell.peek_then_put_rejected
+  - id: D5
+    name: duplicate binder
+    rule: "an outer new binder shadowed before use is dead; the inventory reports it"
+    rejects: [C-call]
+  - id: D6
+    name: sort confusion
+    rule: "a name used where a value is expected, or the reverse, has no transition"
+    rejects: [C-call]
+protocols:
+  - {label: P0, meaning: "pure helper, no cell access"}
+  - {label: P1, meaning: "single-cell commit: peek, check, take, recheck, post"}
+  - {label: P2, meaning: "await-then-commit: external read, then one cell commit"}
+  - {label: P3, meaning: "effect-then-commit: native effect first, then the cell commit; a refusal after the effect must fail the deploy"}
+  - {label: P4, meaning: "hold-through-native: the cell is taken across an ERTP/REV await and reposted after it"}
+  - {label: P5, meaning: "reserve/confirm: a provisional entry is written, then confirmed or dropped"}
+  - {label: P6, meaning: "fail-closed: a refusal after a value movement is 1/0, so the deploy rolls back"}
+helpers:
+  - {class: H1, rule: "pure transformer: receives state by value, returns the new state, the caller posts"}
+  - {class: H2a, rule: "caller-token: the caller took the cell; the helper receives the state value and posts exactly once; the caller does not post on that path"}
+  - {class: H2b, rule: "delegated critical section: the helper takes and posts the cell; the caller only peeks"}
+defects: []

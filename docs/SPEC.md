@@ -794,37 +794,34 @@ surplus. `psmDebt` is signed. `badDebt` is a cumulative memo outside the identit
 ### 18.3 Refusal strings
 
 ```
-not owner                 no account              unknown asset
-unknown market            no market               market not active
-paused                    paused feed             stale feed
-trial                     quorum                  spread
-band                      below depth             below min ticket
-max trade                 slippage                too many shares
-not enough shares         first deposit           reserve mismatch
-seed mismatch             shares mismatch         unfunded lock
-lock mismatch             lock too short          terms drift
-pair mismatch             pair has active market  not draft
-not sealed                not beneficiary         too early
-not open                  expired                 not expired
-bad secret                height not monotonic    closed
-not sender                not pending              unknown asset
-bad signature             bad sponsor signature   currency not authorized
-currency exists           params hash mismatch    duplicate
-unknown component         frozen                  replay
-below threshold           expiry                  expiry too long
-amount too small          amount                  amount mismatch
-memo                      opId                    stipend
-pending                   shares                  payment
-buffer                    min rev                 min stable
-ceiling                   recapitalise            max supply
-max debt                  min debt                close factor
-healthy                   underwater repayment    bad vault auth
-policy                    early                   unknown
-bps                       params                  transition
-slug                      feed inactive           sponsor mismatch
+action  age  already active  amount  amount mismatch  asset  bad attestation  bad buffer authority
+bad burn authority  bad custody authority  bad directory authority  bad index  bad index authority
+bad liquidation authority  bad mint authority  bad savings authority  bad secret
+bad settlement authority  bad signature  bad sponsor  bad sponsor signature  bad vault auth
+bad version  balance  band  base feed  base feed policy  base spread  below MCR  below threshold
+bonus  book expiry  bps  buffer  burn  ceiling  changed  close  close factor  closed
+currency mismatch  custody  default expiry  deposit  depth  depth floor  duplicate  early  exists
+expired  expiry  feed attestation  feed inactive  feed info  first deposit balance  frozen  funded
+future price  healthy  height  height not monotonic  lock beneficiary  lock height  lock too short
+lock unfunded  locked  max debt  max expiry  max memo  max op id  max stipend  max supply  max trade
+mcr  memo  min amount  min debt  min liquidity  min rev  min stable  min ticket  minimum  no account
+no attestation  no currency  no feed  no lock  no market  no purse  no rate  no slot  no system
+no terms  no vault  not LP  not a REV payment  not a stablecoin payment  not active
+not an LP payment  not base  not beneficiary  not draft  not expired  not funder  not installer
+not owner  not quote  not reporter  not sealed  not seeded  not sender  not this asset  opId
+oracle age  output  pair  pair active  params hash  paused  payment  pending  psm fee  psm floor
+quorum  quote feed  quote feed policy  rate  recapitalise  replay  reporter not allowlisted
+reporters  retired  savings share  sealed  seed mismatch  shares  shares mismatch  skew  slippage
+slug  sponsor mismatch  sponsor owner  sponsor slots  spread  stale  stale feed  stale submit
+stipend  supply  terms fields  terms mismatch  threshold  timelock  tolerance  transition  trial
+trial submits  underwater repayment  unfunded  unknown  unknown admin action  unknown asset
+unknown component  verify failed  version
 ```
 
-A new refusal string is a spec change and requires an entry here.
+The list is generated from the deploy inventory (reply-position string literals) and
+is checked against every flow transition by `tools/check_flows.py`. A new refusal
+string is a spec change and requires an entry here; `docs/spec/flows/REFUSAL-DECISIONS.md`
+records the decision for each one.
 
 ## 19. Exclusions
 

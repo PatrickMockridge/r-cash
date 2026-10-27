@@ -4,7 +4,7 @@ PY := $(VENV)/bin/python
 RHOLO_DIR ?= $(or $(RCHAIN_RUST_DIR),../rholo)
 export RHOLO_DIR
 
-.PHONY: venv image devnet down status keys build probes deploy logs clean demo client-test web-build check-languages test-wasm measure measure-check check-arch check-captures spec-check tla-check install install-v3 bootstrap setup unit-v3 unit-feed unit-hub unit-stablecoin unit-liquidation unit-interest unit-savings unit-psm unit-timelock unit-accounts unit-transfer unit-transfer-memo unit-market unit-buffer unit-pool unit-all
+.PHONY: venv image devnet down status keys build probes deploy logs clean demo client-test web-build check-languages inventory flows check-flows lean-build lean-check formal-check test-wasm measure measure-check check-arch check-captures spec-check tla-check install install-v3 bootstrap setup unit-v3 unit-feed unit-hub unit-stablecoin unit-liquidation unit-interest unit-savings unit-psm unit-timelock unit-accounts unit-transfer unit-transfer-memo unit-market unit-buffer unit-pool unit-all
 
 venv:
 	python3 -m venv $(VENV)
@@ -139,11 +139,32 @@ clean:
 # The acceptance journey is the Rust client against the installed components.
 # It assumes a running devnet with the components installed (`make install`).
 demo:
-	cargo run -p rcash-cli -- devnet demo
+	cargo run -p rcash-cli -- --key deployer devnet demo
 
 # The Python scenarios remain as the legacy harness for one release.
 client-test:
 	cargo test --workspace --exclude rcash-wasm
+
+
+# Formal programme: the flow YAML and the Lean model are authoritative.
+inventory:
+	$(PY) tools/rho_inventory.py --write
+
+flows:
+	$(PY) tools/render_flows.py
+
+check-flows:
+	$(PY) tools/rho_inventory.py --check
+	$(PY) tools/check_flows.py --check --strict
+	$(PY) tools/render_flows.py --check
+
+lean-build:
+	cd spec/lean && lake build
+
+lean-check:
+	$(PY) tools/check_lean.py
+
+formal-check: lean-check check-flows
 
 # The project is Rust, Rholang, Python and TypeScript. Reject native sources,
 # native-compiling crates, native build tools and native artifacts.

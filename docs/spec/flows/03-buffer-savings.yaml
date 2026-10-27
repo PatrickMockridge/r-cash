@@ -1,0 +1,271 @@
+# Flow specification.
+# Arm keys, source lines, access modes and refusal sets are checked against
+# contracts/build/arm_inventory.json by tools/check_flows.py. Guards, effects,
+# invariants and status are the authored content; status is not a synonym for
+# tested. See README.md for the schema and protocol labels.
+
+schema: rcash.flows/v1
+subsystem: buffer
+source_globs:
+- contracts/src/deploy/v3/31_stablecoin.rho
+invariants: {}
+components:
+- name: SavingsPool
+  lean_module: Rholphin.Model.BufferSavings
+  arms:
+  - arm: SavingsPool@"deposit"
+    transition: buffer.SavingsPool.deposit
+    lean: Rholphin.Model.BufferSavings.savingsPool_deposit
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1469}
+    guards:
+    - {id: amount_pos, expr: amount > 0, refusal: {reason: amount, phase: pre}}
+    - {id: payment_asset, expr: isStablecoinPayment(payment), refusal: {reason: asset, phase: pre}}
+    - {id: shares_pos, expr: shares = (amount if totalShares = 0 else floor(amount * totalShares / totalAssets)) > 0, refusal: {reason: shares,
+        phase: pre}}
+    - {id: deposit_ok, expr: savingsPurse.deposit ok, refusal: {reason: deposit, phase: pre}}
+    effects:
+    - {target: 'shares[ownerId]', formula: held + shares}
+    - {target: totalShares, formula: totalShares + shares}
+    - {target: totalAssets, formula: totalAssets + amount}
+    access:
+    - {cell: savingsState, mode: consume, actor: arm, phase: commit}
+    - {cell: savingsState, mode: post, actor: arm, phase: commit}
+    nested_calls:
+    - {callee: callerOwner, protocol: P0, takes: [], puts: [], post_owner: helper}
+    refusals:
+    - {reason: amount, phase: pre, reposts: false, fail: false}
+    - {reason: asset, phase: pre, reposts: false, fail: false}
+    - {reason: deposit, phase: pre, reposts: false, fail: false}
+    - {reason: shares, phase: pre, reposts: false, fail: false}
+    invariants:
+    - S10
+    status: verified
+    from: Empty
+    to: Funded
+  - arm: SavingsPool@"withdraw"
+    transition: buffer.SavingsPool.withdraw
+    lean: Rholphin.Model.BufferSavings.savingsPool_withdraw
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1521}
+    guards:
+    - {id: held, expr: 'shares[ownerId] = held', refusal: {reason: shares, phase: pre}}
+    - {id: shares_bounds, expr: 0 < shares <= held and totalShares > 0 and totalAssets > 0, refusal: {reason: shares, phase: pre}}
+    - {id: payment_ok, expr: savingsPurse.withdraw ok, refusal: {reason: payment, phase: pre}}
+    effects:
+    - {target: amount, formula: floor(totalAssets * shares / totalShares)}
+    - {target: 'shares[ownerId]', formula: held - shares}
+    - {target: totalShares, formula: totalShares - shares}
+    - {target: totalAssets, formula: totalAssets - amount}
+    access:
+    - {cell: savingsState, mode: consume, actor: arm, phase: commit}
+    - {cell: savingsState, mode: post, actor: arm, phase: commit}
+    nested_calls:
+    - {callee: callerOwner, protocol: P0, takes: [], puts: [], post_owner: helper}
+    refusals:
+    - {reason: payment, phase: pre, reposts: false, fail: false}
+    - {reason: shares, phase: pre, reposts: false, fail: false}
+    invariants:
+    - S10
+    status: verified
+    from: Funded
+    to: Empty
+  - arm: SavingsPool@"notify"
+    transition: buffer.SavingsPool.notify
+    lean: Rholphin.Model.BufferSavings.savingsPool_notify
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1556}
+    guards:
+    - {id: auth, expr: auth = savingsNotifyAuth, refusal: {reason: bad savings authority, phase: pre}}
+    - {id: payment_asset, expr: isStablecoinPayment(payment), refusal: {reason: asset, phase: pre}}
+    - {id: deposit_ok, expr: savingsPurse.deposit ok, refusal: {reason: deposit, phase: pre}}
+    effects:
+    - {target: totalAssets, formula: totalAssets + amount}
+    - {target: rev, formula: rev + 1}
+    access:
+    - {cell: savingsState, mode: consume, actor: arm, phase: commit}
+    - {cell: savingsState, mode: post, actor: arm, phase: commit}
+    nested_calls: []
+    refusals:
+    - {reason: asset, phase: pre, reposts: false, fail: false}
+    - {reason: bad savings authority, phase: pre, reposts: false, fail: false}
+    - {reason: deposit, phase: pre, reposts: false, fail: false}
+    invariants:
+    - S10
+    status: verified
+    to: Funded
+  - arm: SavingsPool@"info"
+    transition: buffer.SavingsPool.info
+    lean: Rholphin.Model.BufferSavings.savingsPool_info
+    kind: read
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1584}
+    guards: []
+    effects:
+    - {target: reply, formula: '(true, {totalShares, totalAssets, shareValueE8: floor(totalAssets * 1e8 / totalShares), rev})'}
+    access:
+    - {cell: savingsState, mode: peek, actor: arm, phase: pre}
+    nested_calls: []
+    refusals: []
+    invariants:
+    - S10
+    status: verified
+  - arm: SavingsPool@"position"
+    transition: buffer.SavingsPool.position
+    lean: Rholphin.Model.BufferSavings.savingsPool_position
+    kind: read
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1601}
+    guards: []
+    effects:
+    - {target: reply, formula: '(true, shares[ownerId])'}
+    access:
+    - {cell: savingsState, mode: peek, actor: arm, phase: pre}
+    nested_calls: []
+    refusals: []
+    invariants:
+    - S10
+    status: verified
+  states:
+  - Empty
+  - Funded
+  initial: Empty
+- name: SurplusBuffer
+  lean_module: Rholphin.Model.BufferSavings
+  arms:
+  - arm: SurplusBuffer@"deposit"
+    transition: buffer.SurplusBuffer.deposit
+    lean: Rholphin.Model.BufferSavings.surplusBuffer_deposit
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1610}
+    guards:
+    - {id: auth, expr: auth = bufferDepositAuth, refusal: {reason: bad buffer authority, phase: pre}}
+    - {id: payment_asset, expr: isStablecoinPayment(payment), refusal: {reason: asset, phase: pre}}
+    - {id: deposit_ok, expr: bufferPurse.deposit ok, refusal: {reason: deposit, phase: pre}}
+    effects:
+    - {target: surplus, formula: surplus + amount}
+    - {target: rev, formula: rev + 1}
+    access:
+    - {cell: bufferState, mode: consume, actor: arm, phase: commit}
+    - {cell: bufferState, mode: post, actor: arm, phase: commit}
+    nested_calls: []
+    refusals:
+    - {reason: asset, phase: pre, reposts: false, fail: false}
+    - {reason: bad buffer authority, phase: pre, reposts: false, fail: false}
+    - {reason: deposit, phase: pre, reposts: false, fail: false}
+    invariants:
+    - S3
+    - S9
+    status: verified
+  - arm: SurplusBuffer@"paySavings"
+    transition: buffer.SurplusBuffer.paySavings
+    lean: Rholphin.Model.BufferSavings.surplusBuffer_paySavings
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1638}
+    guards:
+    - {id: auth, expr: auth = bufferPayAuth, refusal: {reason: bad buffer authority, phase: pre}}
+    effects:
+    - {target: move, formula: floor(surplus * savingsShareBps / 10000)}
+    - {target: surplus, formula: surplus - (move if move > 0 and savings.totalShares > 0 else 0)}
+    - {target: savings.totalAssets, formula: totalAssets + (move if move > 0 and savings.totalShares > 0 else 0)}
+    access:
+    - {cell: savingsState, mode: peek, actor: arm, phase: pre}
+    - {cell: bufferState, mode: consume, actor: arm, phase: commit}
+    - {cell: bufferState, mode: post, actor: arm, phase: commit}
+    nested_calls: []
+    refusals:
+    - {reason: bad buffer authority, phase: pre, reposts: false, fail: false}
+    - {reason: payment, phase: pre, reposts: false, fail: false}
+    invariants:
+    - S9
+    - S10
+    status: verified
+  - arm: SurplusBuffer@"cover"
+    transition: buffer.SurplusBuffer.cover
+    lean: Rholphin.Model.BufferSavings.surplusBuffer_cover
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1681}
+    guards:
+    - {id: auth, expr: auth = bufferCoverAuth, refusal: {reason: bad buffer authority, phase: pre}}
+    - {id: nonneg, expr: badDebt >= 0, refusal: {reason: amount, phase: pre}}
+    - {id: payment_ok, expr: bufferPurse.withdraw ok, refusal: {reason: payment, phase: pre}}
+    effects:
+    - {target: newSin, formula: sin + badDebt}
+    - {target: cancelled, formula: 'min(surplus, newSin)'}
+    - {target: sin, formula: newSin - cancelled}
+    - {target: surplus, formula: surplus - cancelled}
+    - {target: supply, formula: supply - cancelled}
+    - {target: rev, formula: rev + 1}
+    access:
+    - {cell: bufferState, mode: peek, actor: arm, phase: pre}
+    - {cell: bufferState, mode: consume, actor: arm, phase: commit}
+    - {cell: bufferState, mode: post, actor: arm, phase: commit}
+    nested_calls:
+    - {callee: bufferCancelled, protocol: P0, takes: [], puts: [], post_owner: helper}
+    refusals:
+    - {reason: amount, phase: pre, reposts: false, fail: false}
+    - {reason: bad buffer authority, phase: pre, reposts: false, fail: false}
+    - {reason: payment, phase: pre, reposts: false, fail: false}
+    invariants:
+    - S3
+    - S6
+    - S9
+    status: verified
+  - arm: SurplusBuffer@"info"
+    transition: buffer.SurplusBuffer.info
+    lean: Rholphin.Model.BufferSavings.surplusBuffer_info
+    kind: read
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1737}
+    guards: []
+    effects:
+    - {target: reply, formula: '(true, {surplus, sin, savingsShareBps, rev})'}
+    access:
+    - {cell: bufferState, mode: peek, actor: arm, phase: pre}
+    nested_calls: []
+    refusals: []
+    invariants:
+    - S3
+    status: verified
+  - arm: SurplusBuffer@"scheduleShare"
+    transition: buffer.SurplusBuffer.scheduleShare
+    lean: Rholphin.Model.BufferSavings.surplusBuffer_scheduleShare
+    kind: create
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1745}
+    guards:
+    - {id: bps_range, expr: 0 <= bps <= 10000, refusal: {reason: bps, phase: pre}}
+    effects:
+    - {target: governor.pending, formula: 'pending[stablecoin:currency, nonce] = {action: setSavingsShare, argsHash: bps.toString()}'}
+    access: []
+    nested_calls:
+    - {callee: vaultGovernor, protocol: P0, takes: [], puts: [], post_owner: helper}
+    refusals:
+    - {reason: bps, phase: pre, reposts: false, fail: false}
+    invariants:
+    - S12
+    status: verified
+  - arm: SurplusBuffer@"applyShare"
+    transition: buffer.SurplusBuffer.applyShare
+    lean: Rholphin.Model.BufferSavings.surplusBuffer_applyShare
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1764}
+    guards:
+    - {id: action, expr: action = "setSavingsShare", refusal: {reason: action, phase: pre}}
+    - {id: bps_range, expr: 0 <= args <= 10000, refusal: {reason: bps, phase: pre}}
+    - {id: hash, expr: argsHash = args.toString(), refusal: {reason: params hash, phase: pre}}
+    effects:
+    - {target: savingsShareBps, formula: args}
+    - {target: rev, formula: rev + 1}
+    access:
+    - {cell: bufferState, mode: consume, actor: arm, phase: commit}
+    - {cell: bufferState, mode: post, actor: arm, phase: commit}
+    nested_calls:
+    - {callee: vaultGovernor, protocol: P0, takes: [], puts: [], post_owner: helper}
+    refusals:
+    - {reason: action, phase: pre, reposts: false, fail: false}
+    - {reason: bps, phase: pre, reposts: false, fail: false}
+    - {reason: params hash, phase: pre, reposts: false, fail: false}
+    invariants:
+    - S12
+    status: verified
+  states:
+  - Idle
+  - Active
+  initial: Idle

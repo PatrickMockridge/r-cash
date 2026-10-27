@@ -1,0 +1,403 @@
+# Flow specification.
+# Arm keys, source lines, access modes and refusal sets are checked against
+# contracts/build/arm_inventory.json by tools/check_flows.py. Guards, effects,
+# invariants and status are the authored content; status is not a synonym for
+# tested. See README.md for the schema and protocol labels.
+
+schema: rcash.flows/v1
+subsystem: registry
+source_globs:
+- contracts/src/deploy/v3/00_root.rho
+- contracts/src/deploy/v3/32_currency_registry.rho
+- contracts/src/deploy/v3/14_asset_resolver.rho
+invariants: {}
+defects:
+- {id: D1.1, subject: CurrencyRegistry@"setPaused", defect: peeks currencyState and posts it on the no-currency branch without consuming,
+  fix: delete the post on that branch, status: fixed}
+components:
+- name: Root
+  lean_module: Rholphin.Model.Registry
+  arms:
+  - arm: Root@"resolve"
+    transition: registry.Root.resolve
+    lean: Rholphin.Model.Registry.root_resolve
+    kind: read
+    source: {file: contracts/src/deploy/v3/00_root.rho, line: 29}
+    guards:
+    - {id: exists, expr: 'entries[key] != Nil', refusal: {reason: unknown component, phase: pre}}
+    - {id: not_retired, expr: 'entries[key].status != "retired"', refusal: {reason: retired, phase: pre}}
+    - {id: version, expr: 'entries[key].version >= minVersion', refusal: {reason: stale, phase: pre}}
+    effects:
+    - {target: reply, formula: '(true, entries[key].uri, entries[key].version)'}
+    access:
+    - {cell: rootState, mode: peek, actor: arm, phase: pre}
+    nested_calls: []
+    refusals:
+    - {reason: retired, phase: pre, reposts: false, fail: false}
+    - {reason: stale, phase: pre, reposts: false, fail: false}
+    - {reason: unknown component, phase: pre, reposts: false, fail: false}
+    invariants:
+    - I20
+    status: verified
+  - arm: Root@"get"
+    transition: registry.Root.get
+    lean: Rholphin.Model.Registry.root_get
+    kind: read
+    source: {file: contracts/src/deploy/v3/00_root.rho, line: 44}
+    guards:
+    - {id: exists, expr: 'entries[key] != Nil', refusal: {reason: unknown component, phase: pre}}
+    effects:
+    - {target: reply, formula: '(true, entries[key])'}
+    access:
+    - {cell: rootState, mode: peek, actor: arm, phase: pre}
+    nested_calls: []
+    refusals:
+    - {reason: unknown component, phase: pre, reposts: false, fail: false}
+    invariants: []
+    status: verified
+  - arm: Root@"keys"
+    transition: registry.Root.keys
+    lean: Rholphin.Model.Registry.root_keys
+    kind: read
+    source: {file: contracts/src/deploy/v3/00_root.rho, line: 53}
+    guards: []
+    effects:
+    - {target: reply, formula: '(true, keys(entries))'}
+    access:
+    - {cell: rootState, mode: peek, actor: arm, phase: pre}
+    nested_calls: []
+    refusals: []
+    invariants: []
+    status: verified
+  - arm: Root@"register"
+    transition: registry.Root.register
+    lean: Rholphin.Model.Registry.root_register
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/00_root.rho, line: 57}
+    guards:
+    - {id: unfrozen, expr: not frozen, refusal: {reason: frozen, phase: pre}}
+    - {id: installer, expr: pk = installer, refusal: {reason: not installer, phase: pre}}
+    - {id: version, expr: version >= 1, refusal: {reason: bad version, phase: pre}}
+    - {id: new, expr: 'entries[key] = Nil', refusal: {reason: duplicate, phase: pre}}
+    effects:
+    - {target: 'entries[key]', formula: '{uri: uri, version: version, kind: kind, status: active}'}
+    access:
+    - {cell: rootState, mode: consume, actor: arm, phase: commit}
+    - {cell: rootState, mode: post, actor: arm, phase: commit}
+    nested_calls: []
+    refusals:
+    - {reason: bad version, phase: pre, reposts: false, fail: false}
+    - {reason: duplicate, phase: pre, reposts: false, fail: false}
+    - {reason: frozen, phase: pre, reposts: false, fail: false}
+    - {reason: not installer, phase: pre, reposts: false, fail: false}
+    invariants:
+    - I20
+    status: verified
+  - arm: Root@"rotate"
+    transition: registry.Root.rotate
+    lean: Rholphin.Model.Registry.root_rotate
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/00_root.rho, line: 85}
+    guards:
+    - {id: unfrozen, expr: not frozen, refusal: {reason: frozen, phase: pre}}
+    - {id: exists, expr: 'entries[key] != Nil', refusal: {reason: unknown component, phase: pre}}
+    - {id: expected, expr: 'entries[key].version = expectedVersion', refusal: {reason: stale, phase: pre}}
+    - {id: authorize, expr: 'AdminGuard.verify(root, nonce, rotate, argsHash)', refusal: {reason: below threshold, phase: pre}}
+    - {id: nonce, expr: nonce > govNonce, refusal: {reason: replay, phase: pre}}
+    - {id: recheck, expr: 'entries[key].version = expectedVersion', refusal: {reason: stale, phase: pre}}
+    effects:
+    - {target: 'entries[key].uri', formula: newUri}
+    - {target: 'entries[key].version', formula: newVersion}
+    - {target: 'entries[key].status', formula: active}
+    - {target: govNonce, formula: nonce}
+    access:
+    - {cell: rootState, mode: peek, actor: arm, phase: pre}
+    - {cell: rootState, mode: consume, actor: arm, phase: commit}
+    - {cell: rootState, mode: post, actor: arm, phase: commit}
+    nested_calls:
+    - {callee: rootAuthorize, protocol: P0, takes: [], puts: [], post_owner: helper}
+    refusals:
+    - {reason: frozen, phase: pre, reposts: false, fail: false}
+    - {reason: replay, phase: pre, reposts: false, fail: false}
+    - {reason: stale, phase: pre, reposts: false, fail: false}
+    - {reason: unknown component, phase: pre, reposts: false, fail: false}
+    invariants:
+    - I19
+    - I20
+    status: verified
+  - arm: Root@"deprecate"
+    transition: registry.Root.deprecate
+    lean: Rholphin.Model.Registry.root_deprecate
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/00_root.rho, line: 136}
+    guards:
+    - {id: unfrozen, expr: not frozen, refusal: {reason: frozen, phase: pre}}
+    - {id: authorize, expr: 'AdminGuard.verify(root, nonce, deprecate, key)', refusal: {reason: below threshold, phase: pre}}
+    - {id: nonce, expr: nonce > govNonce, refusal: {reason: replay, phase: pre}}
+    - {id: exists, expr: 'entries[key] != Nil', refusal: {reason: unknown component, phase: pre}}
+    effects:
+    - {target: 'entries[key].status', formula: retired}
+    - {target: govNonce, formula: nonce}
+    access:
+    - {cell: rootState, mode: peek, actor: arm, phase: pre}
+    - {cell: rootState, mode: consume, actor: arm, phase: commit}
+    - {cell: rootState, mode: post, actor: arm, phase: commit}
+    nested_calls:
+    - {callee: rootAuthorize, protocol: P0, takes: [], puts: [], post_owner: helper}
+    refusals:
+    - {reason: frozen, phase: pre, reposts: false, fail: false}
+    - {reason: replay, phase: pre, reposts: false, fail: false}
+    - {reason: unknown component, phase: pre, reposts: false, fail: false}
+    invariants:
+    - I19
+    - I20
+    status: verified
+  - arm: Root@"freeze"
+    transition: registry.Root.freeze
+    lean: Rholphin.Model.Registry.root_freeze
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/00_root.rho, line: 170}
+    guards:
+    - {id: unfrozen, expr: not frozen, refusal: {reason: frozen, phase: pre}}
+    - {id: authorize, expr: 'AdminGuard.verify(root, nonce, freeze, empty)', refusal: {reason: below threshold, phase: pre}}
+    - {id: nonce, expr: nonce > govNonce, refusal: {reason: replay, phase: pre}}
+    effects:
+    - {target: frozen, formula: 'true'}
+    - {target: govNonce, formula: nonce}
+    access:
+    - {cell: rootState, mode: peek, actor: arm, phase: pre}
+    - {cell: rootState, mode: consume, actor: arm, phase: commit}
+    - {cell: rootState, mode: post, actor: arm, phase: commit}
+    nested_calls:
+    - {callee: rootAuthorize, protocol: P0, takes: [], puts: [], post_owner: helper}
+    refusals:
+    - {reason: frozen, phase: pre, reposts: false, fail: false}
+    - {reason: replay, phase: pre, reposts: false, fail: false}
+    invariants:
+    - I19
+    - I20
+    status: verified
+  - arm: Root@"admin"
+    transition: registry.Root.admin
+    lean: Rholphin.Model.Registry.root_admin
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/00_root.rho, line: 197}
+    guards:
+    - {id: unfrozen, expr: not frozen, refusal: {reason: frozen, phase: pre}}
+    - {id: authorize, expr: 'AdminGuard.verify(root, nonce, action, args)', refusal: {reason: below threshold, phase: pre}}
+    - {id: nonce, expr: nonce > govNonce, refusal: {reason: replay, phase: pre}}
+    - {id: threshold, expr: 1 <= newThreshold <= len(newAdmins), refusal: {reason: threshold, phase: pre}}
+    effects:
+    - {target: admins, formula: newAdmins if action = setAdmins else admins}
+    - {target: threshold, formula: newThreshold}
+    - {target: govNonce, formula: nonce}
+    access:
+    - {cell: rootState, mode: peek, actor: arm, phase: pre}
+    - {cell: rootState, mode: consume, actor: arm, phase: commit}
+    - {cell: rootState, mode: post, actor: arm, phase: commit}
+    nested_calls:
+    - {callee: rootAuthorize, protocol: P0, takes: [], puts: [], post_owner: helper}
+    refusals:
+    - {reason: frozen, phase: pre, reposts: false, fail: false}
+    - {reason: replay, phase: pre, reposts: false, fail: false}
+    - {reason: threshold, phase: pre, reposts: false, fail: false}
+    - {reason: unknown admin action, phase: pre, reposts: false, fail: false}
+    invariants:
+    - I19
+    status: verified
+  states:
+  - Live
+  - Frozen
+  initial: Live
+- name: StablecoinDirectory
+  lean_module: Rholphin.Model.Registry
+  arms:
+  - arm: StablecoinDirectory@"register"
+    transition: registry.StablecoinDirectory.register
+    lean: Rholphin.Model.Registry.stablecoinDirectory_register
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/32_currency_registry.rho, line: 19}
+    guards:
+    - {id: auth, expr: auth = directoryAuth, refusal: {reason: bad directory authority, phase: pre}}
+    - {id: new, expr: 'systems[code] = Nil', refusal: {reason: exists, phase: pre}}
+    effects:
+    - {target: 'systems[code]', formula: entry}
+    - {target: rev, formula: rev + 1}
+    access:
+    - {cell: stablecoinDirectoryState, mode: consume, actor: arm, phase: commit}
+    - {cell: stablecoinDirectoryState, mode: post, actor: arm, phase: commit}
+    nested_calls: []
+    refusals:
+    - {reason: bad directory authority, phase: pre, reposts: false, fail: false}
+    - {reason: exists, phase: pre, reposts: false, fail: false}
+    invariants:
+    - I2
+    status: verified
+  - arm: StablecoinDirectory@"lookup"
+    transition: registry.StablecoinDirectory.lookup
+    lean: Rholphin.Model.Registry.stablecoinDirectory_lookup
+    kind: read
+    source: {file: contracts/src/deploy/v3/32_currency_registry.rho, line: 39}
+    guards:
+    - {id: exists, expr: 'systems[code] != Nil', refusal: {reason: no system, phase: pre}}
+    effects:
+    - {target: reply, formula: '(true, systems[code])'}
+    access:
+    - {cell: stablecoinDirectoryState, mode: peek, actor: arm, phase: pre}
+    nested_calls: []
+    refusals:
+    - {reason: no system, phase: pre, reposts: false, fail: false}
+    invariants:
+    - I2
+    status: verified
+  - arm: StablecoinDirectory@"entries"
+    transition: registry.StablecoinDirectory.entries
+    lean: Rholphin.Model.Registry.stablecoinDirectory_entries
+    kind: read
+    source: {file: contracts/src/deploy/v3/32_currency_registry.rho, line: 48}
+    guards: []
+    effects:
+    - {target: reply, formula: '(true, keys(systems))'}
+    access:
+    - {cell: stablecoinDirectoryState, mode: peek, actor: arm, phase: pre}
+    nested_calls: []
+    refusals: []
+    invariants:
+    - I2
+    status: verified
+  states:
+  - Live
+  initial: Live
+- name: CurrencyRegistry
+  lean_module: Rholphin.Model.Registry
+  arms:
+  - arm: CurrencyRegistry@"register"
+    transition: registry.CurrencyRegistry.register
+    lean: Rholphin.Model.Registry.currencyRegistry_register
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/32_currency_registry.rho, line: 71}
+    guards:
+    - {id: new, expr: 'currencies[code] = Nil', refusal: {reason: exists, phase: pre}}
+    - {id: sponsor_sig, expr: 'Verifier.sigOk(H(rcash:currency-register:v3|...), sig, sponsor)', refusal: {reason: bad sponsor signature,
+        phase: pre}}
+    - {id: currency, expr: attestation.currency = code, refusal: {reason: currency mismatch, phase: pre}}
+    - {id: params, expr: attestation.paramsHash = paramsHash, refusal: {reason: params hash, phase: pre}}
+    - {id: sponsor, expr: attestation.sponsor = sponsorHex, refusal: {reason: sponsor mismatch, phase: pre}}
+    - {id: directory, expr: StablecoinDirectory.register ok, refusal: {reason: exists, phase: pre}}
+    - {id: recheck, expr: 'currencies[code] = Nil', refusal: {reason: exists, phase: pre}}
+    effects:
+    - {target: 'currencies[code]', formula: entry}
+    - {target: 'directory.systems[code]', formula: entry}
+    - {target: rev, formula: rev + 1}
+    access:
+    - {cell: currencyState, mode: peek, actor: arm, phase: pre}
+    - {cell: currencyState, mode: consume, actor: arm, phase: commit}
+    - {cell: currencyState, mode: post, actor: arm, phase: commit}
+    nested_calls: []
+    refusals:
+    - {reason: bad attestation, phase: pre, reposts: false, fail: false}
+    - {reason: bad sponsor signature, phase: pre, reposts: false, fail: false}
+    - {reason: currency mismatch, phase: pre, reposts: false, fail: false}
+    - {reason: exists, phase: pre, reposts: false, fail: false}
+    - {reason: params hash, phase: pre, reposts: false, fail: false}
+    - {reason: sponsor mismatch, phase: pre, reposts: false, fail: false}
+    invariants:
+    - I2
+    - S8
+    status: verified
+  - arm: CurrencyRegistry@"currency"
+    transition: registry.CurrencyRegistry.currency
+    lean: Rholphin.Model.Registry.currencyRegistry_currency
+    kind: read
+    source: {file: contracts/src/deploy/v3/32_currency_registry.rho, line: 177}
+    guards:
+    - {id: exists, expr: 'currencies[code] != Nil', refusal: {reason: no currency, phase: pre}}
+    effects:
+    - {target: reply, formula: '(true, currencies[code])'}
+    access:
+    - {cell: currencyState, mode: peek, actor: arm, phase: pre}
+    nested_calls: []
+    refusals:
+    - {reason: no currency, phase: pre, reposts: false, fail: false}
+    invariants:
+    - I2
+    status: verified
+  - arm: CurrencyRegistry@"currencies"
+    transition: registry.CurrencyRegistry.currencies
+    lean: Rholphin.Model.Registry.currencyRegistry_currencies
+    kind: read
+    source: {file: contracts/src/deploy/v3/32_currency_registry.rho, line: 186}
+    guards: []
+    effects:
+    - {target: reply, formula: '(true, keys(currencies))'}
+    access:
+    - {cell: currencyState, mode: peek, actor: arm, phase: pre}
+    nested_calls: []
+    refusals: []
+    invariants:
+    - I2
+    status: verified
+  - arm: CurrencyRegistry@"setPaused"
+    transition: registry.CurrencyRegistry.setPaused
+    lean: Rholphin.Model.Registry.currencyRegistry_setPaused
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/32_currency_registry.rho, line: 192}
+    guards:
+    - {id: exists, expr: 'currencies[code] != Nil', refusal: {reason: no currency, phase: pre}}
+    - {id: pause, expr: 'VaultBook.pause(paused, nonce, sigs) ok', refusal: {reason: authorize, phase: pre}}
+    - {id: recheck, expr: 'currencies[code] != Nil', refusal: {reason: no currency, phase: pre}}
+    effects:
+    - {target: 'currencies[code].status', formula: 'paused ? paused : active'}
+    - {target: rev, formula: rev + 1}
+    access:
+    - {cell: currencyState, mode: peek, actor: arm, phase: pre}
+    - {cell: currencyState, mode: consume, actor: arm, phase: commit}
+    - {cell: currencyState, mode: post, actor: arm, phase: commit}
+    nested_calls:
+    - {callee: registryStatus, protocol: P0, takes: [], puts: [], post_owner: helper}
+    refusals:
+    - {reason: no currency, phase: pre, reposts: false, fail: false}
+    invariants:
+    - S12
+    status: verified
+  states:
+  - Live
+  initial: Live
+- name: AssetResolver
+  lean_module: Rholphin.Model.Registry
+  arms:
+  - arm: AssetResolver@"issuer"
+    transition: registry.AssetResolver.issuer
+    lean: Rholphin.Model.Registry.assetResolver_issuer
+    kind: read
+    source: {file: contracts/src/deploy/v3/14_asset_resolver.rho, line: 15}
+    guards:
+    - {id: known, expr: '(assetId = REV) or currencies[assetId] != Nil', refusal: {reason: unknown asset, phase: pre}}
+    effects:
+    - {target: reply, formula: '(true, brand, issuer)'}
+    access: []
+    nested_calls: []
+    refusals:
+    - {reason: unknown asset, phase: pre, reposts: false, fail: false}
+    invariants:
+    - I2
+    status: verified
+  - arm: AssetResolver@"kind"
+    transition: registry.AssetResolver.kind
+    lean: Rholphin.Model.Registry.assetResolver_kind
+    kind: read
+    source: {file: contracts/src/deploy/v3/14_asset_resolver.rho, line: 62}
+    guards:
+    - {id: known, expr: '(assetId = REV) or currencies[assetId] != Nil', refusal: {reason: unknown asset, phase: pre}}
+    effects:
+    - {target: reply, formula: '(true, rev | stablecoin)'}
+    access: []
+    nested_calls: []
+    refusals:
+    - {reason: unknown asset, phase: pre, reposts: false, fail: false}
+    invariants:
+    - I2
+    status: verified
+  states:
+  - Live
+  initial: Live

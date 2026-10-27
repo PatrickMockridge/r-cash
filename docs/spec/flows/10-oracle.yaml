@@ -1,0 +1,377 @@
+# Flow specification.
+# Arm keys, source lines, access modes and refusal sets are checked against
+# contracts/build/arm_inventory.json by tools/check_flows.py. Guards, effects,
+# invariants and status are the authored content; status is not a synonym for
+# tested. See README.md for the schema and protocol labels.
+
+schema: rcash.flows/v1
+subsystem: oracle
+source_globs:
+- contracts/src/deploy/v3/07_oracle_math.rho
+- contracts/src/deploy/v3/12_oracle_registry.rho
+- contracts/src/deploy/v3/13_oracle_hub.rho
+- contracts/src/deploy/v3/31_feed.rho
+invariants: {}
+components:
+- name: OracleMath
+  lean_module: Rholphin.Model.Oracle
+  arms:
+  - arm: OracleMath@"median3"
+    transition: oracle.OracleMath.median3
+    lean: Rholphin.Model.Oracle.oracleMath_median3
+    kind: read
+    source: {file: contracts/src/deploy/v3/07_oracle_math.rho, line: 43}
+    guards: []
+    effects:
+    - {target: reply, formula: 'median3(a, b, c)'}
+    access: []
+    nested_calls:
+    - {callee: omMedian3, protocol: P0, takes: [], puts: [], post_owner: helper}
+    refusals: []
+    invariants:
+    - I7
+    status: verified
+  - arm: OracleMath@"fresh"
+    transition: oracle.OracleMath.fresh
+    lean: Rholphin.Model.Oracle.oracleMath_fresh
+    kind: read
+    source: {file: contracts/src/deploy/v3/07_oracle_math.rho, line: 48}
+    guards: []
+    effects:
+    - {target: reply, formula: '(true, median3(p0,p1,p2), Nil) if count >= quorum and fresh and spread bound else (false, 0, reason)'}
+    access: []
+    nested_calls:
+    - {callee: omDecide, protocol: P0, takes: [], puts: [], post_owner: helper}
+    - {callee: omIsFresh, protocol: P0, takes: [], puts: [], post_owner: helper}
+    - {callee: omMax3, protocol: P0, takes: [], puts: [], post_owner: helper}
+    - {callee: omMedian3, protocol: P0, takes: [], puts: [], post_owner: helper}
+    - {callee: omMin3, protocol: P0, takes: [], puts: [], post_owner: helper}
+    refusals: []
+    invariants:
+    - I7
+    status: verified
+  - arm: OracleMath@"rate"
+    transition: oracle.OracleMath.rate
+    lean: Rholphin.Model.Oracle.oracleMath_rate
+    kind: read
+    source: {file: contracts/src/deploy/v3/07_oracle_math.rho, line: 81}
+    guards: []
+    effects:
+    - {target: reply, formula: floor(basePrice * 1e8 / quotePrice) if quotePrice > 0 else 0}
+    access: []
+    nested_calls: []
+    refusals: []
+    invariants:
+    - I9
+    status: verified
+  states:
+  - Live
+  initial: Live
+- name: OracleRegistry
+  lean_module: Rholphin.Model.Oracle
+  arms:
+  - arm: OracleRegistry@"registerFeed"
+    transition: oracle.OracleRegistry.registerFeed
+    lean: Rholphin.Model.Oracle.oracleRegistry_registerFeed
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/12_oracle_registry.rho, line: 160}
+    guards:
+    - {id: sponsor_key, expr: caller pubkey = sponsorHex, refusal: {reason: bad sponsor, phase: pre}}
+    - {id: sponsor_sig, expr: 'Verifier.sigOk(H(feed-bind), sig, sponsor)', refusal: {reason: bad sponsor signature, phase: pre}}
+    - {id: attestation, expr: 'feed attestation matches code, feedId, sponsor, policy', refusal: {reason: feed attestation, phase: pre}}
+    - {id: reporters, expr: 3 distinct reporter keys, refusal: {reason: reporters, phase: pre}}
+    - {id: allowlist, expr: all reporters allowlisted, refusal: {reason: reporter not allowlisted, phase: pre}}
+    - {id: sponsor_slots, expr: sponsor occupies at most one slot, refusal: {reason: sponsor slots, phase: pre}}
+    - {id: new, expr: 'feeds[code] = Nil', refusal: {reason: duplicate, phase: pre}}
+    effects:
+    - {target: 'feeds[code]', formula: '{uri: feedUri, feedId, policyHash, sponsor, status: active}'}
+    access:
+    - {cell: oracleRegState, mode: peek, actor: arm, phase: pre}
+    - {cell: oracleRegState, mode: consume, actor: 'helper:regBind', phase: commit}
+    - {cell: oracleRegState, mode: post, actor: 'helper:regBind', phase: commit}
+    nested_calls:
+    - {callee: regBind, protocol: H2b, takes: [oracleRegState], puts: [oracleRegState], post_owner: helper}
+    - {callee: regCheckFeed, protocol: P0, takes: [], puts: [], post_owner: helper}
+    - {callee: regCheckReporters, protocol: P0, takes: [], puts: [], post_owner: helper}
+    - {callee: regVerify, protocol: P0, takes: [], puts: [], post_owner: helper}
+    refusals:
+    - {reason: bad sponsor, phase: pre, reposts: false, fail: false}
+    - {reason: bad sponsor signature, phase: pre, reposts: false, fail: false}
+    - {reason: duplicate, phase: pre, reposts: false, fail: false}
+    - {reason: feed attestation, phase: pre, reposts: false, fail: false}
+    - {reason: feed info, phase: pre, reposts: false, fail: false}
+    - {reason: reporter not allowlisted, phase: pre, reposts: false, fail: false}
+    - {reason: reporters, phase: pre, reposts: false, fail: false}
+    - {reason: sponsor slots, phase: pre, reposts: false, fail: false}
+    invariants:
+    - I8
+    status: verified
+  - arm: OracleRegistry@"feedEntry"
+    transition: oracle.OracleRegistry.feedEntry
+    lean: Rholphin.Model.Oracle.oracleRegistry_feedEntry
+    kind: read
+    source: {file: contracts/src/deploy/v3/12_oracle_registry.rho, line: 212}
+    guards:
+    - {id: exists, expr: 'feeds[code] != Nil', refusal: {reason: no feed, phase: pre}}
+    effects:
+    - {target: reply, formula: '(true, feeds[code])'}
+    access:
+    - {cell: oracleRegState, mode: peek, actor: arm, phase: pre}
+    nested_calls: []
+    refusals:
+    - {reason: no feed, phase: pre, reposts: false, fail: false}
+    invariants:
+    - I8
+    status: verified
+  - arm: OracleRegistry@"info"
+    transition: oracle.OracleRegistry.info
+    lean: Rholphin.Model.Oracle.oracleRegistry_info
+    kind: read
+    source: {file: contracts/src/deploy/v3/12_oracle_registry.rho, line: 221}
+    guards: []
+    effects:
+    - {target: reply, formula: '(true, {feeds, allowlist})'}
+    access:
+    - {cell: oracleRegState, mode: peek, actor: arm, phase: pre}
+    nested_calls: []
+    refusals: []
+    invariants:
+    - I8
+    status: verified
+  - arm: OracleRegistry@"admin"
+    transition: oracle.OracleRegistry.admin
+    lean: Rholphin.Model.Oracle.oracleRegistry_admin
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/12_oracle_registry.rho, line: 227}
+    guards:
+    - {id: authorize, expr: 'Governor.authorize(oracle-registry, nonce, action, args)', refusal: {reason: below threshold, phase: pre}}
+    - {id: duplicate, expr: reporter not already allowlisted, refusal: {reason: duplicate, phase: pre}}
+    effects:
+    - {target: allowlist, formula: add or remove reporter}
+    access:
+    - {cell: oracleRegState, mode: peek, actor: arm, phase: pre}
+    - {cell: oracleRegState, mode: consume, actor: arm, phase: commit}
+    - {cell: oracleRegState, mode: post, actor: arm, phase: commit}
+    nested_calls:
+    - {callee: regGovernor, protocol: P0, takes: [], puts: [], post_owner: helper}
+    - {callee: regInList, protocol: P0, takes: [], puts: [], post_owner: helper}
+    - {callee: regRemove, protocol: P0, takes: [], puts: [], post_owner: helper}
+    refusals:
+    - {reason: duplicate, phase: pre, reposts: false, fail: false}
+    - {reason: unknown admin action, phase: pre, reposts: false, fail: false}
+    invariants:
+    - I8
+    - S12
+    status: verified
+  states:
+  - Live
+  initial: Live
+- name: OracleHub
+  lean_module: Rholphin.Model.Oracle
+  arms:
+  - arm: OracleHub@"get"
+    transition: oracle.OracleHub.get
+    lean: Rholphin.Model.Oracle.oracleHub_get
+    kind: read
+    source: {file: contracts/src/deploy/v3/13_oracle_hub.rho, line: 62}
+    guards: []
+    effects:
+    - {target: reply, formula: feed.get}
+    access: []
+    nested_calls:
+    - {callee: hubFeedCap, protocol: P0, takes: [], puts: [], post_owner: helper}
+    refusals: []
+    invariants: []
+    status: verified
+  - arm: OracleHub@"feedStatus"
+    transition: oracle.OracleHub.feedStatus
+    lean: Rholphin.Model.Oracle.oracleHub_feedStatus
+    kind: read
+    source: {file: contracts/src/deploy/v3/13_oracle_hub.rho, line: 74}
+    guards: []
+    effects:
+    - {target: reply, formula: feed.info}
+    access: []
+    nested_calls:
+    - {callee: hubFeedCap, protocol: P0, takes: [], puts: [], post_owner: helper}
+    refusals: []
+    invariants: []
+    status: verified
+  - arm: OracleHub@"getPair"
+    transition: oracle.OracleHub.getPair
+    lean: Rholphin.Model.Oracle.oracleHub_getPair
+    kind: read
+    source: {file: contracts/src/deploy/v3/13_oracle_hub.rho, line: 86}
+    guards:
+    - {id: quote_feed, expr: quote feed resolves, refusal: {reason: quote feed, phase: pre}}
+    - {id: base_feed, expr: base feed resolves, refusal: {reason: base feed, phase: pre}}
+    effects:
+    - {target: reply, formula: '(true, {rate, fresh, basePrice, quotePrice, baseAge, quoteAge})'}
+    access: []
+    nested_calls:
+    - {callee: hubFeedCap, protocol: P0, takes: [], puts: [], post_owner: helper}
+    - {callee: hubRate, protocol: P0, takes: [], puts: [], post_owner: helper}
+    refusals:
+    - {reason: base feed, phase: pre, reposts: false, fail: false}
+    - {reason: quote feed, phase: pre, reposts: false, fail: false}
+    invariants:
+    - I9
+    status: verified
+  - arm: OracleHub@"reporters"
+    transition: oracle.OracleHub.reporters
+    lean: Rholphin.Model.Oracle.oracleHub_reporters
+    kind: read
+    source: {file: contracts/src/deploy/v3/13_oracle_hub.rho, line: 134}
+    guards: []
+    effects:
+    - {target: reply, formula: feed.info}
+    access: []
+    nested_calls:
+    - {callee: hubFeedCap, protocol: P0, takes: [], puts: [], post_owner: helper}
+    refusals: []
+    invariants:
+    - I8
+    status: verified
+  states:
+  - Live
+  initial: Live
+- name: OracleFeed
+  lean_module: Rholphin.Model.Oracle
+  arms:
+  - arm: OracleFeed@"submit"
+    transition: oracle.OracleFeed.submit
+    lean: Rholphin.Model.Oracle.oracleFeed_submit
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/31_feed.rho, line: 166}
+    guards:
+    - {id: unpaused, expr: not paused, refusal: {reason: paused, phase: pre}}
+    - {id: index, expr: 0 <= index <= 2, refusal: {reason: bad index, phase: pre}}
+    - {id: reporter, expr: 'pubKey = reporters[index]', refusal: {reason: not reporter, phase: pre}}
+    - {id: not_future, expr: height <= now, refusal: {reason: future price, phase: pre}}
+    - {id: fresh_submit, expr: now - height <= 1000, refusal: {reason: stale submit, phase: pre}}
+    - {id: signature, expr: Verifier.sigOk(submit payload), refusal: {reason: bad signature, phase: pre}}
+    - {id: recheck, expr: not paused and rev unchanged, refusal: {reason: changed, phase: pre}}
+    - {id: monotonic, expr: height > priorHeight, refusal: {reason: height not monotonic, phase: pre}}
+    effects:
+    - {target: 'prices[index]', formula: '{price: price, height: height}'}
+    - {target: seenN, formula: 'true'}
+    - {target: trialSubmits, formula: trialSubmits + 1}
+    - {target: rev, formula: rev + 1}
+    access:
+    - {cell: feedState, mode: peek, actor: arm, phase: pre}
+    - {cell: feedState, mode: consume, actor: arm, phase: commit}
+    - {cell: feedState, mode: post, actor: arm, phase: commit}
+    nested_calls:
+    - {callee: feedNow, protocol: P0, takes: [], puts: [], post_owner: helper}
+    - {callee: feedSlot, protocol: P0, takes: [], puts: [], post_owner: helper}
+    - {callee: feedStore, protocol: P0, takes: [], puts: [], post_owner: helper}
+    - {callee: feedVerify, protocol: P0, takes: [], puts: [], post_owner: helper}
+    refusals:
+    - {reason: bad index, phase: pre, reposts: false, fail: false}
+    - {reason: bad signature, phase: pre, reposts: false, fail: false}
+    - {reason: changed, phase: pre, reposts: false, fail: false}
+    - {reason: future price, phase: pre, reposts: false, fail: false}
+    - {reason: height not monotonic, phase: pre, reposts: false, fail: false}
+    - {reason: not reporter, phase: pre, reposts: false, fail: false}
+    - {reason: paused, phase: pre, reposts: false, fail: false}
+    - {reason: stale submit, phase: pre, reposts: false, fail: false}
+    invariants:
+    - I7
+    status: verified
+  - arm: OracleFeed@"get"
+    transition: oracle.OracleFeed.get
+    lean: Rholphin.Model.Oracle.oracleFeed_get
+    kind: read
+    source: {file: contracts/src/deploy/v3/31_feed.rho, line: 235}
+    guards: []
+    effects:
+    - {target: reply, formula: '(true, {fresh, price, age, reason})'}
+    access:
+    - {cell: feedState, mode: peek, actor: arm, phase: pre}
+    nested_calls:
+    - {callee: feedNow, protocol: P0, takes: [], puts: [], post_owner: helper}
+    - {callee: feedRead, protocol: P0, takes: [], puts: [], post_owner: helper}
+    refusals: []
+    invariants:
+    - I7
+    status: verified
+  - arm: OracleFeed@"activate"
+    transition: oracle.OracleFeed.activate
+    lean: Rholphin.Model.Oracle.oracleFeed_activate
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/31_feed.rho, line: 256}
+    guards:
+    - {id: inactive, expr: not active, refusal: {reason: already active, phase: pre}}
+    - {id: unpaused, expr: not paused, refusal: {reason: paused, phase: pre}}
+    - {id: trial_blocks, expr: now - trialStart >= trialBlocks, refusal: {reason: trial, phase: pre}}
+    - {id: trial_submits, expr: trialSubmits >= trialMinSubmits, refusal: {reason: trial submits, phase: pre}}
+    - {id: quorum, expr: seen >= quorum, refusal: {reason: quorum, phase: pre}}
+    - {id: fresh, expr: median fresh, refusal: {reason: quorum, phase: pre}}
+    - {id: recheck, expr: not active and not paused and rev unchanged, refusal: {reason: changed, phase: pre}}
+    effects:
+    - {target: active, formula: 'true'}
+    - {target: listedAt, formula: now}
+    - {target: rev, formula: rev + 1}
+    access:
+    - {cell: feedState, mode: peek, actor: arm, phase: pre}
+    - {cell: feedState, mode: consume, actor: arm, phase: commit}
+    - {cell: feedState, mode: post, actor: arm, phase: commit}
+    nested_calls:
+    - {callee: feedCountSeen, protocol: P0, takes: [], puts: [], post_owner: helper}
+    - {callee: feedNow, protocol: P0, takes: [], puts: [], post_owner: helper}
+    - {callee: feedRead, protocol: P0, takes: [], puts: [], post_owner: helper}
+    refusals:
+    - {reason: already active, phase: pre, reposts: false, fail: false}
+    - {reason: changed, phase: pre, reposts: false, fail: false}
+    - {reason: paused, phase: pre, reposts: false, fail: false}
+    - {reason: quorum, phase: pre, reposts: false, fail: false}
+    - {reason: trial, phase: pre, reposts: false, fail: false}
+    - {reason: trial submits, phase: pre, reposts: false, fail: false}
+    invariants:
+    - I7
+    status: verified
+    from: Trial
+    to: Active
+  - arm: OracleFeed@"info"
+    transition: oracle.OracleFeed.info
+    lean: Rholphin.Model.Oracle.oracleFeed_info
+    kind: read
+    source: {file: contracts/src/deploy/v3/31_feed.rho, line: 307}
+    guards: []
+    effects:
+    - {target: reply, formula: '(true, {feedId, currency, reporters, sponsor, quorum, policyHash, active, paused, rev})'}
+    access:
+    - {cell: feedState, mode: peek, actor: arm, phase: pre}
+    nested_calls: []
+    refusals: []
+    invariants:
+    - I7
+    status: verified
+  - arm: OracleFeed@"admin"
+    transition: oracle.OracleFeed.admin
+    lean: Rholphin.Model.Oracle.oracleFeed_admin
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/31_feed.rho, line: 331}
+    guards:
+    - {id: authorize, expr: 'Governor.authorize(oracle:currency, nonce, action, arg)', refusal: {reason: below threshold, phase: pre}}
+    effects:
+    - {target: paused, formula: arg if setPaused}
+    - {target: trial, formula: reset if restartTrial}
+    - {target: rev, formula: rev + 1}
+    access:
+    - {cell: feedState, mode: peek, actor: arm, phase: pre}
+    - {cell: feedState, mode: consume, actor: arm, phase: commit}
+    - {cell: feedState, mode: post, actor: arm, phase: commit}
+    nested_calls:
+    - {callee: feedGovernor, protocol: P0, takes: [], puts: [], post_owner: helper}
+    - {callee: feedNow, protocol: P0, takes: [], puts: [], post_owner: helper}
+    refusals:
+    - {reason: unknown admin action, phase: pre, reposts: false, fail: false}
+    invariants:
+    - S12
+    status: verified
+  states:
+  - Trial
+  - Active
+  - Paused
+  initial: Trial

@@ -411,9 +411,9 @@ mod tests {
     fn canonical_form_is_stable_and_ordered() {
         let canonical = terms().canonical();
         assert!(canonical.starts_with("rcash:market-terms:v4|"));
-        assert!(canonical.contains("|8:KES/NGN:v1|9:KES-NGN-v1|3:NGN|3:KES|1:1|"));
+        assert!(canonical.contains("|10:KES/NGN:v1|10:KES-NGN-v1|3:NGN|3:KES|1:1|"));
         assert_eq!(terms().values().len(), 25);
-        assert_eq!(canonical.split('|').count(), 27);
+        assert_eq!(canonical.split('|').count(), 26);
     }
 
     #[test]

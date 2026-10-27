@@ -524,23 +524,32 @@ in {
         for (@s <- lockState) {
           if (s.get("funded")) { lockState!(s) | ret2!((false, "funded", *lpPayment)) }
           else {
-            if (untilHeight <= 0) { lockState!(s) | ret2!((false, "height", *lpPayment)) }
-            else {
-              new pkCh, aCh, amtCh in {
-                deployerIdOps!("pubKeyBytes", *dId, *pkCh) |
-                for (@pk <- pkCh) {
-                  revAddress!("fromPublicKey", pk, *aCh) |
-                  for (@funder <- aCh) {
-                    @lockPurse!("deposit", *lpPayment, *amtCh) |
-                    for (@amt <- amtCh) {
-                      match amt {
-                        (true, shares) => {
-                          lockState!(s.set("funded", true).set("untilHeight", untilHeight)
-                                       .set("beneficiary", beneficiaryId)
-                                       .set("funder", funder).set("shares", shares)) |
-                          ret2!((true, shares))
+            new nowCh2 in {
+              poolNow!(*nowCh2) |
+              for (@now2 <- nowCh2) {
+                if (untilHeight <= 0) { lockState!(s) | ret2!((false, "height", *lpPayment)) }
+                else {
+                  if (untilHeight < now2 + terms.get("lockMinBlocks")) {
+                    lockState!(s) | ret2!((false, "lock too short", *lpPayment))
+                  } else {
+                    new pkCh, aCh, amtCh in {
+                      deployerIdOps!("pubKeyBytes", *dId, *pkCh) |
+                      for (@pk <- pkCh) {
+                        revAddress!("fromPublicKey", pk, *aCh) |
+                        for (@funder <- aCh) {
+                          @lockPurse!("deposit", *lpPayment, *amtCh) |
+                          for (@amt <- amtCh) {
+                            match amt {
+                              (true, shares) => {
+                                lockState!(s.set("funded", true).set("untilHeight", untilHeight)
+                                             .set("beneficiary", beneficiaryId)
+                                             .set("funder", funder).set("shares", shares)) |
+                                ret2!((true, shares))
+                              }
+                              _ => { lockState!(s) | ret2!((false, "not LP", *lpPayment)) }
+                            }
+                          }
                         }
-                        _ => { lockState!(s) | ret2!((false, "not LP", *lpPayment)) }
                       }
                     }
                   }

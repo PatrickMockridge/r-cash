@@ -1,0 +1,181 @@
+# Flow specification.
+# Arm keys, source lines, access modes and refusal sets are checked against
+# contracts/build/arm_inventory.json by tools/check_flows.py. Guards, effects,
+# invariants and status are the authored content; status is not a synonym for
+# tested. See README.md for the schema and protocol labels.
+
+schema: rcash.flows/v1
+subsystem: governance
+source_globs:
+- contracts/src/deploy/v3/03_admin_guard.rho
+- contracts/src/deploy/v3/04_governor.rho
+invariants: {}
+components:
+- name: AdminGuard
+  lean_module: Rholphin.Model.Governance
+  arms:
+  - arm: AdminGuard@"verify"
+    transition: governance.AdminGuard.verify
+    lean: Rholphin.Model.Governance.adminGuard_verify
+    kind: read
+    source: {file: contracts/src/deploy/v3/03_admin_guard.rho, line: 49}
+    guards:
+    - {id: threshold, expr: 'adminCount(H(rcash:admin:v1|...), sigs, admins) >= threshold', refusal: {reason: below threshold, phase: pre}}
+    effects:
+    - {target: reply, formula: '(true, Nil)'}
+    access: []
+    nested_calls:
+    - {callee: adminCount, protocol: P0, takes: [], puts: [], post_owner: helper}
+    refusals:
+    - {reason: below threshold, phase: pre, reposts: false, fail: false}
+    invariants:
+    - I19
+    status: verified
+  states:
+  - Live
+  initial: Live
+- name: Governor
+  lean_module: Rholphin.Model.Governance
+  arms:
+  - arm: Governor@"authorize"
+    transition: governance.Governor.authorize
+    lean: Rholphin.Model.Governance.governor_authorize
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/04_governor.rho, line: 35}
+    guards:
+    - {id: nonce, expr: nonce > last(domain), refusal: {reason: replay, phase: pre}}
+    - {id: threshold, expr: 'AdminGuard.verify(domain, nonce, action, argsHash)', refusal: {reason: below threshold, phase: pre}}
+    - {id: recheck, expr: nonce > last(domain), refusal: {reason: replay, phase: pre}}
+    effects:
+    - {target: 'nonces[domain]', formula: nonce}
+    access:
+    - {cell: governorState, mode: peek, actor: arm, phase: pre}
+    - {cell: governorState, mode: consume, actor: arm, phase: commit}
+    - {cell: governorState, mode: post, actor: arm, phase: commit}
+    nested_calls:
+    - {callee: governorAdminGuard, protocol: P0, takes: [], puts: [], post_owner: helper}
+    - {callee: governorLast, protocol: P0, takes: [], puts: [], post_owner: helper}
+    refusals:
+    - {reason: replay, phase: pre, reposts: false, fail: false}
+    invariants:
+    - I19
+    - S12
+    status: verified
+  - arm: Governor@"schedule"
+    transition: governance.Governor.schedule
+    lean: Rholphin.Model.Governance.governor_schedule
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/04_governor.rho, line: 76}
+    guards:
+    - {id: nonce, expr: nonce > last(domain), refusal: {reason: replay, phase: pre}}
+    - {id: absent, expr: 'pending[domain|nonce] = Nil', refusal: {reason: pending, phase: pre}}
+    - {id: threshold, expr: 'AdminGuard.verify(domain, nonce, action, argsHash)', refusal: {reason: below threshold, phase: pre}}
+    - {id: recheck, expr: nonce > last(domain), refusal: {reason: replay, phase: pre}}
+    effects:
+    - {target: 'pending[domain|nonce]', formula: '{action, argsHash, args, readyAt: height + timelock}'}
+    - {target: reply, formula: '(true, height + timelock)'}
+    access:
+    - {cell: governorState, mode: peek, actor: arm, phase: pre}
+    - {cell: governorState, mode: consume, actor: arm, phase: commit}
+    - {cell: governorState, mode: post, actor: arm, phase: commit}
+    nested_calls:
+    - {callee: governorAdminGuard, protocol: P0, takes: [], puts: [], post_owner: helper}
+    - {callee: governorLast, protocol: P0, takes: [], puts: [], post_owner: helper}
+    refusals:
+    - {reason: pending, phase: pre, reposts: false, fail: false}
+    - {reason: replay, phase: pre, reposts: false, fail: false}
+    invariants:
+    - I19
+    - S12
+    status: verified
+  - arm: Governor@"execute"
+    transition: governance.Governor.execute
+    lean: Rholphin.Model.Governance.governor_execute
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/04_governor.rho, line: 122}
+    guards:
+    - {id: pending, expr: 'pending[domain|nonce] != Nil', refusal: {reason: unknown, phase: pre}}
+    - {id: ready, expr: height >= readyAt, refusal: {reason: early, phase: pre}}
+    - {id: nonce, expr: nonce > last(domain), refusal: {reason: replay, phase: pre}}
+    effects:
+    - {target: 'nonces[domain]', formula: nonce}
+    - {target: 'pending[domain|nonce]', formula: Nil}
+    - {target: reply, formula: '(true, action, argsHash, args)'}
+    access:
+    - {cell: governorState, mode: peek, actor: arm, phase: pre}
+    - {cell: governorState, mode: consume, actor: arm, phase: commit}
+    - {cell: governorState, mode: post, actor: arm, phase: commit}
+    nested_calls: []
+    refusals:
+    - {reason: early, phase: pre, reposts: false, fail: false}
+    - {reason: replay, phase: pre, reposts: false, fail: false}
+    - {reason: unknown, phase: pre, reposts: false, fail: false}
+    invariants:
+    - I19
+    - S12
+    status: verified
+  - arm: Governor@"pending"
+    transition: governance.Governor.pending
+    lean: Rholphin.Model.Governance.governor_pending
+    kind: read
+    source: {file: contracts/src/deploy/v3/04_governor.rho, line: 152}
+    guards:
+    - {id: pending, expr: 'pending[domain|nonce] != Nil', refusal: {reason: unknown, phase: pre}}
+    effects:
+    - {target: reply, formula: '(true, action, argsHash, args, readyAt)'}
+    access:
+    - {cell: governorState, mode: peek, actor: arm, phase: pre}
+    nested_calls: []
+    refusals:
+    - {reason: unknown, phase: pre, reposts: false, fail: false}
+    invariants:
+    - S12
+    status: verified
+  - arm: Governor@"admins"
+    transition: governance.Governor.admins
+    lean: Rholphin.Model.Governance.governor_admins
+    kind: read
+    source: {file: contracts/src/deploy/v3/04_governor.rho, line: 164}
+    guards: []
+    effects:
+    - {target: reply, formula: '(true, admins, threshold)'}
+    access:
+    - {cell: governorState, mode: peek, actor: arm, phase: pre}
+    nested_calls: []
+    refusals: []
+    invariants:
+    - I19
+    status: verified
+  - arm: Governor@"admin"
+    transition: governance.Governor.admin
+    lean: Rholphin.Model.Governance.governor_admin
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/04_governor.rho, line: 170}
+    guards:
+    - {id: nonce, expr: nonce > last(governor), refusal: {reason: replay, phase: pre}}
+    - {id: threshold, expr: 'AdminGuard.verify(governor, nonce, action, args)', refusal: {reason: below threshold, phase: pre}}
+    - {id: threshold_bounds, expr: 1 <= newThreshold <= len(admins), refusal: {reason: threshold, phase: pre}}
+    - {id: timelock, expr: 1 <= newTimelock <= 1296000, refusal: {reason: timelock, phase: pre}}
+    effects:
+    - {target: admins, formula: newAdmins if setAdmins else admins}
+    - {target: threshold, formula: newThreshold if setThreshold else threshold}
+    - {target: timelock, formula: newTimelock if setTimelock else timelock}
+    - {target: 'nonces[governor]', formula: nonce}
+    access:
+    - {cell: governorState, mode: peek, actor: arm, phase: pre}
+    - {cell: governorState, mode: consume, actor: arm, phase: commit}
+    - {cell: governorState, mode: post, actor: arm, phase: commit}
+    nested_calls:
+    - {callee: governorAdminGuard, protocol: P0, takes: [], puts: [], post_owner: helper}
+    - {callee: governorLast, protocol: P0, takes: [], puts: [], post_owner: helper}
+    refusals:
+    - {reason: replay, phase: pre, reposts: false, fail: false}
+    - {reason: threshold, phase: pre, reposts: false, fail: false}
+    - {reason: timelock, phase: pre, reposts: false, fail: false}
+    - {reason: unknown admin action, phase: pre, reposts: false, fail: false}
+    invariants:
+    - I19
+    status: verified
+  states:
+  - Live
+  initial: Live

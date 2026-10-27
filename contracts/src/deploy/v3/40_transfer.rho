@@ -6,7 +6,6 @@
 // Placeholders: __ROOT_URI__.
 new
   TransferBook, bookParamsState,
-  TransferContract,
   transferNow, bookAmount, bookSendCheck,
   rl(`rho:registry:lookup`),
   rs(`rho:registry:insertArbitrary`),

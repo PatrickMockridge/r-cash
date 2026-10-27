@@ -2,3 +2,4 @@ coincurve>=20.0
 pycryptodome>=3.20
 requests>=2.31
 hypothesis>=6.100
+pyyaml>=6.0

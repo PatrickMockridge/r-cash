@@ -23,7 +23,7 @@ sys.path.insert(0, str(ROOT / "harness"))
 import deploy as node  # noqa: E402
 import sign_payload  # noqa: E402
 from install_v3 import render  # noqa: E402
-from unit_v3 import call, check, decode, deploy_call, one, ok_or_reason  # noqa: E402
+from unit_v3 import call, check, decode, deploy_call, faucet_top_up, one, ok_or_reason  # noqa: E402
 
 KEYS = ROOT / ".devnet" / "keys.json"
 STATE = ROOT / ".devnet" / "v3-install.json"
@@ -57,6 +57,7 @@ def main() -> int:
     state = json.loads(STATE.read_text())
     root = state["root_uri"]
     secret = keys["deployer"]["secret"]
+    faucet_top_up(keys["sponsor"]["address"])
     sponsor = keys["sponsor"]["public"]
     reporters = [keys[n]["public"] for n in ("reporter1", "reporter2", "reporter3")]
     feed_id = "NGT-feed-test-1"

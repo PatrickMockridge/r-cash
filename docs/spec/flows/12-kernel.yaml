@@ -1,0 +1,458 @@
+# Flow specification.
+# Arm keys, source lines, access modes and refusal sets are checked against
+# contracts/build/arm_inventory.json by tools/check_flows.py. Guards, effects,
+# invariants and status are the authored content; status is not a synonym for
+# tested. See README.md for the schema and protocol labels.
+
+schema: rcash.flows/v1
+subsystem: kernel
+source_globs:
+- contracts/src/deploy/v3/01_kernel.rho
+- contracts/src/deploy/v3/02_bounds.rho
+- contracts/src/deploy/v3/05_amm_math.rho
+- contracts/src/deploy/v3/06_collateral_math.rho
+- contracts/src/deploy/v3/08_claim_code.rho
+invariants: {}
+components:
+- name: Clock
+  lean_module: Rholphin.Model.Kernel
+  arms:
+  - arm: Clock@"now"
+    transition: kernel.Clock.now
+    lean: Rholphin.Model.Kernel.clock_now
+    kind: read
+    source: {file: contracts/src/deploy/v3/01_kernel.rho, line: 18}
+    guards: []
+    effects:
+    - {target: reply, formula: current block height}
+    access: []
+    nested_calls: []
+    refusals: []
+    invariants: []
+    status: verified
+  states:
+  - Live
+  initial: Live
+- name: Codec
+  lean_module: Rholphin.Model.Kernel
+  arms:
+  - arm: Codec@"canonical"
+    transition: kernel.Codec.canonical
+    lean: Rholphin.Model.Kernel.codec_canonical
+    kind: read
+    source: {file: contracts/src/deploy/v3/01_kernel.rho, line: 38}
+    guards: []
+    effects:
+    - {target: reply, formula: 'schema ++ join(''|'', len(v) ++ '':'' ++ v)'}
+    access: []
+    nested_calls:
+    - {callee: codecJoin, protocol: P0, takes: [], puts: [], post_owner: helper}
+    refusals: []
+    invariants:
+    - I5
+    status: verified
+  - arm: Codec@"hash"
+    transition: kernel.Codec.hash
+    lean: Rholphin.Model.Kernel.codec_hash
+    kind: read
+    source: {file: contracts/src/deploy/v3/01_kernel.rho, line: 42}
+    guards: []
+    effects:
+    - {target: reply, formula: 'blake2b256(canonical(schema, values))'}
+    access: []
+    nested_calls:
+    - {callee: codecJoin, protocol: P0, takes: [], puts: [], post_owner: helper}
+    refusals: []
+    invariants:
+    - I5
+    status: verified
+  states:
+  - Live
+  initial: Live
+- name: Verifier
+  lean_module: Rholphin.Model.Kernel
+  arms:
+  - arm: Verifier@"hash"
+    transition: kernel.Verifier.hash
+    lean: Rholphin.Model.Kernel.verifier_hash
+    kind: read
+    source: {file: contracts/src/deploy/v3/01_kernel.rho, line: 22}
+    guards: []
+    effects:
+    - {target: reply, formula: blake2b256(bytes)}
+    access: []
+    nested_calls: []
+    refusals: []
+    invariants: []
+    status: verified
+  - arm: Verifier@"sigOk"
+    transition: kernel.Verifier.sigOk
+    lean: Rholphin.Model.Kernel.verifier_sigOk
+    kind: read
+    source: {file: contracts/src/deploy/v3/01_kernel.rho, line: 23}
+    guards: []
+    effects:
+    - {target: reply, formula: 'secp256k1Verify(digest, sig, pub)'}
+    access: []
+    nested_calls: []
+    refusals: []
+    invariants: []
+    status: verified
+  - arm: Verifier@"claimHash"
+    transition: kernel.Verifier.claimHash
+    lean: Rholphin.Model.Kernel.verifier_claimHash
+    kind: read
+    source: {file: contracts/src/deploy/v3/01_kernel.rho, line: 24}
+    guards: []
+    effects:
+    - {target: reply, formula: blake2b256(secret)}
+    access: []
+    nested_calls: []
+    refusals: []
+    invariants:
+    - I14
+    status: verified
+  states:
+  - Live
+  initial: Live
+- name: Bounds
+  lean_module: Rholphin.Model.Kernel
+  arms:
+  - arm: Bounds@"checkIssuer"
+    transition: kernel.Bounds.checkIssuer
+    lean: Rholphin.Model.Kernel.bounds_checkIssuer
+    kind: read
+    source: {file: contracts/src/deploy/v3/02_bounds.rho, line: 13}
+    guards:
+    - {id: mcr, expr: 10000 <= mcrBps <= 50000, refusal: {reason: mcr, phase: pre}}
+    - {id: bonus, expr: 0 <= bonusBps <= 5000, refusal: {reason: bonus, phase: pre}}
+    - {id: close, expr: 1 <= closeFactorBps <= 10000, refusal: {reason: close, phase: pre}}
+    - {id: rate, expr: 0 <= ratePerBlock <= 50000, refusal: {reason: rate, phase: pre}}
+    - {id: ceiling, expr: 1e10 <= debtCeiling <= 1e15, refusal: {reason: ceiling, phase: pre}}
+    - {id: min_debt, expr: 10000 <= minDebt <= 1e9, refusal: {reason: min debt, phase: pre}}
+    - {id: max_debt, expr: minDebt <= maxDebt <= debtCeiling, refusal: {reason: max debt, phase: pre}}
+    - {id: age, expr: 1 <= maxOracleAge <= 1000, refusal: {reason: oracle age, phase: pre}}
+    - {id: savings, expr: 0 <= savingsShareBps <= 10000, refusal: {reason: savings share, phase: pre}}
+    - {id: psm_fee, expr: 0 <= psmFeeBps <= 1000, refusal: {reason: psm fee, phase: pre}}
+    effects:
+    - {target: reply, formula: '(true, Nil)'}
+    access: []
+    nested_calls: []
+    refusals:
+    - {reason: bonus, phase: pre, reposts: false, fail: false}
+    - {reason: ceiling, phase: pre, reposts: false, fail: false}
+    - {reason: close, phase: pre, reposts: false, fail: false}
+    - {reason: max debt, phase: pre, reposts: false, fail: false}
+    - {reason: mcr, phase: pre, reposts: false, fail: false}
+    - {reason: min debt, phase: pre, reposts: false, fail: false}
+    - {reason: oracle age, phase: pre, reposts: false, fail: false}
+    - {reason: psm fee, phase: pre, reposts: false, fail: false}
+    - {reason: rate, phase: pre, reposts: false, fail: false}
+    - {reason: savings share, phase: pre, reposts: false, fail: false}
+    invariants:
+    - S12
+    status: verified
+  - arm: Bounds@"checkFeed"
+    transition: kernel.Bounds.checkFeed
+    lean: Rholphin.Model.Kernel.bounds_checkFeed
+    kind: read
+    source: {file: contracts/src/deploy/v3/02_bounds.rho, line: 38}
+    guards:
+    - {id: quorum, expr: 1 <= quorum <= 3, refusal: {reason: quorum, phase: pre}}
+    - {id: age, expr: age >= 1, refusal: {reason: age, phase: pre}}
+    - {id: spread, expr: 0 <= spread <= 10000, refusal: {reason: spread, phase: pre}}
+    - {id: band, expr: 0 < minP <= maxP, refusal: {reason: band, phase: pre}}
+    - {id: trial, expr: trialBlocks >= 1, refusal: {reason: trial, phase: pre}}
+    - {id: trial_submits, expr: trialMinSubmits >= quorum, refusal: {reason: trial submits, phase: pre}}
+    effects:
+    - {target: reply, formula: '(true, Nil)'}
+    access: []
+    nested_calls: []
+    refusals:
+    - {reason: age, phase: pre, reposts: false, fail: false}
+    - {reason: band, phase: pre, reposts: false, fail: false}
+    - {reason: quorum, phase: pre, reposts: false, fail: false}
+    - {reason: spread, phase: pre, reposts: false, fail: false}
+    - {reason: trial, phase: pre, reposts: false, fail: false}
+    - {reason: trial submits, phase: pre, reposts: false, fail: false}
+    invariants:
+    - I7
+    status: verified
+  - arm: Bounds@"checkPool"
+    transition: kernel.Bounds.checkPool
+    lean: Rholphin.Model.Kernel.bounds_checkPool
+    kind: read
+    source: {file: contracts/src/deploy/v3/02_bounds.rho, line: 48}
+    guards:
+    - {id: base_spread, expr: 0 <= baseSpreadBps <= 10000, refusal: {reason: base spread, phase: pre}}
+    - {id: skew, expr: 0 <= skewSpreadBps <= 10000, refusal: {reason: skew, phase: pre}}
+    - {id: max_trade, expr: 1 <= maxTradeBps <= 10000, refusal: {reason: max trade, phase: pre}}
+    - {id: min_liquidity, expr: minLiquidity >= 1, refusal: {reason: min liquidity, phase: pre}}
+    - {id: tolerance, expr: 0 <= firstDepositToleranceBps <= 1000, refusal: {reason: tolerance, phase: pre}}
+    - {id: depth, expr: depthFloorQuote >= 0, refusal: {reason: depth floor, phase: pre}}
+    - {id: min_ticket, expr: minTicketQuote > 0, refusal: {reason: min ticket, phase: pre}}
+    effects:
+    - {target: reply, formula: '(true, Nil)'}
+    access: []
+    nested_calls: []
+    refusals:
+    - {reason: base spread, phase: pre, reposts: false, fail: false}
+    - {reason: depth floor, phase: pre, reposts: false, fail: false}
+    - {reason: max trade, phase: pre, reposts: false, fail: false}
+    - {reason: min liquidity, phase: pre, reposts: false, fail: false}
+    - {reason: min ticket, phase: pre, reposts: false, fail: false}
+    - {reason: skew, phase: pre, reposts: false, fail: false}
+    - {reason: tolerance, phase: pre, reposts: false, fail: false}
+    invariants:
+    - I12
+    status: verified
+  - arm: Bounds@"checkBook"
+    transition: kernel.Bounds.checkBook
+    lean: Rholphin.Model.Kernel.bounds_checkBook
+    kind: read
+    source: {file: contracts/src/deploy/v3/02_bounds.rho, line: 67}
+    guards:
+    - {id: default_expiry, expr: defaultExpiryBlocks >= 1, refusal: {reason: default expiry, phase: pre}}
+    - {id: max_expiry, expr: defaultExpiryBlocks <= maxExpiryBlocks <= 1296000, refusal: {reason: max expiry, phase: pre}}
+    - {id: min_amount, expr: minAmount >= 0, refusal: {reason: min amount, phase: pre}}
+    - {id: memo, expr: 0 <= maxMemoBytes <= 4096, refusal: {reason: max memo, phase: pre}}
+    - {id: op_id, expr: 0 <= maxOpIdBytes <= 256, refusal: {reason: max op id, phase: pre}}
+    - {id: stipend, expr: maxStipend >= 0, refusal: {reason: max stipend, phase: pre}}
+    effects:
+    - {target: reply, formula: '(true, Nil)'}
+    access: []
+    nested_calls: []
+    refusals:
+    - {reason: default expiry, phase: pre, reposts: false, fail: false}
+    - {reason: max expiry, phase: pre, reposts: false, fail: false}
+    - {reason: max memo, phase: pre, reposts: false, fail: false}
+    - {reason: max op id, phase: pre, reposts: false, fail: false}
+    - {reason: max stipend, phase: pre, reposts: false, fail: false}
+    - {reason: min amount, phase: pre, reposts: false, fail: false}
+    invariants:
+    - I19
+    status: verified
+  - arm: Bounds@"checkTransfer"
+    transition: kernel.Bounds.checkTransfer
+    lean: Rholphin.Model.Kernel.bounds_checkTransfer
+    kind: read
+    source: {file: contracts/src/deploy/v3/02_bounds.rho, line: 84}
+    guards:
+    - {id: min_amount, expr: amount >= minAmount, refusal: {reason: min amount, phase: pre}}
+    - {id: expiry, expr: expiry > now, refusal: {reason: expiry, phase: pre}}
+    - {id: max_expiry, expr: expiry <= now + maxExpiryBlocks, refusal: {reason: max expiry, phase: pre}}
+    effects:
+    - {target: reply, formula: '(true, Nil)'}
+    access: []
+    nested_calls: []
+    refusals:
+    - {reason: expiry, phase: pre, reposts: false, fail: false}
+    - {reason: max expiry, phase: pre, reposts: false, fail: false}
+    - {reason: min amount, phase: pre, reposts: false, fail: false}
+    invariants:
+    - I14
+    status: verified
+  - arm: Bounds@"checkTerms"
+    transition: kernel.Bounds.checkTerms
+    lean: Rholphin.Model.Kernel.bounds_checkTerms
+    kind: read
+    source: {file: contracts/src/deploy/v3/02_bounds.rho, line: 177}
+    guards:
+    - {id: fields, expr: len(values) = 25 and all terms fields match, refusal: {reason: terms fields, phase: pre}}
+    - {id: semantic, expr: boundsTermsSemantic(terms), refusal: {reason: terms fields, phase: pre}}
+    - {id: pool, expr: checkPool(terms), refusal: {reason: base spread, phase: pre}}
+    effects:
+    - {target: reply, formula: '(true, Nil)'}
+    access: []
+    nested_calls:
+    - {callee: boundsTerms, protocol: P0, takes: [], puts: [], post_owner: helper}
+    refusals:
+    - {reason: book expiry, phase: pre, reposts: false, fail: false}
+    - {reason: lock height, phase: pre, reposts: false, fail: false}
+    - {reason: lock too short, phase: pre, reposts: false, fail: false}
+    - {reason: oracle age, phase: pre, reposts: false, fail: false}
+    - {reason: pair, phase: pre, reposts: false, fail: false}
+    - {reason: seed mismatch, phase: pre, reposts: false, fail: false}
+    - {reason: terms fields, phase: pre, reposts: false, fail: false}
+    - {reason: version, phase: pre, reposts: false, fail: false}
+    invariants:
+    - I5
+    - I6
+    - I12
+    status: verified
+  states:
+  - Live
+  initial: Live
+- name: AmmMath
+  lean_module: Rholphin.Model.Kernel
+  arms:
+  - arm: AmmMath@"value"
+    transition: kernel.AmmMath.value
+    lean: Rholphin.Model.Kernel.ammMath_value
+    kind: read
+    source: {file: contracts/src/deploy/v3/05_amm_math.rho, line: 12}
+    guards: []
+    effects:
+    - {target: reply, formula: floor(rb * rate / 1e8) + rq}
+    access: []
+    nested_calls: []
+    refusals: []
+    invariants:
+    - I10
+    status: verified
+  - arm: AmmMath@"weight"
+    transition: kernel.AmmMath.weight
+    lean: Rholphin.Model.Kernel.ammMath_weight
+    kind: read
+    source: {file: contracts/src/deploy/v3/05_amm_math.rho, line: 16}
+    guards: []
+    effects:
+    - {target: reply, formula: 5000 if value <= 0 else floor(floor(rb*rate/1e8)*10000 / value)}
+    access: []
+    nested_calls: []
+    refusals: []
+    invariants:
+    - I12
+    status: verified
+  - arm: AmmMath@"fee"
+    transition: kernel.AmmMath.fee
+    lean: Rholphin.Model.Kernel.ammMath_fee
+    kind: read
+    source: {file: contracts/src/deploy/v3/05_amm_math.rho, line: 30}
+    guards: []
+    effects:
+    - {target: reply, formula: baseSpread + floor(abs(weight - 5000) * skewSpread / 5000)}
+    access: []
+    nested_calls: []
+    refusals: []
+    invariants:
+    - I12
+    status: verified
+  - arm: AmmMath@"out"
+    transition: kernel.AmmMath.out
+    lean: Rholphin.Model.Kernel.ammMath_out
+    kind: read
+    source: {file: contracts/src/deploy/v3/05_amm_math.rho, line: 42}
+    guards: []
+    effects:
+    - {target: reply, formula: 'b2q: floor(floor(dx*rate/1e8) * (10000-fee)/10000); q2b: -1 if rate <= 0 else floor(floor(dx*1e8/rate)
+        * (10000-fee)/10000)'}
+    access: []
+    nested_calls: []
+    refusals: []
+    invariants:
+    - I12
+    status: verified
+  - arm: AmmMath@"shares"
+    transition: kernel.AmmMath.shares
+    lean: Rholphin.Model.Kernel.ammMath_shares
+    kind: read
+    source: {file: contracts/src/deploy/v3/05_amm_math.rho, line: 65}
+    guards: []
+    effects:
+    - {target: reply, formula: 'first: depositValue - 1e8; else 0 if totalShares<=0 or poolValue<=0; else floor(depositValue*totalShares/poolValue)'}
+    access: []
+    nested_calls: []
+    refusals: []
+    invariants:
+    - I11
+    status: verified
+  - arm: AmmMath@"inputValue"
+    transition: kernel.AmmMath.inputValue
+    lean: Rholphin.Model.Kernel.ammMath_inputValue
+    kind: read
+    source: {file: contracts/src/deploy/v3/05_amm_math.rho, line: 77}
+    guards: []
+    effects:
+    - {target: reply, formula: floor(amount*rate/1e8) if base; amount if quote; -1}
+    access: []
+    nested_calls: []
+    refusals: []
+    invariants:
+    - I12
+    status: verified
+  states:
+  - Live
+  initial: Live
+- name: CollateralMath
+  lean_module: Rholphin.Model.Kernel
+  arms:
+  - arm: CollateralMath@"accrue"
+    transition: kernel.CollateralMath.accrue
+    lean: Rholphin.Model.Kernel.collateralMath_accrue
+    kind: read
+    source: {file: contracts/src/deploy/v3/06_collateral_math.rho, line: 15}
+    guards: []
+    effects:
+    - {target: reply, formula: debt if debt<=0 or now<=last or rate<=0 else debt + ceil(debt*rate*(now-last)/1e12)}
+    access: []
+    nested_calls: []
+    refusals: []
+    invariants:
+    - S3
+    status: verified
+  - arm: CollateralMath@"health"
+    transition: kernel.CollateralMath.health
+    lean: Rholphin.Model.Kernel.collateralMath_health
+    kind: read
+    source: {file: contracts/src/deploy/v3/06_collateral_math.rho, line: 27}
+    guards: []
+    effects:
+    - {target: reply, formula: 'true if debt<=0 else rate<=0 ? false : floor(collateral*rate/1e8)*10000 >= debt*mcrBps'}
+    access: []
+    nested_calls: []
+    refusals: []
+    invariants:
+    - S4
+    status: verified
+  - arm: CollateralMath@"payout"
+    transition: kernel.CollateralMath.payout
+    lean: Rholphin.Model.Kernel.collateralMath_payout
+    kind: read
+    source: {file: contracts/src/deploy/v3/06_collateral_math.rho, line: 41}
+    guards: []
+    effects:
+    - {target: reply, formula: 0 if rate<=0 else floor(amount*(10000+bonusBps)*1e8 / (rate*10000))}
+    access: []
+    nested_calls: []
+    refusals: []
+    invariants:
+    - S6
+    status: verified
+  - arm: CollateralMath@"seize"
+    transition: kernel.CollateralMath.seize
+    lean: Rholphin.Model.Kernel.collateralMath_seize
+    kind: read
+    source: {file: contracts/src/deploy/v3/06_collateral_math.rho, line: 50}
+    guards: []
+    effects:
+    - {target: reply, formula: 'payout(amount, bonusBps, rate)'}
+    access: []
+    nested_calls: []
+    refusals: []
+    invariants:
+    - S6
+    status: verified
+  states:
+  - Live
+  initial: Live
+- name: ClaimCode
+  lean_module: Rholphin.Model.Kernel
+  arms:
+  - arm: ClaimCode@"hash"
+    transition: kernel.ClaimCode.hash
+    lean: Rholphin.Model.Kernel.claimCode_hash
+    kind: read
+    source: {file: contracts/src/deploy/v3/08_claim_code.rho, line: 14}
+    guards: []
+    effects:
+    - {target: reply, formula: blake2b256(secret)}
+    access: []
+    nested_calls: []
+    refusals: []
+    invariants:
+    - I14
+    status: verified
+  states:
+  - Live
+  initial: Live

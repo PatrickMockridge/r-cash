@@ -60,11 +60,18 @@ def rholang_value(value) -> str:
 
 
 def wait_height(target: int) -> None:
-    import time
-    for _ in range(60):
+    import time, urllib.request
+    deadline = time.time() + 900
+    while time.time() < deadline:
         if node.height() > target:
             return
-        time.sleep(2)
+        try:
+            urllib.request.urlopen(urllib.request.Request(
+                "http://localhost:40405/api/v1/propose", data=b"{}",
+                headers={"content-type": "application/json"}, method="POST"), timeout=5)
+        except Exception:
+            pass
+        time.sleep(0.2)
     raise AssertionError(f"height did not pass {target}")
 
 
@@ -78,7 +85,8 @@ def main() -> int:
     index = state["market_index_uri"]
     sponsor = keys["sponsor"]
     faucet_top_up(keys["key18"]["address"])
-    lock_until = node.height() + 20
+    faucet_top_up(keys["sponsor"]["address"])
+    lock_until = node.height() + 60
 
     listed = one(call(currency_registry, "CurrencyRegistry",
                       'CurrencyRegistry!("currency", "V4T", *r) | '

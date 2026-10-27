@@ -79,11 +79,21 @@ def faucet_top_up(address: str) -> None:
         headers={"content-type": "application/json"},
         method="POST",
     )
-    try:
-        with urllib.request.urlopen(request, timeout=10):
-            time.sleep(6.0)
-    except urllib.error.HTTPError:
-        pass
+    for _ in range(4):
+        try:
+            with urllib.request.urlopen(request, timeout=10):
+                time.sleep(6.0)
+                return
+        except urllib.error.HTTPError as error:
+            # The faucet is rate-limited to one drip per second. Back-to-back
+            # top-ups for several keys can hit 429; retry rather than silently
+            # leaving the later key unfunded.
+            if error.code == 429:
+                time.sleep(1.5)
+                continue
+            return
+        except Exception:
+            return
 
 
 def deploy_call(term: str, secret: str) -> list:

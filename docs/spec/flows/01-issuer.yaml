@@ -1,0 +1,346 @@
+# Flow specification.
+# Arm keys, source lines, access modes and refusal sets are checked against
+# contracts/build/arm_inventory.json by tools/check_flows.py. Guards, effects,
+# invariants and status are the authored content; status is not a synonym for
+# tested. See README.md for the schema and protocol labels.
+
+schema: rcash.flows/v1
+subsystem: issuer
+source_globs:
+- contracts/src/deploy/v3/31_stablecoin.rho
+invariants: {}
+components:
+- name: Stablecoin
+  lean_module: Rholphin.Model.Issuer
+  arms:
+  - arm: Stablecoin@"brand"
+    transition: issuer.Stablecoin.brand
+    lean: Rholphin.Model.Issuer.stablecoin_brand
+    kind: read
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 594}
+    guards: []
+    effects:
+    - {target: reply, formula: '(true, brand)'}
+    access: []
+    nested_calls: []
+    refusals: []
+    invariants: []
+    status: verified
+  - arm: Stablecoin@"issuer"
+    transition: issuer.Stablecoin.issuer
+    lean: Rholphin.Model.Issuer.stablecoin_issuer
+    kind: read
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 598}
+    guards: []
+    effects:
+    - {target: reply, formula: '(true, issuer)'}
+    access: []
+    nested_calls: []
+    refusals: []
+    invariants: []
+    status: verified
+  - arm: Stablecoin@"supply"
+    transition: issuer.Stablecoin.supply
+    lean: Rholphin.Model.Issuer.stablecoin_supply
+    kind: read
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 602}
+    guards: []
+    effects:
+    - {target: reply, formula: '(true, totalPrincipal)'}
+    access:
+    - {cell: issuerState, mode: peek, actor: arm, phase: pre}
+    nested_calls: []
+    refusals: []
+    invariants:
+    - S1
+    status: verified
+  - arm: Stablecoin@"mint"
+    transition: issuer.Stablecoin.mint
+    lean: Rholphin.Model.Issuer.stablecoin_mint
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 606}
+    guards:
+    - {id: auth_scoped, expr: auth = mintAuth or auth = psmMintAuth, refusal: {reason: bad mint authority, phase: pre}}
+    - {id: amount_pos, expr: amount > 0, refusal: {reason: amount, phase: pre}}
+    - {id: solvency_first, expr: not (sin > surplus), refusal: {reason: recapitalise, phase: pre}}
+    - {id: supply_cap, expr: totalPrincipal + amount <= maxSupply, refusal: {reason: max supply, phase: pre}}
+    - {id: rev_unchanged, expr: issuerState.rev = rev_read, refusal: {reason: changed, phase: pre}}
+    - {id: solvency_recheck, expr: not (sin2 > surplus2), refusal: {reason: recapitalise, phase: pre}}
+    effects:
+    - {target: totalPrincipal, formula: totalPrincipal + amount}
+    - {target: supply, formula: totalPrincipal + amount}
+    - {target: caller, formula: 'mintPayment(brand, amount)'}
+    access:
+    - {cell: bufferState, mode: peek, actor: arm, phase: pre}
+    - {cell: issuerState, mode: peek, actor: arm, phase: pre}
+    - {cell: issuerState, mode: consume, actor: arm, phase: commit}
+    - {cell: issuerState, mode: post, actor: arm, phase: commit}
+    nested_calls: []
+    refusals:
+    - {reason: amount, phase: pre, reposts: false, fail: false}
+    - {reason: bad mint authority, phase: pre, reposts: false, fail: false}
+    - {reason: changed, phase: pre, reposts: false, fail: false}
+    - {reason: max supply, phase: pre, reposts: false, fail: false}
+    - {reason: recapitalise, phase: pre, reposts: false, fail: false}
+    invariants:
+    - S1
+    - S3
+    - S5
+    - S9
+    status: verified
+  - arm: Stablecoin@"burn"
+    transition: issuer.Stablecoin.burn
+    lean: Rholphin.Model.Issuer.stablecoin_burn
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 648}
+    guards:
+    - {id: auth_scoped, expr: auth = burnAuth or auth = psmBurnAuth, refusal: {reason: bad burn authority, phase: pre}}
+    - {id: payment_asset, expr: isStablecoinPayment(payment), refusal: {reason: not a stablecoin payment, phase: pre}}
+    - {id: amount_bounds, expr: 0 < amount and amount <= maxAmount, refusal: {reason: amount, phase: pre}}
+    - {id: supply_floor, expr: totalPrincipal >= amount, refusal: {reason: supply, phase: pre}}
+    - {id: rev_unchanged, expr: issuerState.rev = rev_read, refusal: {reason: changed, phase: pre}}
+    effects:
+    - {target: totalPrincipal, formula: totalPrincipal - amount}
+    - {target: supply, formula: totalPrincipal - amount}
+    - {target: burnPurse, formula: burnPurse + amount}
+    access:
+    - {cell: issuerState, mode: peek, actor: arm, phase: pre}
+    - {cell: issuerState, mode: consume, actor: arm, phase: commit}
+    - {cell: issuerState, mode: post, actor: arm, phase: commit}
+    nested_calls: []
+    refusals:
+    - {reason: amount, phase: pre, reposts: false, fail: false}
+    - {reason: bad burn authority, phase: pre, reposts: false, fail: false}
+    - {reason: changed, phase: pre, reposts: false, fail: false}
+    - {reason: not a stablecoin payment, phase: pre, reposts: false, fail: false}
+    - {reason: supply, phase: pre, reposts: false, fail: false}
+    invariants:
+    - S1
+    - S3
+    - S7
+    status: verified
+  - arm: Stablecoin@"settle"
+    transition: issuer.Stablecoin.settle
+    lean: Rholphin.Model.Issuer.stablecoin_settle
+    kind: read
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 692}
+    guards:
+    - {id: auth_settlement, expr: auth = settlementAuth, refusal: {reason: bad settlement authority, phase: pre}}
+    - {id: amounts_nonneg, expr: principal >= 0 and interest >= 0, refusal: {reason: amount, phase: pre}}
+    - {id: payment_total, expr: total = principal + interest, refusal: {reason: amount, phase: pre}}
+    - {id: payment_asset, expr: isStablecoinPayment(payment), refusal: {reason: asset, phase: pre}}
+    effects:
+    - {target: supply, formula: supply - principal}
+    - {target: totalPrincipal, formula: totalPrincipal - principal}
+    - {target: buffer.surplus, formula: surplus + (interest if principal = 0 else interest)}
+    - {target: reply, formula: '(true, principal, interest)'}
+    access: []
+    nested_calls: []
+    refusals:
+    - {reason: amount, phase: pre, reposts: false, fail: false}
+    - {reason: asset, phase: pre, reposts: false, fail: false}
+    - {reason: bad settlement authority, phase: pre, reposts: false, fail: false}
+    invariants:
+    - S1
+    - S3
+    - S7
+    - S9
+    status: verified
+  - arm: Stablecoin@"amountOf"
+    transition: issuer.Stablecoin.amountOf
+    lean: Rholphin.Model.Issuer.stablecoin_amountOf
+    kind: read
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 767}
+    guards: []
+    effects:
+    - {target: reply, formula: issuer.amountOf(payment)}
+    access: []
+    nested_calls: []
+    refusals: []
+    invariants: []
+    status: verified
+  - arm: Stablecoin@"attest"
+    transition: issuer.Stablecoin.attest
+    lean: Rholphin.Model.Issuer.stablecoin_attest
+    kind: read
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 771}
+    guards: []
+    effects:
+    - {target: reply, formula: '(true, {currency, paramsHash, sponsor, template})'}
+    access: []
+    nested_calls: []
+    refusals: []
+    invariants:
+    - S8
+    status: verified
+  states:
+  - Live
+  initial: Live
+- name: CollateralCustody
+  lean_module: Rholphin.Model.Issuer
+  arms:
+  - arm: CollateralCustody@"deposit"
+    transition: issuer.CollateralCustody.deposit
+    lean: Rholphin.Model.Issuer.collateralCustody_deposit
+    kind: read
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 780}
+    guards:
+    - {id: auth_custody, expr: auth = custodyAuth, refusal: {reason: bad custody authority, phase: pre}}
+    - {id: payment_asset, expr: isRevPayment(payment), refusal: {reason: not a REV payment, phase: pre}}
+    effects:
+    - {target: custody.rev, formula: custody.rev + amount}
+    access: []
+    nested_calls: []
+    refusals:
+    - {reason: bad custody authority, phase: pre, reposts: false, fail: false}
+    - {reason: not a REV payment, phase: pre, reposts: false, fail: false}
+    invariants:
+    - S7
+    status: verified
+  - arm: CollateralCustody@"withdraw"
+    transition: issuer.CollateralCustody.withdraw
+    lean: Rholphin.Model.Issuer.collateralCustody_withdraw
+    kind: read
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 803}
+    guards:
+    - {id: auth_custody, expr: auth = custodyAuth, refusal: {reason: bad custody authority, phase: pre}}
+    - {id: amount_pos, expr: amount > 0, refusal: {reason: amount, phase: pre}}
+    effects:
+    - {target: custody.rev, formula: custody.rev - amount}
+    - {target: caller, formula: REV payment amount}
+    access: []
+    nested_calls: []
+    refusals:
+    - {reason: amount, phase: pre, reposts: false, fail: false}
+    - {reason: bad custody authority, phase: pre, reposts: false, fail: false}
+    invariants:
+    - S7
+    status: verified
+  - arm: CollateralCustody@"balance"
+    transition: issuer.CollateralCustody.balance
+    lean: Rholphin.Model.Issuer.collateralCustody_balance
+    kind: read
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 813}
+    guards: []
+    effects:
+    - {target: reply, formula: custody.rev}
+    access: []
+    nested_calls: []
+    refusals: []
+    invariants:
+    - S7
+    status: verified
+  - arm: CollateralCustody@"attest"
+    transition: issuer.CollateralCustody.attest
+    lean: Rholphin.Model.Issuer.collateralCustody_attest
+    kind: read
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 817}
+    guards: []
+    effects:
+    - {target: reply, formula: '(true, {currency, kind: rev, template})'}
+    access: []
+    nested_calls: []
+    refusals: []
+    invariants: []
+    status: verified
+  states:
+  - Live
+  initial: Live
+- name: RiskParameters
+  lean_module: Rholphin.Model.Issuer
+  arms:
+  - arm: RiskParameters@"params"
+    transition: issuer.RiskParameters.params
+    lean: Rholphin.Model.Issuer.riskParameters_params
+    kind: read
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 825}
+    guards: []
+    effects:
+    - {target: reply, formula: '(true, params)'}
+    access:
+    - {cell: paramsState, mode: peek, actor: arm, phase: pre}
+    nested_calls: []
+    refusals: []
+    invariants: []
+    status: verified
+  - arm: RiskParameters@"info"
+    transition: issuer.RiskParameters.info
+    lean: Rholphin.Model.Issuer.riskParameters_info
+    kind: read
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 829}
+    guards: []
+    effects:
+    - {target: reply, formula: '(true, {params, hash, rev})'}
+    access:
+    - {cell: paramsState, mode: peek, actor: arm, phase: pre}
+    nested_calls: []
+    refusals: []
+    invariants: []
+    status: verified
+  - arm: RiskParameters@"scheduleParams"
+    transition: issuer.RiskParameters.scheduleParams
+    lean: Rholphin.Model.Issuer.riskParameters_scheduleParams
+    kind: create
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 837}
+    guards:
+    - {id: bounds, expr: Bounds.checkIssuer(newParams), refusal: {reason: params hash, phase: pre}}
+    - {id: canonical, expr: 'argsHash = H(rcash:stablecoin-params:v2, values)', refusal: {reason: params hash, phase: pre}}
+    effects:
+    - {target: governor.pending, formula: 'pending[stablecoin:currency, nonce] = {action: setRiskParams, argsHash, args: newParams}'}
+    access: []
+    nested_calls:
+    - {callee: paramsValues, protocol: P0, takes: [], puts: [], post_owner: helper}
+    - {callee: vaultBounds, protocol: P0, takes: [], puts: [], post_owner: helper}
+    - {callee: vaultCodec, protocol: P0, takes: [], puts: [], post_owner: helper}
+    - {callee: vaultGovernor, protocol: P0, takes: [], puts: [], post_owner: helper}
+    refusals: []
+    invariants:
+    - S12
+    status: verified
+  - arm: RiskParameters@"applyParams"
+    transition: issuer.RiskParameters.applyParams
+    lean: Rholphin.Model.Issuer.riskParameters_applyParams
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 873}
+    guards:
+    - {id: action, expr: action = "setRiskParams", refusal: {reason: action, phase: pre}}
+    - {id: hash, expr: 'argsHash = H(rcash:stablecoin-params:v2, values)', refusal: {reason: params hash, phase: pre}}
+    - {id: bounds, expr: Bounds.checkIssuer(args), refusal: {reason: params hash, phase: pre}}
+    effects:
+    - {target: paramsState.params, formula: args}
+    - {target: paramsState.hash, formula: 'H(rcash:stablecoin-params:v2, values(args))'}
+    - {target: paramsState.rev, formula: rev + 1}
+    - {target: reply, formula: '(true, {params: args, currentHash: hash})'}
+    access:
+    - {cell: paramsState, mode: consume, actor: arm, phase: commit}
+    - {cell: paramsState, mode: post, actor: arm, phase: commit}
+    nested_calls:
+    - {callee: paramsValues, protocol: P0, takes: [], puts: [], post_owner: helper}
+    - {callee: vaultBounds, protocol: P0, takes: [], puts: [], post_owner: helper}
+    - {callee: vaultCodec, protocol: P0, takes: [], puts: [], post_owner: helper}
+    - {callee: vaultGovernor, protocol: P0, takes: [], puts: [], post_owner: helper}
+    refusals:
+    - {reason: action, phase: pre, reposts: false, fail: false}
+    - {reason: params hash, phase: pre, reposts: false, fail: false}
+    invariants:
+    - S12
+    status: verified
+    from: Genesis
+    to: Live
+  - arm: RiskParameters@"attest"
+    transition: issuer.RiskParameters.attest
+    lean: Rholphin.Model.Issuer.riskParameters_attest
+    kind: read
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 923}
+    guards: []
+    effects:
+    - {target: reply, formula: '(true, {currency, paramsHash, sponsor, template})'}
+    access: []
+    nested_calls: []
+    refusals: []
+    invariants: []
+    status: verified
+  states:
+  - Genesis
+  - Live
+  initial: Genesis

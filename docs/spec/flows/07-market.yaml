@@ -1,0 +1,482 @@
+# Flow specification.
+# Arm keys, source lines, access modes and refusal sets are checked against
+# contracts/build/arm_inventory.json by tools/check_flows.py. Guards, effects,
+# invariants and status are the authored content; status is not a synonym for
+# tested. See README.md for the schema and protocol labels.
+
+schema: rcash.flows/v1
+subsystem: market
+source_globs:
+- contracts/src/deploy/v3/50_market.rho
+invariants: {}
+components:
+- name: MarketTerms
+  lean_module: Rholphin.Model.Market
+  arms:
+  - arm: MarketTerms@"put"
+    transition: market.MarketTerms.put
+    lean: Rholphin.Model.Market.marketTerms_put
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/50_market.rho, line: 105}
+    guards:
+    - {id: bounds, expr: 'Bounds.checkTerms(terms, values)', refusal: {reason: terms fields, phase: pre}}
+    - {id: canonical, expr: 'hash = Codec.canonical(rcash:market-terms:v4, values)', refusal: {reason: terms fields, phase: pre}}
+    effects:
+    - {target: 'terms[hash]', formula: '{terms: terms, values: values}'}
+    - {target: rev, formula: rev + 1}
+    - {target: reply, formula: '(true, hash)'}
+    access:
+    - {cell: termsState, mode: consume, actor: arm, phase: commit}
+    - {cell: termsState, mode: post, actor: arm, phase: commit}
+    nested_calls: []
+    refusals: []
+    invariants:
+    - I5
+    status: verified
+  - arm: MarketTerms@"get"
+    transition: market.MarketTerms.get
+    lean: Rholphin.Model.Market.marketTerms_get
+    kind: read
+    source: {file: contracts/src/deploy/v3/50_market.rho, line: 146}
+    guards:
+    - {id: exists, expr: 'terms[hash] != Nil', refusal: {reason: no terms, phase: pre}}
+    effects:
+    - {target: reply, formula: '(true, terms[hash])'}
+    access:
+    - {cell: termsState, mode: peek, actor: arm, phase: pre}
+    nested_calls: []
+    refusals:
+    - {reason: no terms, phase: pre, reposts: false, fail: false}
+    invariants:
+    - I5
+    status: verified
+  states:
+  - Live
+  initial: Live
+- name: MarketDirectory
+  lean_module: Rholphin.Model.Market
+  arms:
+  - arm: MarketDirectory@"bind"
+    transition: market.MarketDirectory.bind
+    lean: Rholphin.Model.Market.marketDirectory_bind
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/50_market.rho, line: 155}
+    guards:
+    - {id: auth, expr: auth = marketAuth, refusal: {reason: bad directory authority, phase: pre}}
+    - {id: unsealed, expr: 'slots[marketId] = Nil or not sealed', refusal: {reason: sealed, phase: pre}}
+    effects:
+    - {target: 'slots[marketId]', formula: slot}
+    - {target: rev, formula: rev + 1}
+    access:
+    - {cell: directoryState, mode: consume, actor: arm, phase: commit}
+    - {cell: directoryState, mode: post, actor: arm, phase: commit}
+    nested_calls: []
+    refusals:
+    - {reason: bad directory authority, phase: pre, reposts: false, fail: false}
+    - {reason: sealed, phase: pre, reposts: false, fail: false}
+    invariants:
+    - I6
+    status: verified
+    from: Unbound
+    to: Bound
+  - arm: MarketDirectory@"seal"
+    transition: market.MarketDirectory.seal
+    lean: Rholphin.Model.Market.marketDirectory_seal
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/50_market.rho, line: 179}
+    guards:
+    - {id: auth, expr: auth = marketAuth, refusal: {reason: bad directory authority, phase: pre}}
+    - {id: exists, expr: 'slots[marketId] != Nil', refusal: {reason: no slot, phase: pre}}
+    effects:
+    - {target: 'slots[marketId].sealed', formula: 'true'}
+    - {target: rev, formula: rev + 1}
+    access:
+    - {cell: directoryState, mode: consume, actor: arm, phase: commit}
+    - {cell: directoryState, mode: post, actor: arm, phase: commit}
+    nested_calls: []
+    refusals:
+    - {reason: bad directory authority, phase: pre, reposts: false, fail: false}
+    - {reason: no slot, phase: pre, reposts: false, fail: false}
+    invariants:
+    - I6
+    status: verified
+    from: Bound
+    to: Sealed
+  - arm: MarketDirectory@"byId"
+    transition: market.MarketDirectory.byId
+    lean: Rholphin.Model.Market.marketDirectory_byId
+    kind: read
+    source: {file: contracts/src/deploy/v3/50_market.rho, line: 196}
+    guards:
+    - {id: exists, expr: 'slots[marketId] != Nil', refusal: {reason: no slot, phase: pre}}
+    effects:
+    - {target: reply, formula: '(true, slot)'}
+    access:
+    - {cell: directoryState, mode: peek, actor: arm, phase: pre}
+    nested_calls: []
+    refusals:
+    - {reason: no slot, phase: pre, reposts: false, fail: false}
+    invariants:
+    - I6
+    status: verified
+  - arm: MarketDirectory@"slot"
+    transition: market.MarketDirectory.slot
+    lean: Rholphin.Model.Market.marketDirectory_slot
+    kind: read
+    source: {file: contracts/src/deploy/v3/50_market.rho, line: 205}
+    guards:
+    - {id: exists, expr: 'slots[marketId] != Nil', refusal: {reason: no slot, phase: pre}}
+    effects:
+    - {target: reply, formula: '(true, slot)'}
+    access:
+    - {cell: directoryState, mode: peek, actor: arm, phase: pre}
+    nested_calls: []
+    refusals:
+    - {reason: no slot, phase: pre, reposts: false, fail: false}
+    invariants:
+    - I6
+    status: verified
+  states:
+  - Unbound
+  - Bound
+  - Sealed
+  initial: Unbound
+- name: MarketIndex
+  lean_module: Rholphin.Model.Market
+  arms:
+  - arm: MarketIndex@"stage"
+    transition: market.MarketIndex.stage
+    lean: Rholphin.Model.Market.marketIndex_stage
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/50_market.rho, line: 294}
+    guards:
+    - {id: auth, expr: auth = marketAuth, refusal: {reason: bad index authority, phase: pre}}
+    - {id: new, expr: 'markets[marketId] = Nil', refusal: {reason: exists, phase: pre}}
+    - {id: slug, expr: 'bySlug[slug] = Nil', refusal: {reason: slug, phase: pre}}
+    - {id: pair, expr: 'byPair[pairKey] absent or prior delisted and version > prior.version', refusal: {reason: pair active, phase: pre}}
+    - {id: version, expr: version > prior.version, refusal: {reason: version, phase: pre}}
+    effects:
+    - {target: 'markets[marketId]', formula: record}
+    - {target: 'byPair[pairKey]', formula: marketId}
+    - {target: 'bySlug[slug]', formula: marketId}
+    - {target: rev, formula: rev + 1}
+    access:
+    - {cell: indexState, mode: consume, actor: arm, phase: commit}
+    - {cell: indexState, mode: post, actor: arm, phase: commit}
+    - {cell: indexState, mode: post, actor: 'helper:stagePairCheck', phase: commit}
+    nested_calls:
+    - {callee: stagePairCheck, protocol: H2a, takes: [], puts: [indexState], post_owner: helper}
+    refusals:
+    - {reason: bad index authority, phase: pre, reposts: false, fail: false}
+    - {reason: exists, phase: pre, reposts: false, fail: false}
+    - {reason: pair active, phase: pre, reposts: false, fail: false}
+    - {reason: slug, phase: pre, reposts: false, fail: false}
+    - {reason: version, phase: pre, reposts: false, fail: false}
+    invariants:
+    - I3
+    - I4
+    status: verified
+    to: Draft
+  - arm: MarketIndex@"activate"
+    transition: market.MarketIndex.activate
+    lean: Rholphin.Model.Market.marketIndex_activate
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/50_market.rho, line: 311}
+    guards:
+    - {id: draft, expr: status = "draft", refusal: {reason: not draft, phase: pre}}
+    - {id: sealed, expr: 'directory.slots[marketId].sealed', refusal: {reason: not sealed, phase: pre}}
+    - {id: terms, expr: 'terms[termsHash] exists', refusal: {reason: no terms, phase: pre}}
+    - {id: lock, expr: lock.funded, refusal: {reason: lock unfunded, phase: pre}}
+    - {id: lock_height, expr: lock.untilHeight >= terms.lockUntilHeight, refusal: {reason: lock height, phase: pre}}
+    - {id: seed, expr: pool.seeded and rb >= seedBase and rq >= seedQuote, refusal: {reason: seed mismatch, phase: pre}}
+    - {id: shares, expr: totalShares >= seedInitialShares, refusal: {reason: shares mismatch, phase: pre}}
+    - {id: terms_hash, expr: pool.termsHash = record.termsHash, refusal: {reason: terms mismatch, phase: pre}}
+    - {id: depth, expr: rq >= depthFloorQuote, refusal: {reason: depth, phase: pre}}
+    effects:
+    - {target: 'markets[marketId].status', formula: active}
+    - {target: rev, formula: rev + 1}
+    access:
+    - {cell: indexState, mode: peek, actor: arm, phase: pre}
+    - {cell: indexState, mode: consume, actor: 'helper:activatePool', phase: commit}
+    - {cell: indexState, mode: post, actor: 'helper:activatePool', phase: commit}
+    nested_calls:
+    - {callee: activatePool, protocol: H2b, takes: [indexState], puts: [indexState], post_owner: helper}
+    refusals:
+    - {reason: depth, phase: pre, reposts: false, fail: false}
+    - {reason: lock height, phase: pre, reposts: false, fail: false}
+    - {reason: lock unfunded, phase: pre, reposts: false, fail: false}
+    - {reason: no attestation, phase: pre, reposts: false, fail: false}
+    - {reason: no lock, phase: pre, reposts: false, fail: false}
+    - {reason: no market, phase: pre, reposts: false, fail: false}
+    - {reason: not draft, phase: pre, reposts: false, fail: false}
+    - {reason: not sealed, phase: pre, reposts: false, fail: false}
+    - {reason: not seeded, phase: pre, reposts: false, fail: false}
+    - {reason: seed mismatch, phase: pre, reposts: false, fail: false}
+    - {reason: shares mismatch, phase: pre, reposts: false, fail: false}
+    - {reason: terms mismatch, phase: pre, reposts: false, fail: false}
+    invariants:
+    - I3
+    - I4
+    - I12
+    status: verified
+    from: Draft
+    to: Active
+  - arm: MarketIndex@"market"
+    transition: market.MarketIndex.market
+    lean: Rholphin.Model.Market.marketIndex_market
+    kind: read
+    source: {file: contracts/src/deploy/v3/50_market.rho, line: 363}
+    guards:
+    - {id: exists, expr: 'markets[marketId] != Nil', refusal: {reason: no market, phase: pre}}
+    effects:
+    - {target: reply, formula: '(true, record)'}
+    access:
+    - {cell: indexState, mode: peek, actor: arm, phase: pre}
+    nested_calls: []
+    refusals:
+    - {reason: no market, phase: pre, reposts: false, fail: false}
+    invariants:
+    - I3
+    status: verified
+  - arm: MarketIndex@"markets"
+    transition: market.MarketIndex.markets
+    lean: Rholphin.Model.Market.marketIndex_markets
+    kind: read
+    source: {file: contracts/src/deploy/v3/50_market.rho, line: 372}
+    guards: []
+    effects:
+    - {target: reply, formula: '(true, markets)'}
+    access:
+    - {cell: indexState, mode: peek, actor: arm, phase: pre}
+    nested_calls: []
+    refusals: []
+    invariants:
+    - I3
+    status: verified
+  - arm: MarketIndex@"marketFor"
+    transition: market.MarketIndex.marketFor
+    lean: Rholphin.Model.Market.marketIndex_marketFor
+    kind: read
+    source: {file: contracts/src/deploy/v3/50_market.rho, line: 376}
+    guards:
+    - {id: exists, expr: 'byPair[market:base/quote] resolves', refusal: {reason: no market, phase: pre}}
+    effects:
+    - {target: reply, formula: '(true, record)'}
+    access:
+    - {cell: indexState, mode: peek, actor: arm, phase: pre}
+    nested_calls: []
+    refusals:
+    - {reason: no market, phase: pre, reposts: false, fail: false}
+    invariants:
+    - I3
+    status: verified
+  - arm: MarketIndex@"setStatus"
+    transition: market.MarketIndex.setStatus
+    lean: Rholphin.Model.Market.marketIndex_setStatus
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/50_market.rho, line: 390}
+    guards:
+    - {id: authorize, expr: 'Governor.authorize(market-index, nonce, setStatus, marketId|status)', refusal: {reason: below threshold,
+        phase: pre}}
+    - {id: exists, expr: 'markets[marketId] != Nil', refusal: {reason: no market, phase: pre}}
+    - {id: transition, expr: 'legal(status, next)', refusal: {reason: transition, phase: pre}}
+    effects:
+    - {target: 'markets[marketId].status', formula: status}
+    - {target: rev, formula: rev + 1}
+    access:
+    - {cell: indexState, mode: consume, actor: arm, phase: commit}
+    - {cell: indexState, mode: post, actor: arm, phase: commit}
+    nested_calls:
+    - {callee: marketTransition, protocol: P0, takes: [], puts: [], post_owner: helper}
+    refusals:
+    - {reason: no market, phase: pre, reposts: false, fail: false}
+    - {reason: transition, phase: pre, reposts: false, fail: false}
+    invariants:
+    - I4
+    - S12
+    status: verified
+  states:
+  - Draft
+  - Active
+  - Paused
+  - Delisted
+  initial: Draft
+- name: MarketFactory
+  lean_module: Rholphin.Model.Market
+  arms:
+  - arm: MarketFactory@"createMarket"
+    transition: market.MarketFactory.createMarket
+    lean: Rholphin.Model.Market.marketFactory_createMarket
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/50_market.rho, line: 564}
+    guards:
+    - {id: terms, expr: 'MarketTerms.put(terms, values) = (true, termsHash)', refusal: {reason: terms fields, phase: pre}}
+    - {id: sponsor_sig, expr: 'Verifier.sigOk(H(rcash:market-create:v1|marketId|termsHash|sponsor), sig)', refusal: {reason: bad sponsor
+          signature, phase: pre}}
+    - {id: sponsor, expr: terms.sponsorPubKey = sponsorHex, refusal: {reason: sponsor mismatch, phase: pre}}
+    - {id: owner, expr: 'marketOwnerCheck(terms, sponsorHex)', refusal: {reason: lock beneficiary, phase: pre}}
+    - {id: base_feed, expr: base feed policy matches and active, refusal: {reason: base feed policy, phase: pre}}
+    - {id: quote_feed, expr: quote feed policy matches and active, refusal: {reason: quote feed policy, phase: pre}}
+    - {id: pool, expr: PoolTemplate.create ok, refusal: {reason: no attestation, phase: pre}}
+    - {id: bind, expr: MarketDirectory.bind ok, refusal: {reason: sealed, phase: pre}}
+    - {id: seal, expr: MarketDirectory.seal ok, refusal: {reason: no slot, phase: pre}}
+    - {id: stage, expr: MarketIndex.stage ok, refusal: {reason: exists, phase: pre}}
+    effects:
+    - {target: 'terms[termsHash]', formula: '{terms, values}'}
+    - {target: 'directory.slots[marketId]', formula: '{poolUri, lockUri, termsHash, sealed}'}
+    - {target: 'markets[marketId]', formula: '{marketId, slug, pairKey, base, quote, version, termsHash, status: draft}'}
+    - {target: reply, formula: '(true, marketId, poolUri, lockUri, termsHash)'}
+    access: []
+    nested_calls:
+    - {callee: marketVerifier, protocol: P0, internal: true, takes: [], puts: [], post_owner: helper}
+    - {callee: marketOwnerCheck, protocol: P0, internal: true, takes: [], puts: [], post_owner: helper}
+    - {callee: marketOracle, protocol: P0, internal: true, takes: [], puts: [], post_owner: helper}
+    - {callee: MarketTerms@"put", protocol: P4, internal: true}
+    - {callee: PoolTemplate@"create", protocol: P4, internal: true}
+    - {callee: MarketDirectory@"bind", protocol: P4, internal: true}
+    - {callee: MarketDirectory@"seal", protocol: P4, internal: true}
+    - {callee: MarketIndex@"stage", protocol: P4, internal: true}
+    refusals:
+    - {reason: bad sponsor signature, phase: pre, reposts: false, fail: false}
+    - {reason: base feed policy, phase: pre, reposts: false, fail: false}
+    - {reason: feed inactive, phase: pre, reposts: false, fail: false}
+    - {reason: lock beneficiary, phase: pre, reposts: false, fail: false}
+    - {reason: lock too short, phase: pre, reposts: false, fail: false}
+    - {reason: quote feed policy, phase: pre, reposts: false, fail: false}
+    - {reason: sponsor mismatch, phase: pre, reposts: false, fail: false}
+    - {reason: sponsor owner, phase: pre, reposts: false, fail: false}
+    invariants:
+    - I3
+    - I5
+    - I6
+    status: verified
+  states:
+  - Live
+  initial: Live
+- name: ListingViews
+  lean_module: Rholphin.Model.Market
+  arms:
+  - arm: ListingViews@"marketFor"
+    transition: market.ListingViews.marketFor
+    lean: Rholphin.Model.Market.listingViews_marketFor
+    kind: read
+    source: {file: contracts/src/deploy/v3/50_market.rho, line: 449}
+    guards: []
+    effects:
+    - {target: reply, formula: MarketIndex.marketFor}
+    access: []
+    nested_calls: []
+    refusals: []
+    invariants: []
+    status: verified
+  - arm: ListingViews@"market"
+    transition: market.ListingViews.market
+    lean: Rholphin.Model.Market.listingViews_market
+    kind: read
+    source: {file: contracts/src/deploy/v3/50_market.rho, line: 466}
+    guards: []
+    effects:
+    - {target: reply, formula: MarketIndex.market}
+    access: []
+    nested_calls: []
+    refusals: []
+    invariants: []
+    status: verified
+  - arm: ListingViews@"isActive"
+    transition: market.ListingViews.isActive
+    lean: Rholphin.Model.Market.listingViews_isActive
+    kind: read
+    source: {file: contracts/src/deploy/v3/50_market.rho, line: 481}
+    guards: []
+    effects:
+    - {target: reply, formula: '(true, record.status = active)'}
+    access: []
+    nested_calls: []
+    refusals:
+    - {reason: no market, phase: pre, reposts: false, fail: false}
+    invariants:
+    - I4
+    status: verified
+  - arm: ListingViews@"terms"
+    transition: market.ListingViews.terms
+    lean: Rholphin.Model.Market.listingViews_terms
+    kind: read
+    source: {file: contracts/src/deploy/v3/50_market.rho, line: 504}
+    guards: []
+    effects:
+    - {target: reply, formula: MarketTerms.get}
+    access: []
+    nested_calls: []
+    refusals: []
+    invariants: []
+    status: verified
+  - arm: ListingViews@"currency"
+    transition: market.ListingViews.currency
+    lean: Rholphin.Model.Market.listingViews_currency
+    kind: read
+    source: {file: contracts/src/deploy/v3/50_market.rho, line: 519}
+    guards: []
+    effects:
+    - {target: reply, formula: CurrencyRegistry.currency}
+    access: []
+    nested_calls: []
+    refusals: []
+    invariants: []
+    status: verified
+  - arm: ListingViews@"currencies"
+    transition: market.ListingViews.currencies
+    lean: Rholphin.Model.Market.listingViews_currencies
+    kind: read
+    source: {file: contracts/src/deploy/v3/50_market.rho, line: 534}
+    guards: []
+    effects:
+    - {target: reply, formula: CurrencyRegistry.currencies}
+    access: []
+    nested_calls: []
+    refusals: []
+    invariants: []
+    status: verified
+  - arm: ListingViews@"markets"
+    transition: market.ListingViews.markets
+    lean: Rholphin.Model.Market.listingViews_markets
+    kind: read
+    source: {file: contracts/src/deploy/v3/50_market.rho, line: 549}
+    guards: []
+    effects:
+    - {target: reply, formula: MarketIndex.markets}
+    access: []
+    nested_calls: []
+    refusals: []
+    invariants: []
+    status: verified
+  states:
+  - Live
+  initial: Live
+- name: TradabilityGate
+  lean_module: Rholphin.Model.Market
+  arms:
+  - arm: TradabilityGate@"admit"
+    transition: market.TradabilityGate.admit
+    lean: Rholphin.Model.Market.tradabilityGate_admit
+    kind: read
+    source: {file: contracts/src/deploy/v3/50_market.rho, line: 433}
+    guards:
+    - {id: active, expr: status = "active", refusal: {reason: not active, phase: pre}}
+    - {id: fresh, expr: fresh, refusal: {reason: stale, phase: pre}}
+    - {id: min_ticket, expr: inputValue >= minTicketQuote, refusal: {reason: min ticket, phase: pre}}
+    - {id: max_trade, expr: inputValue * 10000 <= poolValue * maxTradeBps, refusal: {reason: max trade, phase: pre}}
+    effects:
+    - {target: reply, formula: '(true, Nil)'}
+    access: []
+    nested_calls: []
+    refusals:
+    - {reason: max trade, phase: pre, reposts: false, fail: false}
+    - {reason: min ticket, phase: pre, reposts: false, fail: false}
+    - {reason: not active, phase: pre, reposts: false, fail: false}
+    - {reason: stale, phase: pre, reposts: false, fail: false}
+    invariants:
+    - I12
+    status: verified
+  states:
+  - Live
+  initial: Live
