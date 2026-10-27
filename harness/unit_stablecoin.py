@@ -216,6 +216,23 @@ def main() -> int:
     check("savings shares", savings_result[0], 100000000)
     check("savings withdrawn", savings_result[1], 100000000)
 
+    # PSM: fund the REV buffer, mint a stablecoin, redeem it at the oracle rate.
+    psm_uri = system[6]
+    psm_text = (ROOT / "harness/scenarios/stablecoin_psm.rho").read_text()
+    for key, value in {
+        "__ROOT_URI__": root,
+        "__VAULT_URI__": vault_uri,
+        "__PSM_URI__": psm_uri,
+        "__PUBKEY__": keys["key14"]["public"],
+        "__FUND__": "20000000",
+        "__COLLATERAL__": "10000000",
+        "__MINT__": "100000000",
+        "__PSM_REV__": "10000000",
+    }.items():
+        psm_text = psm_text.replace(key, value)
+    psm_result = one(minify(psm_text), keys["key14"]["secret"])
+    check("psm redemption", psm_result[0] > 0, True)
+
     sender_pub = keys["key12"]["public"]
     sender_secret = keys["key12"]["secret"]
     ops_text = (ROOT / "harness/scenarios/stablecoin_ops.rho").read_text()

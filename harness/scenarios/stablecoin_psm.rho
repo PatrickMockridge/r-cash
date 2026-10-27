@@ -1,0 +1,105 @@
+// Fund the PSM with REV, mint a stablecoin, redeem it for REV at the oracle rate.
+// Returns [netRev].
+// Placeholders: __ROOT_URI__, __VAULT_URI__, __PSM_URI__, __PUBKEY__,
+//               __FUND__, __COLLATERAL__, __MINT__, __PSM_REV__.
+new
+  rl(`rho:registry:lookup`), rootCh, afCh, ac, vc, psmCh,
+  oCh, zCh, depCh, mintCh, acctCh, wdAcctCh, psmFundCh, sellCh, revFacetCh,
+  ertpCh, revIssuerCh, purseCh, fundCh, wdCh,
+  deployId(`rho:rchain:deployId`),
+  deployerId(`rho:rchain:deployerId`)
+in {
+  rl!(`__ROOT_URI__`, *rootCh) |
+  rl!(`__VAULT_URI__`, *vc) |
+  rl!(`__PSM_URI__`, *psmCh) |
+  rl!(`rho:rchain:ertp`, *ertpCh) |
+  for (Root <- rootCh; VaultBook <- vc; PSM <- psmCh; @(_, ERTP) <- ertpCh) {
+    Root!("resolve", "component:account-factory", 1, *afCh) |
+    for (@(true, afUri, _) <- afCh) {
+      rl!(afUri, *ac) |
+      for (AccountFactory <- ac) {
+        AccountFactory!("getOrCreate", "__PUBKEY__".hexToBytes(), *oCh) |
+        for (@(true, account, ownerId) <- oCh) {
+          @account!("vaultOpen", *deployerId, `__VAULT_URI__`, *zCh) |
+          for (@z <- zCh) {
+            match z {
+              (true, auth) => {
+                @account!("depositFacet", "REV", *revFacetCh) |
+                for (@rf <- revFacetCh) {
+                  match rf {
+                    (true, revFacet) => {
+                      @ERTP!("getRevIssuer", *revIssuerCh) |
+                      for (@(revBrand, revIssuer) <- revIssuerCh) {
+                        @revIssuer!("makeEmptyPurse", *purseCh) |
+                        for (@(true, purse) <- purseCh) {
+                          @purse!("revFund", *deployerId, __FUND__, *fundCh) |
+                          for (@_ <- fundCh) {
+                            @purse!("withdraw", (revBrand, __COLLATERAL__), *wdCh) |
+                            for (@(true, payment) <- wdCh) {
+                              VaultBook!("deposit", ownerId, auth, payment, *depCh) |
+                              for (@d <- depCh) {
+                                match d {
+                                  (true, _) => {
+                                    @purse!("withdraw", (revBrand, __PSM_REV__), *psmFundCh) |
+                                    for (@(true, psmRev) <- psmFundCh) {
+                                      PSM!("fundRev", psmRev, *sellCh) |
+                                      for (@fr <- sellCh) {
+                                        match fr {
+                                          (true, _) => {
+                                            VaultBook!("mint", ownerId, auth, __MINT__, *mintCh) |
+                                            for (@m <- mintCh) {
+                                              match m {
+                                                (true, stablePayment, debt) => {
+                                                  @account!("deposit", *deployerId, "V4T", stablePayment, *acctCh) |
+                                                  for (@ad <- acctCh) {
+                                                    match ad {
+                                                      (true, _) => {
+                                                        @account!("withdraw", *deployerId, "V4T", __MINT__, *wdAcctCh) |
+                                                        for (@aw <- wdAcctCh) {
+                                                          match aw {
+                                                            (true, stableOut) => {
+                                                              PSM!("sellStable", stableOut, revFacet, 0, *sellCh) |
+                                                              for (@s <- sellCh) {
+                                                                match s {
+                                                                  (true, netRev) => deployId!([netRev])
+                                                                  _ => deployId!(s)
+                                                                }
+                                                              }
+                                                            }
+                                                            _ => deployId!(aw)
+                                                          }
+                                                        }
+                                                      }
+                                                      _ => deployId!(ad)
+                                                    }
+                                                  }
+                                                }
+                                                _ => deployId!(m)
+                                              }
+                                            }
+                                          }
+                                          _ => deployId!(fr)
+                                        }
+                                      }
+                                    }
+                                  }
+                                  _ => deployId!(d)
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                    _ => deployId!(rf)
+                  }
+                }
+              }
+              _ => deployId!(z)
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -325,7 +325,7 @@ in {
   } |
 
   contract Stablecoin(@"mint", @amount, @auth, ret2) = {
-    if (auth != *mintAuth) { ret2!((false, "bad mint authority")) }
+    if (auth != *mintAuth && auth != *psmMintAuth) { ret2!((false, "bad mint authority")) }
     else {
       if (amount <= 0) { ret2!((false, "amount")) }
       else {
@@ -359,7 +359,7 @@ in {
   } |
 
   contract Stablecoin(@"burn", payment, @maxAmount, @auth, ret2) = {
-    if (auth != *burnAuth) { ret2!((false, "bad burn authority")) }
+    if (auth != *burnAuth && auth != *psmBurnAuth) { ret2!((false, "bad burn authority")) }
     else {
       new amtCh in {
         @issuer!("getAmountOf", *payment, *amtCh) |
