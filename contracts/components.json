@@ -26,8 +26,8 @@
         "contracts": 2
       },
       "contracts/build/deploy/v3/40_transfer.rho": {
-        "bytes": 8192,
-        "depth": 48,
+        "bytes": 12288,
+        "depth": 64,
         "contracts": 6
       },
       "contracts/build/deploy/v3/50_market.rho": {
@@ -36,9 +36,9 @@
         "contracts": 26
       },
       "contracts/build/deploy/v3/51_pool.rho": {
-        "bytes": 16384,
+        "bytes": 24576,
         "depth": 96,
-        "contracts": 20
+        "contracts": 26
       }
     }
   },

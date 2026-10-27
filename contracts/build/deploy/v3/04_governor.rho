@@ -7,7 +7,8 @@ new
   rs(`rho:registry:insertArbitrary`),
   deployerId(`rho:rchain:deployerId`),
   deployId(`rho:rchain:deployId`),
-  rootCh, Root, agCh, AdminGuard,
+  bd(`rho:block:data`),
+  rootCh, Root, agCh, AdminGuard, nowCh,
   uGovernor, ack
 in {
 
@@ -62,6 +63,82 @@ in {
                       }
                     }
                     _ => { ret!(v) }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  } |
+
+  contract Governor(@"schedule", @domain, @nonce, @action, @argsHash,
+                            @args, @sigs, ret) = {
+    for (@s <<- governorState) {
+      new lastCh, nowCh in {
+        governorLast!(s.get("nonces"), domain, *lastCh) |
+        bd!(*nowCh) |
+        for (@last <- lastCh; @height, @sender, @ts <- nowCh) {
+          if (nonce <= last) { ret!((false, "replay")) }
+          else {
+            match s.get("pending").get(domain ++ "|" ++ nonce.toString()) {
+              Nil => {
+                new vCh in {
+                  governorAdminGuard!(*agCh) |
+                  for (AG <- agCh) {
+                    AG!("verify", domain, nonce, action, argsHash, sigs,
+                        s.get("admins"), s.get("threshold"), *vCh) |
+                    for (@v <- vCh) {
+                      match v {
+                        (true, Nil) => {
+                          for (@s2 <- governorState) {
+                            if (s2.get("nonces").get(domain) >= nonce) {
+                              governorState!(s2) | ret!((false, "replay"))
+                            } else {
+                              governorState!(s2.set("pending",
+                                s2.get("pending").set(
+                                  domain ++ "|" ++ nonce.toString(),
+                                  {"action": action, "argsHash": argsHash,
+                                   "args": args, "readyAt": height + s2.get("timelock")}))) |
+                              ret!((true, height + s2.get("timelock")))
+                            }
+                          }
+                        }
+                        _ => { ret!(v) }
+                      }
+                    }
+                  }
+                }
+              }
+              _ => { ret!((false, "pending")) }
+            }
+          }
+        }
+      }
+    }
+  } |
+
+  contract Governor(@"execute", @domain, @nonce, ret) = {
+    for (@s <<- governorState) {
+      new nowCh in {
+        bd!(*nowCh) |
+        for (@height, @sender, @ts <- nowCh) {
+          match s.get("pending").get(domain ++ "|" ++ nonce.toString()) {
+            Nil => { ret!((false, "unknown")) }
+            entry => {
+              if (height < entry.get("readyAt")) { ret!((false, "early")) }
+              else {
+                for (@s2 <- governorState) {
+                  if (s2.get("nonces").get(domain) >= nonce) {
+                    governorState!(s2) | ret!((false, "replay"))
+                  } else {
+                    governorState!(s2.set("nonces",
+                      s2.get("nonces").set(domain, nonce)).set("pending",
+                      s2.get("pending").set(
+                        domain ++ "|" ++ nonce.toString(), Nil))) |
+                    ret!((true, entry.get("action"), entry.get("argsHash"),
+                          entry.get("args")))
                   }
                 }
               }
@@ -136,6 +213,20 @@ in {
                                     }
                                   }
                                 }
+                                "setTimelock" => {
+                                  match args.nth(0) {
+                                    newTimelock => {
+                                      if (newTimelock < 1 || newTimelock > 1296000) {
+                                        governorState!(s2) | ret!((false, "timelock"))
+                                      } else {
+                                        governorState!(s2.set("timelock", newTimelock)
+                                          .set("nonces", s2.get("nonces")
+                                            .set("governor", nonce))) |
+                                        ret!((true, Nil))
+                                      }
+                                    }
+                                  }
+                                }
                                 _ => {
                                   governorState!(s2) | ret!((false, "unknown admin action"))
                                 }
@@ -159,7 +250,9 @@ in {
   governorState!({
     "admins": __ADMIN_KEYS__,
     "threshold": 2,
-    "nonces": {}
+    "nonces": {},
+    "timelock": 100,
+    "pending": {}
   }) |
 
   rl!(`__ROOT_URI__`, *rootCh) |

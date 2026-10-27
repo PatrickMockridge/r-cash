@@ -51,7 +51,7 @@ in {
         if (a < 0 || a > 10000) { ret!((false, "base spread")) }
         else { if (b < 0 || b > 10000) { ret!((false, "skew")) }
         else { if (c < 1 || c > 10000) { ret!((false, "max trade")) }
-        else { if (d < 0) { ret!((false, "min liquidity")) }
+        else { if (d < 1) { ret!((false, "min liquidity")) }
         else { if (e < 0 || e > 1000) { ret!((false, "tolerance")) }
         else { if (f < 0) { ret!((false, "depth floor")) }
         else { if (g <= 0) { ret!((false, "min ticket")) }
@@ -73,6 +73,14 @@ in {
     }
   } |
 
+  contract Bounds(@"checkTransfer", @params, @amount, @expiry, @now, ret) = {
+    if (amount < params.get("minAmount")) { ret!((false, "min amount")) }
+    else { if (expiry <= now) { ret!((false, "expiry")) }
+    else { if (expiry > now + params.get("maxExpiryBlocks")) {
+             ret!((false, "max expiry")) }
+    else { ret!((true, Nil)) } } }
+  } |
+
   contract boundsTermFields(@terms, @values, @keys, @i, ret) = {
     if (i >= keys.length()) { ret!((true, Nil)) }
     else {
@@ -92,14 +100,14 @@ in {
 
   contract boundsTerms(@terms, @values, ret) = {
     new keysCh in {
-      keysCh!(["marketId", "slug", "base", "quote", "version",
+      keysCh!(["marketId", "base", "quote", "version",
                "sponsorPubKey", "sponsorOwnerId",
                "baseFeedPolicyHash", "quoteFeedPolicyHash", "baseSpreadBps",
                "skewSpreadBps", "maxTradeBps", "minLiquidity",
                "firstDepositToleranceBps", "depthFloorQuote", "minTicketQuote",
                "seedBase", "seedQuote", "seedInitialShares",
                "lockBeneficiaryPubKey", "lockMinBlocks", "lockUntilHeight",
-               "bookDefaultExpiryBlocks", "bookMaxExpiryBlocks", "maxPairAgeBlocks"]) |
+               "maxPairAgeBlocks"]) |
       for (@keys <- keysCh) {
         if (values.length() != keys.length()) { ret!((false, "terms fields")) }
         else {
