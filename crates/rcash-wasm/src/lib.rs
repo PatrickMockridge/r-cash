@@ -445,8 +445,10 @@ impl Rcash {
         direction: &str,
         amount: &str,
     ) -> Result<String, JsValue> {
+        // A v4 quote is a signed read: it needs a block context for oracle freshness.
         let q = self
-            .reader()
+            .client()
+            .map_err(js_err)?
             .v4_quote(pool, direction, parse_amount(amount)?)
             .await
             .map_err(js_err)?;

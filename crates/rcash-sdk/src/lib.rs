@@ -334,7 +334,7 @@ impl Client {
 
     /// The current finalized tip height, for absolute transfer expiries.
     pub async fn height(&self) -> Result<i64, ChainError> {
-        self.node.latest_block_number().await
+        Ok(self.node.last_finalized_block().await?.block_number)
     }
 
     /// Run a public read and decode the protocol reply it returns.
@@ -360,6 +360,14 @@ impl Client {
     /// Run a signed read and decode the raw value it sent to `deployId`.
     pub(crate) async fn signed_value(&self, term: &str) -> Result<RhoValue, ChainError> {
         let outcome = self.deploy_term(term).await?;
+        // A processed deploy is not an accepted effect. A merge can reject it, so a
+        // value-moving call must not report success before its block is finalized.
+        if !outcome.finalized {
+            return Err(ChainError::StillUnknown {
+                deploy_id: outcome.deploy_id.clone(),
+                last: "processed but not finalized".into(),
+            });
+        }
         match &outcome.status {
             DeployStatus::ProcessedWithSuccess { deploy_result, .. } => {
                 let first = deploy_result.first().ok_or_else(|| {
