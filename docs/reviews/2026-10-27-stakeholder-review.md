@@ -19,6 +19,24 @@ The economic model is DAI-shaped but incomplete: the stability fee has no `vow`,
 savings rate (`pot`/DSR), and there is no PSM/redemption facility. AMMs exist, so the
 secondary peg has a venue; the protocol-level floor and the surplus/bad-debt loop do not.
 
+### Remediation progress (branch `main`)
+
+The first contract and client batch is committed:
+
+- **Fixed in contracts**: STB-01 repay totals; MKT-01 trade gate (swap/add refuse unless
+  the market status is `active`); MKT-02 reseed/burn/shares; MKT-03 cancel destination;
+  MKT-04 fund returns the LP payment and the SDK unwinds a refused funding; MKT-05 status
+  transitions; PAY-05 claim expiry; PAY-08 measured payment.
+- **Fixed in clients**: PAY-02 finality and finalized height; MKT-09 browser quote;
+  MKT-04 lock preflight and add-and-lock unwind.
+- **Design written**: `docs/SAVINGS-AND-PSM.md` (surplus buffer, savings pool, PSM, interest
+  split, identities and tests).
+- **Still open**: the economic contracts themselves, PAY-01/03/04/06/07/09, STB-03/04/05/06,
+  MKT-07/08/10/11, GOV-01 and the documentation pass. The devnet matrix has not run.
+
+Commits: `dc60813` (review), `dc60813`/`c176214`/`9db4ff0` (fixes). Findings marked
+`Confirmed-static` remain static until the matrix reproduces them.
+
 ## 2. Method and evidence standard
 
 - Three read-only explorations covered the payment, stablecoin/collateral and market/AMM
