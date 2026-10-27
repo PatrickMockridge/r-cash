@@ -130,10 +130,10 @@
       "brace_depth": 40,
       "contracts": 68,
       "grammar_depth": 65,
-      "minified_bytes": 45171,
+      "minified_bytes": 45263,
       "operator_run": 5,
-      "sha256": "c705b42a65e5158f79fea9fdbac59d997ef605749545f7fc462c1c37c80508af",
-      "source_bytes": 81968
+      "sha256": "ea5454f15fdf282d0b520026e290e43a72f07a7eca5ccab9e9b5dd881f50c718",
+      "source_bytes": 82174
     },
     "contracts/build/deploy/v3/32_currency_registry.rho": {
       "brace_depth": 32,

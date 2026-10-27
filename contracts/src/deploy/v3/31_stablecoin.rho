@@ -1686,8 +1686,13 @@ in {
               bufferCancelled!(s.get("surplus"), newSin, *cCh) |
               for (@cancelled <- cCh) {
                   if (cancelled <= 0) {
-                    bufferState!(s.set("sin", newSin).set("rev", s.get("rev") + 1)) |
-                    ret2!((true, 0, newSin))
+                    for (@s2 <- bufferState) {
+                      if (s2.get("rev") != s.get("rev")) { ret2!(1 / 0) }
+                      else {
+                        bufferState!(s2.set("sin", newSin).set("rev", s2.get("rev") + 1)) |
+                        ret2!((true, 0, newSin))
+                      }
+                    }
                   } else {
                     new wCh, bCh in {
                       @bufferPurse!("withdraw", (brand, cancelled), *wCh) |
