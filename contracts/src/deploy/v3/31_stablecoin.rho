@@ -1679,7 +1679,7 @@ in {
     else {
       if (badDebt < 0) { ret2!((false, "amount")) }
       else {
-        for (@s <- bufferState) {
+        for (@s <<- bufferState) {
           match (s.get("sin") + badDebt) {
             newSin => {
               new cCh in {
@@ -1698,9 +1698,14 @@ in {
                             for (@b <- bCh) {
                               match b {
                                 (true, _, _) => {
-                                  bufferState!(s.set("surplus", s.get("surplus") - cancelled)
-                                    .set("sin", newSin - cancelled).set("rev", s.get("rev") + 1)) |
-                                  ret2!((true, cancelled, newSin - cancelled))
+                                  for (@s2 <- bufferState) {
+                                    if (s2.get("rev") != s.get("rev")) { ret2!(1 / 0) }
+                                    else {
+                                      bufferState!(s2.set("surplus", s2.get("surplus") - cancelled)
+                                        .set("sin", newSin - cancelled).set("rev", s2.get("rev") + 1)) |
+                                      ret2!((true, cancelled, newSin - cancelled))
+                                    }
+                                  }
                                 }
                                 _ => { ret2!(1 / 0) }
                               }

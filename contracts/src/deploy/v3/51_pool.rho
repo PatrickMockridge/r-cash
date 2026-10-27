@@ -4,7 +4,7 @@
 // Placeholders: __ROOT_URI__, __ASSET_RESOLVER_URI__.
 new
   PoolTemplate, assemblePool, poolAmmMath, poolRate, poolNow, poolGovernor,
-  poolStatus, poolActive, poolGate, poolTradeAdmit,
+  poolStatus, poolActive, poolOpen, poolGate, poolTradeAdmit,
   rl(`rho:registry:lookup`),
   revAddress(`rho:rev:address`),
   deployerIdOps(`rho:rchain:deployerId:ops`),
@@ -33,6 +33,26 @@ in {
       for (@x <- r) {
         match x {
           (true, record) => { ret!(record.get("status") == "active") }
+          _ => { ret!(false) }
+        }
+      }
+    }
+  } |
+
+  // A pool may be seeded while its market is a draft; the draft becomes active
+  // only after the seed and the lock. Paused and delisted markets refuse adds.
+  contract poolOpen(@marketId, ret) = {
+    new r in {
+      poolStatus!(marketId, *r) |
+      for (@x <- r) {
+        match x {
+          (true, record) => {
+            match record.get("status") {
+              "draft" => { ret!(true) }
+              "active" => { ret!(true) }
+              _ => { ret!(false) }
+            }
+          }
           _ => { ret!(false) }
         }
       }
@@ -395,7 +415,7 @@ in {
         new rateCh, activeCh in {
           poolRate!(terms.get("base"), terms.get("quote"),
                    terms.get("maxPairAgeBlocks"), *rateCh) |
-          poolActive!(terms.get("marketId"), *activeCh) |
+          poolOpen!(terms.get("marketId"), *activeCh) |
           for (@rr <- rateCh; @active <- activeCh) {
             match rr {
               (rate, fresh) => {

@@ -102,6 +102,7 @@ def main() -> int:
     check("empty buffer redemption refused", refused[0], False)
     check("empty buffer reason", refused[1], "buffer")
 
+    faucet_top_up(actor["address"])
     fund2 = render("stablecoin_psm_fund", {"__ROOT_URI__": root, "__PSM_URI__": psm,
                                            "__PSM_REV__": "10000000"})
     one(fund2, actor["secret"])
@@ -128,6 +129,7 @@ def main() -> int:
     # floor working for stablecoin the PSM never minted.
     supply_before_sell = supply(stablecoin, deployer)
     debt_before_sell = after_buy["stableDebt"]
+    faucet_top_up(actor["address"])
     sell = render("stablecoin_psm_sell_only", {
         "__ROOT_URI__": root, "__VAULT_URI__": vault, "__PSM_URI__": psm,
         "__PUBKEY__": actor["public"], "__FUND__": "15000000",

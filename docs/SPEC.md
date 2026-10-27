@@ -539,8 +539,9 @@ to the input reserve; `minTicketQuote` applies to the input value. The first dep
 minted (documented loss).
 
 `quote` and `swap` require an active market and a fresh oracle; `swap` passes
-`TradabilityGate.admit` before any deposit. `addLiquidity` requires an active market and a
-fresh oracle and enforces the seed bounds. Every pre-deposit refusal returns the caller's
+`TradabilityGate.admit` before any deposit. `addLiquidity` is allowed on a draft market so the seed can precede activation; it
+requires a fresh oracle, enforces the seed bounds, and is refused on paused or delisted
+markets. Every pre-deposit refusal returns the caller's
 input payment(s); after a deposit the arm fails the deploy instead. `removeLiquidity` and `LiquidityLock.release` are the LP exit and
 MUST remain available when the market is paused or delisted. Removing all liquidity sets
 `seeded = false`; a later deposit reseeds.

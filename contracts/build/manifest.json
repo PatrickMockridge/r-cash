@@ -130,10 +130,10 @@
       "brace_depth": 40,
       "contracts": 68,
       "grammar_depth": 65,
-      "minified_bytes": 45077,
+      "minified_bytes": 45171,
       "operator_run": 5,
-      "sha256": "926f404af5de7fc7bf20d4a0ce638ae5eda18711a24f106b59552dcb04af4e93",
-      "source_bytes": 81686
+      "sha256": "c705b42a65e5158f79fea9fdbac59d997ef605749545f7fc462c1c37c80508af",
+      "source_bytes": 81968
     },
     "contracts/build/deploy/v3/32_currency_registry.rho": {
       "brace_depth": 32,
@@ -164,12 +164,12 @@
     },
     "contracts/build/deploy/v3/51_pool.rho": {
       "brace_depth": 39,
-      "contracts": 23,
+      "contracts": 24,
       "grammar_depth": 67,
-      "minified_bytes": 16247,
+      "minified_bytes": 16516,
       "operator_run": 3,
-      "sha256": "9ef589df9cdfc9621c99d233fa5f69388cc6c7f26f2f178d8f38c47b3d87ba54",
-      "source_bytes": 29141
+      "sha256": "621daa2cbeab834cf4d61814a1e4012d8db52ebccddb484ebffe45d660358a45",
+      "source_bytes": 29713
     }
   },
   "schema": "rcash:contract-metrics:v1"

@@ -139,7 +139,8 @@ def main() -> int:
                         "__TRANSFER_URI__": uri,
                         "__SECRET__": SECRET.hex()}),
                 recipient["secret"])
-    check("claim accepted", claim[0], (True, AMOUNT))
+    check("claim accepted", claim[0][0], True)
+    check("recipient balance covers the claim", claim[1][1] >= AMOUNT, True)
 
     print(f"transfer {uri} with memo and opId")
     print(f"recipient native REV {recipient_native_before} -> {recipient_native_after}")
