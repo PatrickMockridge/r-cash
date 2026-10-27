@@ -11,9 +11,9 @@
     "contracts_fail": 12,
     "overrides": {
       "contracts/build/deploy/v3/31_stablecoin.rho": {
-        "bytes": 24576,
+        "bytes": 40960,
         "depth": 96,
-        "contracts": 35
+        "contracts": 64
       },
       "contracts/build/deploy/v3/09_identity.rho": {
         "bytes": 16384,

@@ -69,8 +69,8 @@ in {
   } |
 
   contract CurrencyRegistry(@"register", @code, @scUri, @custodyUri, @paramsUri,
-                            @vaultUri, @liqUri, @paramsHash, @sponsorHex, @sig,
-                            ret) = {
+                            @vaultUri, @liqUri, @savingsUri, @psmUri,
+                            @paramsHash, @sponsorHex, @sig, ret) = {
     for (@s <<- currencyState) {
       match s.get("currencies").get(code) {
         Nil => {
@@ -83,7 +83,9 @@ in {
                   rl!(verUri, *vc) |
                   for (Verifier <- vc) {
                     Verifier!("hash",
-                      ("rcash:currency-register:v1|" ++ code ++ "|" ++ scUri
+                      ("rcash:currency-register:v2|" ++ code ++ "|" ++ scUri
+                       ++ "|" ++ custodyUri ++ "|" ++ paramsUri ++ "|" ++ vaultUri
+                       ++ "|" ++ liqUri ++ "|" ++ savingsUri ++ "|" ++ psmUri
                        ++ "|" ++ paramsHash ++ "|" ++ sponsorHex).toUtf8Bytes(),
                       *dCh) |
                     for (@digest <- dCh) {
@@ -114,6 +116,8 @@ in {
                                               "paramsUri": paramsUri,
                                               "vaultUri": vaultUri,
                                               "liquidationUri": liqUri,
+                                              "savingsUri": savingsUri,
+                                              "psmUri": psmUri,
                                               "paramsHash": paramsHash,
                                               "sponsor": sponsorHex,
                                               "status": "active"
@@ -184,31 +188,37 @@ in {
   } |
 
   contract CurrencyRegistry(@"setPaused", @code, @paused, @nonce, @sigs, ret) = {
-    new gCh, vCh, stCh in {
-      registryGovernor!(*gCh) |
-      for (Governor <- gCh) {
-        Governor!("authorize", "currency-registry", nonce, "setPaused",
-                  code ++ "|" ++ paused.toString(), sigs, *vCh) |
-        for (@v <- vCh) {
-          match v {
-            (true, Nil) => {
-              registryStatus!(paused, *stCh) |
-              for (@status <- stCh) {
-                for (@s <- currencyState) {
-                  match s.get("currencies").get(code) {
-                    Nil => { currencyState!(s) | ret!((false, "no currency")) }
-                    entry => {
-                      currencyState!(
-                        s.set("currencies",
-                          s.get("currencies").set(code, entry.set("status", status)))
-                         .set("rev", s.get("rev") + 1)) |
-                      ret!((true, status))
+    for (@s <<- currencyState) {
+      match s.get("currencies").get(code) {
+        Nil => { currencyState!(s) | ret!((false, "no currency")) }
+        entry => {
+          new vCh, pCh, stCh in {
+            rl!(entry.get("vaultUri"), *vCh) |
+            for (VaultBook <- vCh) {
+              VaultBook!("pause", paused, nonce, sigs, *pCh) |
+              for (@v <- pCh) {
+                match v {
+                  (true, Nil) => {
+                    registryStatus!(paused, *stCh) |
+                    for (@status <- stCh) {
+                      for (@s2 <- currencyState) {
+                        match s2.get("currencies").get(code) {
+                          Nil => { currencyState!(s2) | ret!((false, "no currency")) }
+                          entry2 => {
+                            currencyState!(
+                              s2.set("currencies",
+                                s2.get("currencies").set(code, entry2.set("status", status)))
+                                .set("rev", s2.get("rev") + 1)) |
+                            ret!((true, status))
+                          }
+                        }
+                      }
                     }
                   }
+                  _ => { ret!(v) }
                 }
               }
             }
-            _ => { ret!(v) }
           }
         }
       }

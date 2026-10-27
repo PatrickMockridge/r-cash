@@ -20,12 +20,12 @@
     },
     "contracts/build/deploy/v3/02_bounds.rho": {
       "brace_depth": 14,
-      "contracts": 7,
+      "contracts": 8,
       "grammar_depth": 19,
-      "minified_bytes": 4491,
+      "minified_bytes": 4757,
       "operator_run": 3,
-      "sha256": "1706f6c0cb69883685722db69eb59f9a9fc87b632967776ba6764013a486014c",
-      "source_bytes": 5443
+      "sha256": "134a0439338fb807039577351a6c353ccd54ff59b6c38e70f923b00b65db112f",
+      "source_bytes": 5743
     },
     "contracts/build/deploy/v3/03_admin_guard.rho": {
       "brace_depth": 10,
@@ -38,12 +38,12 @@
     },
     "contracts/build/deploy/v3/04_governor.rho": {
       "brace_depth": 25,
-      "contracts": 5,
+      "contracts": 7,
       "grammar_depth": 40,
-      "minified_bytes": 3384,
+      "minified_bytes": 5482,
       "operator_run": 3,
-      "sha256": "d41c10ebb21625d81d90d14b2c06bbcea682fc53e0a08dbef91944b015fa9a69",
-      "source_bytes": 6570
+      "sha256": "fe83664b990c2cc47f08b8a9f26cb99ee07d6cd9e2265e8a15730088c8129c51",
+      "source_bytes": 10417
     },
     "contracts/build/deploy/v3/05_amm_math.rho": {
       "brace_depth": 9,
@@ -128,21 +128,21 @@
     },
     "contracts/build/deploy/v3/31_stablecoin.rho": {
       "brace_depth": 41,
-      "contracts": 35,
+      "contracts": 54,
       "grammar_depth": 66,
-      "minified_bytes": 22697,
+      "minified_bytes": 35410,
       "operator_run": 5,
-      "sha256": "1f3d0a92d1a78427dd2c5b60879fa958812d8a81fa5c2c51165c23fb67bed32f",
-      "source_bytes": 44534
+      "sha256": "82c8cb159c28ed917c847899ab61884c9c1609045b621966c4ae4c79790702f2",
+      "source_bytes": 67326
     },
     "contracts/build/deploy/v3/32_currency_registry.rho": {
       "brace_depth": 32,
       "contracts": 9,
       "grammar_depth": 53,
-      "minified_bytes": 5018,
-      "operator_run": 4,
-      "sha256": "97c2aa4252689998e21096062614884b7ce48712a8124b073d925a3479a2a7b2",
-      "source_bytes": 9563
+      "minified_bytes": 5298,
+      "operator_run": 6,
+      "sha256": "8cbb1b024fb70ea873b895e252e564ccbc082004e8ed0ede729f38e89fde915c",
+      "source_bytes": 10176
     },
     "contracts/build/deploy/v3/40_transfer.rho": {
       "brace_depth": 30,

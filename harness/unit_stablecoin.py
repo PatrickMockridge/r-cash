@@ -48,6 +48,10 @@ def deploy_system(term: str, secret: str) -> list:
 def main() -> int:
     keys = json.loads(KEYS.read_text())
     state = json.loads(STATE.read_text())
+    if "currency_registry_uri" not in state:
+        steps = state.get("steps", {})
+        state["currency_registry_uri"] = steps["currency_registry"]["uris"][1]
+        state["stablecoin_directory_uri"] = steps["currency_registry"]["uris"][0]
     root = state["root_uri"]
     secret = keys["deployer"]["secret"]
     sponsor = keys["sponsor"]["public"]
@@ -71,7 +75,7 @@ def main() -> int:
         "__SPONSOR_SIG__": sig,
     })
     system = deploy_system(term, secret)
-    sc_uri, custody_uri, params_uri, vault_uri, liq_uri, att_reply = system
+    sc_uri, custody_uri, params_uri, vault_uri, liq_uri, savings_uri, psm_uri, att_reply = system
     attest = att_reply[1]
     check("stablecoin attestation", attest.get("currency"), currency)
     check("stablecoin params hash", attest.get("paramsHash"), params_hash)
@@ -100,12 +104,15 @@ def main() -> int:
     # Currency listing: sponsor signature + live attestation + directory.
     currency_registry = state["currency_registry_uri"]
     directory = state["stablecoin_directory_uri"]
-    listing = f"rcash:currency-register:v1|{currency}|{sc_uri}|{params_hash}|{sponsor}"
+    listing = (f"rcash:currency-register:v2|{currency}|{sc_uri}|{custody_uri}|"
+               f"{params_uri}|{vault_uri}|{liq_uri}|{savings_uri}|{psm_uri}|"
+               f"{params_hash}|{sponsor}")
     listing_sig = sign_payload.sign_payload(keys["sponsor"]["secret"],
                                             listing.encode())["signature"]
     register_body = (
         f'CurrencyRegistry!("register", "{currency}", "{sc_uri}", "{custody_uri}", '
-        f'"{params_uri}", "{vault_uri}", "{liq_uri}", "{params_hash}", "{sponsor}", '
+        f'"{params_uri}", "{vault_uri}", "{liq_uri}", "{savings_uri}", "{psm_uri}", '
+        f'"{params_hash}", "{sponsor}", '
         f'"{listing_sig}".hexToBytes(), *r) |\n'
         "  for (@x <- r) {\n"
         "    match x {\n"
@@ -139,12 +146,15 @@ def main() -> int:
     duplicate = one(call(currency_registry, "CurrencyRegistry", register_body), secret)
     check("duplicate listing refused", duplicate[0], False)
 
-    bad_listing = f"rcash:currency-register:v1|V4U|{sc_uri}|{params_hash}|{sponsor}"
+    bad_listing = (f"rcash:currency-register:v2|V4U|{sc_uri}|{custody_uri}|"
+                   f"{params_uri}|{vault_uri}|{liq_uri}|{savings_uri}|{psm_uri}|"
+                   f"{params_hash}|{sponsor}")
     bad_sig = sign_payload.sign_payload(keys["reporter1"]["secret"],
                                         bad_listing.encode())["signature"]
     bad_body = (
         f'CurrencyRegistry!("register", "V4U", "{sc_uri}", "{custody_uri}", '
-        f'"{params_uri}", "{vault_uri}", "{liq_uri}", "{params_hash}", "{sponsor}", '
+        f'"{params_uri}", "{vault_uri}", "{liq_uri}", "{savings_uri}", "{psm_uri}", '
+        f'"{params_hash}", "{sponsor}", '
         f'"{bad_sig}".hexToBytes(), *r) |\n'
         "  for (@x <- r) {\n"
         "    match x {\n"
@@ -158,8 +168,8 @@ def main() -> int:
     check("bad sponsor signature refused", refused, [False, "bad sponsor signature"])
 
     def set_paused(nonce: int, paused: bool) -> str:
-        args = f"{currency}|{'true' if paused else 'false'}"
-        payload = f"rcash:admin:v1|currency-registry|{nonce}|setPaused|{args}"
+        args = "true" if paused else "false"
+        payload = f"rcash:admin:v1|stablecoin:{currency}|{nonce}|setPaused|{args}"
         sigs = ", ".join(
             f'"{sign_payload.sign_payload(keys[n]["secret"], payload.encode())["signature"]}".hexToBytes()'
             for n in ("admin1", "admin2"))
@@ -188,6 +198,23 @@ def main() -> int:
     v4t_feed = feed_uri(keys, root, registry, "V4T", [66666] * 3)
     set_price(keys, v4t_feed, "V4T", 66666)
     set_price(keys, rev_feed, "REV", 5000000)
+
+    # Savings: mint, route through the account, deposit, withdraw and repay.
+    savings_uri = system[5]
+    savings_text = (ROOT / "harness/scenarios/stablecoin_savings.rho").read_text()
+    for key, value in {
+        "__ROOT_URI__": root,
+        "__VAULT_URI__": vault_uri,
+        "__SAVINGS_URI__": savings_uri,
+        "__PUBKEY__": keys["key13"]["public"],
+        "__FUND__": "20000000",
+        "__COLLATERAL__": "10000000",
+        "__MINT__": "100000000",
+    }.items():
+        savings_text = savings_text.replace(key, value)
+    savings_result = one(minify(savings_text), keys["key13"]["secret"])
+    check("savings shares", savings_result[0], 100000000)
+    check("savings withdrawn", savings_result[1], 100000000)
 
     sender_pub = keys["key12"]["public"]
     sender_secret = keys["key12"]["secret"]

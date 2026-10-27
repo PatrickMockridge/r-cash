@@ -189,10 +189,11 @@ def deploy_stablecoin(state: dict, sponsor: dict) -> list:
     })
     doc = deploy_term(term)
     found = net.uris(doc)
-    if len(found) < 5:
-        raise SystemExit(f"stablecoin deploy returned {found} (want five URIs)")
-    sc, custody, params_uri, vault, liq = found[:5]
-    listing = f"rcash:currency-register:v1|{CURRENCY}|{sc}|{params_hash}|{sponsor['public']}"
+    if len(found) < 7:
+        raise SystemExit(f"stablecoin deploy returned {found} (want seven URIs)")
+    sc, custody, params_uri, vault, liq, savings, psm = found[:7]
+    listing = (f"rcash:currency-register:v2|{CURRENCY}|{sc}|{custody}|{params_uri}|"
+               f"{vault}|{liq}|{savings}|{psm}|{params_hash}|{sponsor['public']}")
     listing_sig = sign_payload.sign_payload(
         sponsor["secret"], listing.encode())["signature"]
     register = (
@@ -201,7 +202,7 @@ def deploy_stablecoin(state: dict, sponsor: dict) -> list:
         f"  rl!(`{state['currency_registry_uri']}`, *ch) |\n"
         f"  for (Registry <- ch) {{\n"
         f'    Registry!("register", "{CURRENCY}", "{sc}", "{custody}", "{params_uri}", '
-        f'"{vault}", "{liq}", "{params_hash}", "{sponsor["public"]}", '
+        f'"{vault}", "{liq}", "{savings}", "{psm}", "{params_hash}", "{sponsor["public"]}", '
         f'"{listing_sig}".hexToBytes(), *r) |\n'
         f"    for (@x <- r) {{ deployId!(x) }}\n"
         f"  }}\n"
@@ -210,7 +211,7 @@ def deploy_stablecoin(state: dict, sponsor: dict) -> list:
     listed = deploy_term(register)
     if "true" not in json.dumps(listed.get("result")).lower():
         raise SystemExit(f"currency listing refused: {listed.get('result')}")
-    return [sc, custody, params_uri, vault, liq, params_hash]
+    return [sc, custody, params_uri, vault, liq, params_hash, savings, psm]
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -62,7 +62,8 @@ State: `{surplus, sin, savingsShareBps, lastHeight}`. It holds a stablecoin purs
 
 - `deposit(payment)`: only the issuer/`settle` path (an unforgeable capability), deposit
   into the buffer purse, `surplus += amount`.
-- `paySavings()`: move `savingsShareBps` of the surplus to the SavingsPool.
+- `paySavings()`: move `savingsShareBps` of the surplus to the SavingsPool; the repay path
+  calls it after `settle` so the interest reaches savers in the same deploy.
 - `cover(badDebt)`: only the VaultBook capability; `sin += badDebt`; cancel
   `min(surplus, sin)` and leave the residual as explicit uncollateralised debt.
 - `info`: `{surplus, sin, savingsShareBps}`.
@@ -73,15 +74,18 @@ future interest covers it. There is no debt auction in this scope.
 
 ## 4. `SavingsPool` (pot/DSR)
 
-State: `{totalShares, totalAssets, purse}`. It holds a stablecoin purse and a deposit
-facet; only `notify` may add assets without minting shares.
+State: `{totalShares, totalAssets, shares: {ownerId: amount}, rev}`. It holds a stablecoin
+purse; only `notify` may add assets without minting shares. Shares are credited to the
+owner derived from the caller's `deployerId`; a bare `withdraw(shares)` would let any caller
+take any position.
 
-- `deposit(payment)`: measure; `shares = amount` when `totalShares = 0`, else
-  `amount * totalShares / totalAssets` (floor); deposit into the purse; `totalAssets +=
-  amount`; mint a claim to the caller as a `(shares)` reply. The caller's claim is its
-  share balance; there is no separate ERTP savings token in this version.
-- `withdraw(shares)`: `amount = totalAssets * shares / totalShares` (floor); withdraw from
-  the purse; `totalShares -= shares`, `totalAssets -= amount`; return the payment.
+- `deposit(dId, payment)`: derive the owner from `deployerId`, measure; `shares = amount`
+  when `totalShares = 0`, else `amount * totalShares / totalAssets` (floor); deposit into
+  the purse; credit `shares[ownerId] += shares`, `totalAssets += amount`; reply `(shares)`.
+  There is no separate ERTP savings token in this version.
+- `withdraw(dId, shares)`: only the owner's recorded shares can be withdrawn;
+  `amount = totalAssets * shares / totalShares` (floor); withdraw from the purse;
+  `shares[ownerId] -= shares`, `totalShares -= shares`, `totalAssets -= amount`.
 - `notify(payment)`: measure, deposit, `totalAssets += amount`; no shares minted. The
   interest therefore lifts every share.
 - `info`: `{totalShares, totalAssets, shareValue}`.
@@ -99,13 +103,15 @@ stablecoin purse, and receives separate `psmMintAuth`/`psmBurnAuth` capabilities
 issuer deploy.
 
 - `fundRev(payment)`: governance-only; deposit REV into `revPurse`.
-- `sellStable(stablePayment, minRev)`: measure stable; deposit into `stablePurse`; burn it
-  through `psmBurnAuth`; compute `revOut = stableAmount * rate / 1e8` less `feeBps`; if
-  `revOut > revPurse balance` or `< minRev`, refuse and return the stable payment; withdraw
-  REV and return it; `stableDebt -= stableAmount`.
-- `buyStable(revPayment, minStable)`: measure REV; deposit into `revPurse`; compute
-  `stableOut = revAmount * 1e8 / rate` less `feeBps`; refuse if it would exceed `ceiling`;
-  mint with `psmMintAuth`; send stable to the caller; `stableDebt += stableOut`.
+- `sellStable(stablePayment, revFacet, minRev)`: measure stable; burn it through
+  `psmBurnAuth`; `grossRev = stableAmount * 1e8 / rate` (rate is quote per REV, e8), then
+  `revOut = grossRev - grossRev*feeBps/10000`; if `revOut` exceeds the REV purse or is
+  below `minRev`, refuse and return the stable payment; withdraw REV and deposit it to
+  `revFacet`; `stableDebt -= stableAmount`.
+- `buyStable(revPayment, stableFacet, minStable)`: measure REV; deposit into `revPurse`;
+  `grossStable = revAmount * rate / 1e8`, `stableOut = grossStable -
+  grossStable*feeBps/10000`; refuse at `ceiling` or below `minStable`; mint with
+  `psmMintAuth`; deposit the stable payment to `stableFacet`; `stableDebt += stableOut`.
 - Fees stay in `revPurse`/`stablePurse`; they are the buffer's income.
 - `info`: `{stableDebt, feeBps, ceiling, revBalance}`.
 - Governor domain `psm` sets the fee/ceiling and withdraws buffer only with a timelock.

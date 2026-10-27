@@ -113,7 +113,7 @@ def main() -> int:
         "__SPONSOR_SIG__": sig,
     })
     system = deploy_system(term, secret)
-    sc_uri, custody_uri, params_uri, vault_uri, liq_uri, att_reply = system
+    sc_uri, custody_uri, params_uri, vault_uri, liq_uri, savings_uri, psm_uri, att_reply = system
     check("liquidation engine attestation", att_reply[1].get("template") is not None, True)
     print(f"stablecoin: {sc_uri}")
     print(f"liquidation engine: {liq_uri}")

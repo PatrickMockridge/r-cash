@@ -7,21 +7,30 @@
 new
   Stablecoin, issuerState,
   CollateralCustody,
-  RiskParameters,
+  RiskParameters, paramsState,
   VaultBook, vaultState,
   LiquidationEngine,
+  SavingsPool, savingsState,
+  SurplusBuffer, bufferState,
+  PegStabilityModule, psmState,
+  callerOwner, bufferCancelled,
   stablecoinCheck, vaultLiquidateCommit,
   vaultNow, vaultPrice, vaultMath, vaultUpdate, vaultGovernor, vaultAccountFactory,
   rl(`rho:registry:lookup`),
   rs(`rho:registry:insertArbitrary`),
   bd(`rho:block:data`),
   deployerId(`rho:rchain:deployerId`),
+  deployerIdOps(`rho:rchain:deployerId:ops`),
+  revAddress(`rho:rev:address`),
   deployId(`rho:rchain:deployId`),
   currencyCh, paramsCh, paramsHashCh, sponsorCh, checkCh, nowCh,
   ertpCh, kitCh, revIssuerCh, burnPurseCh, revPurseCh, burnFacetCh,
+  savingsPurseCh, bufferPurseCh, psmRevPurseCh,
   mintAuth, burnAuth, custodyAuth, liquidationAuth,
-  uSC, uCustody, uParams, uVault, uLiq,
-  scUri, custodyUri, paramsUri, vaultUri, liqUri, attCh
+  settlementAuth, psmMintAuth, psmBurnAuth,
+  bufferDepositAuth, bufferPayAuth, bufferCoverAuth, savingsNotifyAuth,
+  uSC, uCustody, uParams, uVault, uLiq, uSavings, uBuffer, uPsm,
+  scUri, custodyUri, paramsUri, vaultUri, liqUri, savingsUri, psmUri, attCh
 in {
 
   contract stablecoinCheck(@currency, @params, @paramsHash, @sponsorHex, @sig, ret) = {
@@ -291,8 +300,14 @@ in {
             @ERTP!("getRevIssuer", *revIssuerCh) |
             for (@(brand, mint, issuer) <- kitCh; @(revBrand, revIssuer) <- revIssuerCh) {
               @issuer!("makeEmptyPurse", *burnPurseCh) |
+              @issuer!("makeEmptyPurse", *savingsPurseCh) |
+              @issuer!("makeEmptyPurse", *bufferPurseCh) |
               @revIssuer!("makeEmptyPurse", *revPurseCh) |
-              for (@(true, burnPurse) <- burnPurseCh; @(true, revPurse) <- revPurseCh) {
+              @revIssuer!("makeEmptyPurse", *psmRevPurseCh) |
+              for (@(true, burnPurse) <- burnPurseCh; @(true, revPurse) <- revPurseCh;
+                   @(true, savingsPurse) <- savingsPurseCh;
+                   @(true, bufferPurse) <- bufferPurseCh;
+                   @(true, psmRevPurse) <- psmRevPurseCh) {
                 @burnPurse!("getDepositFacet", *burnFacetCh) |
                 for (@(true, burnFacet) <- burnFacetCh) {
                   bd!(*nowCh) |
@@ -387,6 +402,81 @@ in {
     }
   } |
 
+  contract Stablecoin(@"settle", payment, @principal, @interest, @auth, ret2) = {
+    if (auth != *settlementAuth) { ret2!((false, "bad settlement authority", *payment)) }
+    else {
+      if (principal < 0 || interest < 0) { ret2!((false, "amount", *payment)) }
+      else {
+        new amtCh, sCh in {
+          @issuer!("getAmountOf", *payment, *amtCh) |
+          for (@a <- amtCh) {
+            match a {
+              (true, total) => {
+                if (total != principal + interest) {
+                  ret2!((false, "amount", *payment))
+                } else {
+                  if (principal == 0) {
+                    SurplusBuffer!("deposit", *payment, *bufferDepositAuth, *sCh) |
+                    for (@s <- sCh) {
+                      match s {
+                        (true, _) => { ret2!((true, 0, interest)) }
+                        _ => { ret2!(s) }
+                      }
+                    }
+                  } else {
+                    if (interest == 0) {
+                      new bCh in {
+                        Stablecoin!("burn", *payment, principal, *burnAuth, *bCh) |
+                        for (@b <- bCh) {
+                          match b {
+                            (true, _, _) => { ret2!((true, principal, 0)) }
+                            _ => { ret2!(b) }
+                          }
+                        }
+                      }
+                    } else {
+                      new pCh, dCh, wpCh, wiCh, bCh in {
+                        @issuer!("makeEmptyPurse", *pCh) |
+                        for (@(true, purse) <- pCh) {
+                          @purse!("deposit", *payment, *dCh) |
+                          for (@(true, _) <- dCh) {
+                            @purse!("withdraw", (brand, principal), *wpCh) |
+                            for (@(true, principalPay) <- wpCh) {
+                              @purse!("withdraw", (brand, interest), *wiCh) |
+                              for (@(true, interestPay) <- wiCh) {
+                                Stablecoin!("burn", principalPay, principal, *burnAuth, *bCh) |
+                                for (@b <- bCh) {
+                                  match b {
+                                    (true, _, _) => {
+                                      SurplusBuffer!("deposit", interestPay,
+                                                     *bufferDepositAuth, *sCh) |
+                                      for (@s <- sCh) {
+                                        match s {
+                                          (true, _) => { ret2!((true, principal, interest)) }
+                                          _ => { ret2!(1 / 0) }
+                                        }
+                                      }
+                                    }
+                                    _ => { ret2!(1 / 0) }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+              _ => { ret2!((false, "asset", *payment)) }
+            }
+          }
+        }
+      }
+    }
+  } |
+
   contract Stablecoin(@"amountOf", payment, ret2) = {
     @issuer!("getAmountOf", *payment, *ret2)
   } |
@@ -446,7 +536,14 @@ in {
   } |
 
   contract RiskParameters(@"params", ret2) = {
-    ret2!((true, params))
+    for (@s <<- paramsState) { ret2!((true, s.get("params"))) }
+  } |
+
+  contract RiskParameters(@"info", ret2) = {
+    for (@s <<- paramsState) {
+      ret2!((true, {"params": s.get("params"), "paramsHash": paramsHash,
+                    "genesis": params, "rev": s.get("rev")}))
+    }
   } |
 
   contract RiskParameters(@"attest", ret2) = {
@@ -1019,10 +1116,471 @@ in {
     }))
   } |
 
+  contract bufferCancelled(@surplus, @sin, ret) = {
+    if (surplus < sin) { ret!(surplus) } else { ret!(sin) }
+  } |
+
+  contract callerOwner(dId, ret) = {
+    new pkCh, aCh in {
+      deployerIdOps!("pubKeyBytes", *dId, *pkCh) |
+      for (@pk <- pkCh) {
+        revAddress!("fromPublicKey", pk, *aCh) |
+        for (@addr <- aCh) { ret!(addr) }
+      }
+    }
+  } |
+
+  contract SavingsPool(@"deposit", dId, payment, ret2) = {
+    new oCh, amtCh, dCh, shCh in {
+      callerOwner!(*dId, *oCh) |
+      for (@ownerId <- oCh) {
+        @issuer!("getAmountOf", *payment, *amtCh) |
+        for (@a <- amtCh) {
+          match a {
+            (true, amount) => {
+              if (amount <= 0) { ret2!((false, "amount", *payment)) }
+              else {
+                for (@s <- savingsState) {
+                  if (s.get("totalShares") == 0) { shCh!(amount) }
+                  else { shCh!((amount * s.get("totalShares")) / s.get("totalAssets")) } |
+                  for (@shares <- shCh) {
+                    if (shares <= 0) {
+                      savingsState!(s) | ret2!((false, "shares", *payment))
+                    } else {
+                      @savingsPurse!("deposit", *payment, *dCh) |
+                      for (@d <- dCh) {
+                        match d {
+                          (true, _) => {
+                            new hCh in {
+                              match s.get("shares").get(ownerId) {
+                                Nil => { hCh!(0) }
+                                held => { hCh!(held) }
+                              } |
+                              for (@held <- hCh) {
+                                savingsState!(s.set("totalShares", s.get("totalShares") + shares)
+                                  .set("totalAssets", s.get("totalAssets") + amount)
+                                  .set("shares", s.get("shares").set(ownerId, held + shares))) |
+                                ret2!((true, shares))
+                              }
+                            }
+                          }
+                          _ => { savingsState!(s) | ret2!((false, "deposit", *payment)) }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            _ => { ret2!((false, "asset", *payment)) }
+          }
+        }
+      }
+    }
+  } |
+
+  contract SavingsPool(@"withdraw", dId, @shares, ret2) = {
+    new oCh, amtCh, wCh in {
+      callerOwner!(*dId, *oCh) |
+      for (@ownerId <- oCh) {
+        for (@s <- savingsState) {
+          match s.get("shares").get(ownerId) {
+            Nil => { savingsState!(s) | ret2!((false, "shares")) }
+            held => {
+              if (shares <= 0 || shares > held || s.get("totalShares") <= 0) {
+                savingsState!(s) | ret2!((false, "shares"))
+              } else {
+                amtCh!(((s.get("totalAssets") * shares) / s.get("totalShares")).toInt()) |
+                for (@amount <- amtCh) {
+                  @savingsPurse!("withdraw", (brand, amount), *wCh) |
+                  for (@w <- wCh) {
+                    match w {
+                      (true, payment) => {
+                        savingsState!(s.set("totalShares", s.get("totalShares") - shares)
+                          .set("totalAssets", s.get("totalAssets") - amount)
+                          .set("shares", s.get("shares").set(ownerId, held - shares))) |
+                        ret2!((true, payment, amount))
+                      }
+                      _ => { savingsState!(s) | ret2!((false, "payment")) }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  } |
+
+  contract SavingsPool(@"notify", payment, @auth, ret2) = {
+    if (auth != *savingsNotifyAuth) { ret2!((false, "bad savings authority", *payment)) }
+    else {
+      new amtCh, dCh in {
+        @issuer!("getAmountOf", *payment, *amtCh) |
+        for (@a <- amtCh) {
+          match a {
+            (true, amount) => {
+              @savingsPurse!("deposit", *payment, *dCh) |
+              for (@d <- dCh) {
+                match d {
+                  (true, _) => {
+                    for (@s <- savingsState) {
+                      savingsState!(s.set("totalAssets", s.get("totalAssets") + amount).set("rev", s.get("rev") + 1)) |
+                      ret2!((true, amount))
+                    }
+                  }
+                  _ => { ret2!((false, "deposit", *payment)) }
+                }
+              }
+            }
+            _ => { ret2!((false, "asset", *payment)) }
+          }
+        }
+      }
+    }
+  } |
+
+  contract SavingsPool(@"info", ret2) = {
+    for (@s <<- savingsState) {
+      ret2!((true, {"totalShares": s.get("totalShares"),
+                    "totalAssets": s.get("totalAssets"),
+                    "rev": s.get("rev")}))
+    }
+  } |
+
+  contract SavingsPool(@"position", @ownerId, ret2) = {
+    for (@s <<- savingsState) {
+      match s.get("shares").get(ownerId) {
+        Nil => { ret2!((true, 0)) }
+        held => { ret2!((true, held)) }
+      }
+    }
+  } |
+
+  contract SurplusBuffer(@"deposit", payment, @auth, ret2) = {
+    if (auth != *bufferDepositAuth) { ret2!((false, "bad buffer authority", *payment)) }
+    else {
+      new amtCh, dCh in {
+        @issuer!("getAmountOf", *payment, *amtCh) |
+        for (@a <- amtCh) {
+          match a {
+            (true, amount) => {
+              @bufferPurse!("deposit", *payment, *dCh) |
+              for (@d <- dCh) {
+                match d {
+                  (true, _) => {
+                    for (@s <- bufferState) {
+                      bufferState!(s.set("surplus", s.get("surplus") + amount).set("rev", s.get("rev") + 1)) |
+                      ret2!((true, amount))
+                    }
+                  }
+                  _ => { ret2!((false, "deposit", *payment)) }
+                }
+              }
+            }
+            _ => { ret2!((false, "asset", *payment)) }
+          }
+        }
+      }
+    }
+  } |
+
+  contract SurplusBuffer(@"paySavings", @auth, ret2) = {
+    if (auth != *bufferPayAuth) { ret2!((false, "bad buffer authority")) }
+    else {
+      for (@s <- bufferState) {
+        match ((s.get("surplus") * s.get("savingsShareBps")) / 10000).toInt() {
+          move => {
+            if (move <= 0) { bufferState!(s) | ret2!((true, 0, s.get("surplus"))) }
+            else {
+              new wCh, nCh in {
+                @bufferPurse!("withdraw", (brand, move), *wCh) |
+                for (@w <- wCh) {
+                  match w {
+                    (true, payment) => {
+                      SavingsPool!("notify", payment, *savingsNotifyAuth, *nCh) |
+                      for (@n <- nCh) {
+                        match n {
+                          (true, _) => {
+                            bufferState!(s.set("surplus", s.get("surplus") - move).set("rev", s.get("rev") + 1)) |
+                            ret2!((true, move, s.get("surplus") - move))
+                          }
+                          _ => { ret2!(1 / 0) }
+                        }
+                      }
+                    }
+                    _ => { bufferState!(s) | ret2!((false, "payment")) }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  } |
+
+  contract SurplusBuffer(@"cover", @badDebt, @auth, ret2) = {
+    if (auth != *bufferCoverAuth) { ret2!((false, "bad buffer authority")) }
+    else {
+      if (badDebt <= 0) { ret2!((false, "amount")) }
+      else {
+        for (@s <- bufferState) {
+          match (s.get("sin") + badDebt) {
+            newSin => {
+              new cCh in {
+              bufferCancelled!(s.get("surplus"), newSin, *cCh) |
+              for (@cancelled <- cCh) {
+                  if (cancelled <= 0) {
+                    bufferState!(s.set("sin", newSin).set("rev", s.get("rev") + 1)) |
+                    ret2!((true, 0, newSin))
+                  } else {
+                    new wCh, bCh in {
+                      @bufferPurse!("withdraw", (brand, cancelled), *wCh) |
+                      for (@w <- wCh) {
+                        match w {
+                          (true, payment) => {
+                            Stablecoin!("burn", payment, cancelled, *burnAuth, *bCh) |
+                            for (@b <- bCh) {
+                              match b {
+                                (true, _, _) => {
+                                  bufferState!(s.set("surplus", s.get("surplus") - cancelled)
+                                    .set("sin", newSin - cancelled).set("rev", s.get("rev") + 1)) |
+                                  ret2!((true, cancelled, newSin - cancelled))
+                                }
+                                _ => { ret2!(1 / 0) }
+                              }
+                            }
+                          }
+                          _ => { bufferState!(s) | ret2!((false, "payment")) }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  } |
+
+  contract SurplusBuffer(@"info", ret2) = {
+    for (@s <<- bufferState) {
+      ret2!((true, {"surplus": s.get("surplus"), "sin": s.get("sin"),
+                    "savingsShareBps": s.get("savingsShareBps"),
+                    "rev": s.get("rev")}))
+    }
+  } |
+
+  contract SurplusBuffer(@"setShare", @bps, @nonce, @sigs, ret2) = {
+    if (bps < 0 || bps > 10000) { ret2!((false, "bps")) }
+    else {
+      new gCh, vCh in {
+        vaultGovernor!(*gCh) |
+        for (Governor <- gCh) {
+          Governor!("authorize", "stablecoin:" ++ currency, nonce,
+                    "setSavingsShare", bps.toString(), sigs, *vCh) |
+          for (@v <- vCh) {
+            match v {
+              (true, Nil) => {
+                for (@s <- bufferState) {
+                  bufferState!(s.set("savingsShareBps", bps).set("rev", s.get("rev") + 1)) |
+                  ret2!((true, bps))
+                }
+              }
+              _ => { ret2!(v) }
+            }
+          }
+        }
+      }
+    }
+  } |
+
+  contract PegStabilityModule(@"fundRev", payment, ret2) = {
+    new amtCh, dCh in {
+      @revIssuer!("getAmountOf", *payment, *amtCh) |
+      for (@a <- amtCh) {
+        match a {
+          (true, amount) => {
+            @psmRevPurse!("deposit", *payment, *dCh) |
+            for (@d <- dCh) {
+              match d {
+                (true, _) => { ret2!((true, amount)) }
+                _ => { ret2!((false, "deposit", *payment)) }
+              }
+            }
+          }
+          _ => { ret2!((false, "asset", *payment)) }
+        }
+      }
+    }
+  } |
+
+  contract PegStabilityModule(@"sellStable", payment, revFacet, @minRev, ret2) = {
+    new amtCh, rateCh, balCh, netCh, bCh, wCh, depCh in {
+      @issuer!("getAmountOf", *payment, *amtCh) |
+      for (@a <- amtCh) {
+        match a {
+          (true, amount) => {
+            vaultPrice!(currency, params.get("maxOracleAge"), *rateCh) |
+            for (@rr <- rateCh) {
+              match rr {
+                (rate, fresh) => {
+                  if (fresh == false || rate <= 0) {
+                    ret2!((false, "stale feed", *payment))
+                  } else {
+                    netCh!(((amount * 100000000) / rate).toInt()) |
+                    for (@netRev <- netCh) {
+                      @psmRevPurse!("getCurrentAmount", *balCh) |
+                      for (@bal <- balCh) {
+                        match bal {
+                          (true, available) => {
+                            if (netRev < minRev) {
+                              ret2!((false, "min rev", *payment))
+                            } else {
+                              if (netRev > available) {
+                                ret2!((false, "buffer", *payment))
+                              } else {
+                                Stablecoin!("burn", *payment, amount, *psmBurnAuth, *bCh) |
+                                for (@b <- bCh) {
+                                  match b {
+                                    (true, _, _) => {
+                                      @psmRevPurse!("withdraw", (revBrand, netRev), *wCh) |
+                                      for (@w <- wCh) {
+                                        match w {
+                                          (true, revPayment) => {
+                                            revFacet!("deposit", revPayment, *depCh) |
+                                            for (@dep <- depCh) {
+                                              match dep {
+                                                (true, _) => {
+                                                  for (@s <- psmState) {
+                                                    psmState!(s.set("stableDebt",
+                                                      s.get("stableDebt") - amount)
+                                                      .set("rev", s.get("rev") + 1)) |
+                                                    ret2!((true, netRev))
+                                                  }
+                                                }
+                                                _ => { ret2!(1 / 0) }
+                                              }
+                                            }
+                                          }
+                                          _ => { ret2!(1 / 0) }
+                                        }
+                                      }
+                                    }
+                                    _ => { ret2!((false, "burn", *payment)) }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                          _ => { ret2!((false, "balance", *payment)) }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+          _ => { ret2!((false, "asset", *payment)) }
+        }
+      }
+    }
+  } |
+
+  contract PegStabilityModule(@"buyStable", payment, stableFacet, @minStable, ret2) = {
+    new amtCh, rateCh, mCh, depCh in {
+      @revIssuer!("getAmountOf", *payment, *amtCh) |
+      for (@a <- amtCh) {
+        match a {
+          (true, amount) => {
+            vaultPrice!(currency, params.get("maxOracleAge"), *rateCh) |
+            for (@rr <- rateCh) {
+              match rr {
+                (rate, fresh) => {
+                  if (fresh == false || rate <= 0) {
+                    ret2!((false, "stale feed", *payment))
+                  } else {
+                    new netSCh in {
+                      netSCh!(((amount * rate) / 100000000).toInt()) |
+                      for (@netStable <- netSCh) {
+                            for (@s <- psmState) {
+                              if (netStable < minStable) {
+                                psmState!(s) | ret2!((false, "min stable", *payment))
+                              } else {
+                                if (s.get("stableDebt") + netStable > s.get("ceiling")) {
+                                  psmState!(s) | ret2!((false, "ceiling", *payment))
+                                } else {
+                                  new dCh in {
+                                    @psmRevPurse!("deposit", *payment, *dCh) |
+                                    for (@d <- dCh) {
+                                      match d {
+                                        (true, _) => {
+                                          Stablecoin!("mint", netStable, *psmMintAuth, *mCh) |
+                                          for (@m <- mCh) {
+                                            match m {
+                                              (true, stablePayment, _) => {
+                                                stableFacet!("deposit", stablePayment, *depCh) |
+                                                for (@dep <- depCh) {
+                                                  match dep {
+                                                    (true, _) => {
+                                                      psmState!(s.set("stableDebt", s.get("stableDebt") + netStable).set("rev", s.get("rev") + 1)) |
+                                                      ret2!((true, netStable))
+                                                    }
+                                                    _ => { ret2!(1 / 0) }
+                                                  }
+                                                }
+                                              }
+                                              _ => { ret2!(1 / 0) }
+                                            }
+                                          }
+                                        }
+                                        _ => { psmState!(s) | ret2!((false, "deposit", *payment)) }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                    }
+                  }
+                }
+              }
+            }
+          }
+          _ => { ret2!((false, "asset", *payment)) }
+        }
+      }
+    }
+  } |
+
+  contract PegStabilityModule(@"info", ret2) = {
+    for (@s <<- psmState) {
+      ret2!((true, {"stableDebt": s.get("stableDebt"), "feeBps": s.get("feeBps"),
+                    "ceiling": s.get("ceiling"), "rev": s.get("rev")}))
+    }
+  } |
+
+  contract PegStabilityModule(@"debt", ret2) = {
+    for (@s <<- psmState) { ret2!((true, s.get("stableDebt"))) }
+  } |
+
                     issuerState!({
                       "totalPrincipal": 0,
-                      "maxSupply": params.get("debtCeiling")
+                      "maxSupply": 2000000000000000
                     }) |
+                    paramsState!({"params": params, "rev": 0}) |
+                    savingsState!({"totalShares": 0, "totalAssets": 0,
+                                   "shares": {}, "rev": 0}) |
+                    bufferState!({"surplus": 0, "sin": 0,
+                                  "savingsShareBps": 0, "rev": 0}) |
+                    psmState!({"stableDebt": 0, "feeBps": 0,
+                               "ceiling": params.get("debtCeiling"), "rev": 0}) |
                     vaultState!({
                       "vaults": {},
                       "totalDebt": 0,
@@ -1037,12 +1595,17 @@ in {
                     rs!(bundle+{*RiskParameters}, *uParams) |
                     rs!(bundle+{*VaultBook}, *uVault) |
                     rs!(bundle+{*LiquidationEngine}, *uLiq) |
+                    rs!(bundle+{*SavingsPool}, *uSavings) |
+                    rs!(bundle+{*SurplusBuffer}, *uBuffer) |
+                    rs!(bundle+{*PegStabilityModule}, *uPsm) |
                     for (@scUri <- uSC; @custodyUri <- uCustody;
                          @paramsUri <- uParams; @vaultUri <- uVault;
-                         @liqUri <- uLiq) {
+                         @liqUri <- uLiq; @savingsUri <- uSavings;
+                         @psmUri <- uPsm) {
                       Stablecoin!("attest", *attCh) |
                       for (@att <- attCh) {
-                        deployId!([scUri, custodyUri, paramsUri, vaultUri, liqUri, att])
+                        deployId!([scUri, custodyUri, paramsUri, vaultUri, liqUri,
+                                   savingsUri, psmUri, att])
                       }
                     }
                   }
