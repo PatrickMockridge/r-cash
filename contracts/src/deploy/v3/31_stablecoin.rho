@@ -674,6 +674,8 @@ in {
         match s.get("vaults").get(ownerId) {
           Nil => { ret2!((false, "no vault")) }
           v => {
+            if (s.get("paused")) { ret2!((false, "paused")) }
+            else {
             if (v.get("auth") != auth) { ret2!((false, "bad vault auth")) }
             else {
               if (v.get("collateral") < amount) { ret2!((false, "amount")) }
@@ -745,6 +747,7 @@ in {
         }
       }
     }
+    }
   } |
 
   contract VaultBook(@"repay", @ownerId, @auth, payment, ret2) = {
@@ -785,8 +788,10 @@ in {
                                             "collateral": v2.get("collateral"),
                                             "debt": nd,
                                             "lastHeight": now2
-                                          }, s2.get("totalDebt") - amount,
-                                          s2.get("totalAccruedInterest"),
+                                          }, s2.get("totalDebt")
+                                             + (accrued - v2.get("debt")) - amount,
+                                          s2.get("totalAccruedInterest")
+                                             + (accrued - v2.get("debt")),
                                           s2.get("totalCollateral"),
                                           s2.get("badDebt"),
                                           s2.get("rev") + 1, *nsCh) |

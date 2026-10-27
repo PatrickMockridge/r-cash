@@ -8,7 +8,7 @@ new
   MarketIndex, indexState,
   MarketDirectory, directoryState,
   MarketFactory, TradabilityGate, ListingViews,
-  marketNow, marketVerifier, marketOracle, stageMarket, activatePool,
+  marketNow, marketVerifier, marketOracle, stageMarket, activatePool, marketTransition,
   marketAuth,
   rl(`rho:registry:lookup`),
   rs(`rho:registry:insertArbitrary`),
@@ -60,6 +60,18 @@ in {
           }
         }
       }
+    }
+  } |
+
+  contract marketTransition(@from, @to, ret) = {
+    if (from == "active") {
+      if (to == "paused" || to == "delisted") { ret!(true) }
+      else { ret!(false) }
+    } else {
+      if (from == "paused") {
+        if (to == "active" || to == "delisted") { ret!(true) }
+        else { ret!(false) }
+      } else { ret!(false) }
     }
   } |
 
@@ -328,7 +340,7 @@ in {
   } |
 
   contract MarketIndex(@"setStatus", @marketId, @status, @nonce, @sigs, ret) = {
-    new gCh, vCh in {
+    new gCh, vCh, tCh in {
       rl!(`__ROOT_URI__`, *gCh) |
       for (Root <- gCh) {
         Root!("resolve", "component:governor", 1, *vCh) |
@@ -345,10 +357,17 @@ in {
                       match s.get("markets").get(marketId) {
                         Nil => { indexState!(s) | ret!((false, "no market")) }
                         record => {
-                          indexState!(s.set("markets",
-                            s.get("markets").set(marketId, record.set("status", status)))
-                            .set("rev", s.get("rev") + 1)) |
-                          ret!((true, status))
+                          marketTransition!(record.get("status"), status, *tCh) |
+                          for (@ok <- tCh) {
+                            if (ok == false) {
+                              indexState!(s) | ret!((false, "transition"))
+                            } else {
+                              indexState!(s.set("markets",
+                                s.get("markets").set(marketId, record.set("status", status)))
+                                .set("rev", s.get("rev") + 1)) |
+                              ret!((true, status))
+                            }
+                          }
                         }
                       }
                     }

@@ -7,7 +7,7 @@
 new
   TransferBook,
   TransferContract,
-  transferNow,
+  transferNow, bookAmount,
   rl(`rho:registry:lookup`),
   rs(`rho:registry:insertArbitrary`),
   revAddress(`rho:rev:address`),
@@ -32,6 +32,27 @@ in {
     }
   } |
 
+  contract bookAmount(@assetId, payment, ret) = {
+    new rCh, resCh, ac, issuerCh in {
+      rl!(`__ROOT_URI__`, *rCh) |
+      for (Root <- rCh) {
+        Root!("resolve", "component:asset-resolver", 1, *resCh) |
+        for (@(true, resUri, _) <- resCh) {
+          rl!(resUri, *ac) |
+          for (AssetResolver <- ac) {
+            AssetResolver!("issuer", assetId, *issuerCh) |
+            for (@ir <- issuerCh) {
+              match ir {
+                (true, _, issuer) => { @issuer!("getAmountOf", *payment, *ret) }
+                _ => { ret!(ir) }
+              }
+            }
+          }
+        }
+      }
+    }
+  } |
+
   contract TransferBook(@"send", @senderId, @id, recipientFacet, refundFacet,
                         @assetId, @amount, payment, @secretHash, @expiry, ret) = {
     if (amount <= 0) { ret!((false, "amount")) }
@@ -41,11 +62,25 @@ in {
         for (@now <- nowCh) {
           if (expiry <= now) { ret!((false, "expiry")) }
           else {
+            new amtCh in {
+            bookAmount!(assetId, *payment, *amtCh) |
+            for (@measured <- amtCh) {
+              match measured {
+                (true, actual) => {
+                  if (actual != amount) {
+                    ret!((false, "amount mismatch", *payment))
+                  } else {
             new TransferContract, transferState, uCh in {
                     contract TransferContract(@"claim", @secret, ret2) = {
+                      new nowCh in {
+                      transferNow!(*nowCh) |
+                      for (@now <- nowCh) {
                       for (@ts <- transferState) {
                         match ts.get("status") {
                           "open" => {
+                            if (now >= expiry) {
+                              transferState!(ts) | ret2!((false, "expired"))
+                            } else {
                             new rCh, ccCh, hCh in {
                               rl!(`__ROOT_URI__`, *rCh) |
                               for (Root <- rCh) {
@@ -75,10 +110,12 @@ in {
                               }
                             }
                           }
+                            }
                           _ => { transferState!(ts) | ret2!((false, "closed")) }
                         }
                       }
-                    } |
+                      }
+                      } } |
 
                     contract TransferContract(@"refund", dId, ret2) = {
                       for (@ts <- transferState) {
@@ -145,6 +182,12 @@ in {
               transferState!({"status": "open"}) |
               rs!(bundle+{*TransferContract}, *uCh) |
               for (@uri <- uCh) { ret!((true, id, uri)) }
+            }
+          }
+                  }
+                _ => { ret!((false, "asset", *payment)) }
+              }
+            }
             }
           }
         }
