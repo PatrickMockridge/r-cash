@@ -537,8 +537,16 @@ impl Client {
     ) -> Result<i64, ChainError> {
         // Preflight the feed before either side leaves the account.
         self.v4_quote(pool_uri, "b2q", 1).await?;
+        // A funded lock refuses the funding step after the pool has already minted the
+        // LP. Check before withdrawing either side, so a retry cannot strand the seed.
+        let lock_state = self.v4_lock_info(lock_uri).await?;
+        if lock_state.funded || lock_state.released || lock_state.cancelled {
+            return Err(ChainError::Refused(
+                "seed lock is already funded or closed".into(),
+            ));
+        }
         let body = format!(
-            "new wb, wq, pCh, aCh, lCh, fCh, d1, d2 in {{ \
+            "new wb, wq, pCh, aCh, lCh, fCh, rCh, rb, db, dq in {{ \
              @account!(\"withdraw\", *deployerId, {base_lit}, {base_amount}, *wb) | \
              for (@(true, basePayment) <- wb) {{ \
                @account!(\"withdraw\", *deployerId, {quote_lit}, {quote_amount}, *wq) | \
@@ -552,6 +560,15 @@ impl Client {
                                    {until_height}, *fCh) | \
                      for (@f <- fCh) {{ match f {{ \
                        (true, _) => deployId!((true, shares)) \
+                       (false, reason, lpPayment) => {{ \
+                         rl!(`{pool_uri}`, *rCh) | for (FxPool2 <- rCh) {{ \
+                         FxPool2!(\"removeLiquidity\", lpPayment, 0, 0, *rb) | \
+                         for (@rr2 <- rb) {{ match rr2 {{ \
+                           (true, baseBack, quoteBack) => {{ \
+                             @account!(\"deposit\", *deployerId, {base_lit}, baseBack, *db) | \
+                             @account!(\"deposit\", *deployerId, {quote_lit}, quoteBack, *dq) | \
+                             for (@_ <- db; @_ <- dq) {{ deployId!((false, reason)) }} }} \
+                           _ => deployId!((false, reason)) }} }} }} }} \
                        _ => deployId!(f) }} }} }} }} \
                    _ => deployId!(1 / 0) }} }} }} }} }} }}",
             base_lit = terms::s(base_asset)?,

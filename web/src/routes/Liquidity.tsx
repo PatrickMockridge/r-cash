@@ -207,7 +207,14 @@ export default function Liquidity() {
         {error && <p className="error">{error}</p>}
         {message && <p className="ok">{message}</p>}
         <div className="row gap">
-          <button className="primary" onClick={add} disabled={busy || !slot.data}>
+          <button
+            className="primary"
+            onClick={add}
+            disabled={
+              busy || !slot.data || !lock.data ||
+              lock.data.funded || lock.data.released || lock.data.cancelled
+            }
+          >
             {busy ? "Working…" : "Add and lock"}
           </button>
           <button
