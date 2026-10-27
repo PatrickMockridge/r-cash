@@ -59,10 +59,10 @@ def main() -> int:
     params = ('{"mcrBps": 20000, "bonusBps": 800, "closeFactorBps": 5000, '
               '"ratePerBlock": 3171, "debtCeiling": 10000000000000, '
               '"minDebt": 1000000, "maxDebt": 10000000000000, '
-              '"maxOracleAge": 50}')
+              '"maxOracleAge": 50, "savingsShareBps": 5000, "psmFeeBps": 10}')
     values = [currency, "20000", "800", "5000", "3171", "10000000000000",
-              "1000000", "10000000000000", "50"]
-    params_hash = blake2b256(canonical("rcash:stablecoin-params:v1", values))
+              "1000000", "10000000000000", "50", "5000", "10"]
+    params_hash = blake2b256(canonical("rcash:stablecoin-params:v2", values))
     payload = f"rcash:stablecoin-create:v1|{currency}|{params_hash}|{sponsor}"
     sig = sign_payload.sign_payload(keys["sponsor"]["secret"],
                                     payload.encode())["signature"]
@@ -75,7 +75,8 @@ def main() -> int:
         "__SPONSOR_SIG__": sig,
     })
     system = deploy_system(term, secret)
-    sc_uri, custody_uri, params_uri, vault_uri, liq_uri, savings_uri, psm_uri, att_reply = system
+    (sc_uri, custody_uri, params_uri, vault_uri, liq_uri, savings_uri,
+     psm_uri, buffer_uri, att_reply) = system
     attest = att_reply[1]
     check("stablecoin attestation", attest.get("currency"), currency)
     check("stablecoin params hash", attest.get("paramsHash"), params_hash)
@@ -104,15 +105,15 @@ def main() -> int:
     # Currency listing: sponsor signature + live attestation + directory.
     currency_registry = state["currency_registry_uri"]
     directory = state["stablecoin_directory_uri"]
-    listing = (f"rcash:currency-register:v2|{currency}|{sc_uri}|{custody_uri}|"
+    listing = (f"rcash:currency-register:v3|{currency}|{sc_uri}|{custody_uri}|"
                f"{params_uri}|{vault_uri}|{liq_uri}|{savings_uri}|{psm_uri}|"
-               f"{params_hash}|{sponsor}")
+               f"{buffer_uri}|{params_hash}|{sponsor}")
     listing_sig = sign_payload.sign_payload(keys["sponsor"]["secret"],
                                             listing.encode())["signature"]
     register_body = (
         f'CurrencyRegistry!("register", "{currency}", "{sc_uri}", "{custody_uri}", '
         f'"{params_uri}", "{vault_uri}", "{liq_uri}", "{savings_uri}", "{psm_uri}", '
-        f'"{params_hash}", "{sponsor}", '
+        f'"{buffer_uri}", "{params_hash}", "{sponsor}", '
         f'"{listing_sig}".hexToBytes(), *r) |\n'
         "  for (@x <- r) {\n"
         "    match x {\n"
@@ -127,6 +128,9 @@ def main() -> int:
     if fresh_listing:
         check("currency entry status", listed[1].get("status"), "active")
         check("currency entry stablecoin", listed[1].get("stablecoinUri"), sc_uri)
+        check("currency entry savings", listed[1].get("savingsUri"), savings_uri)
+        check("currency entry psm", listed[1].get("psmUri"), psm_uri)
+        check("currency entry buffer", listed[1].get("bufferUri"), buffer_uri)
     else:
         # One system per currency: a previous run on this chain already listed it.
         print("currency already listed; checking the existing entry")
@@ -146,15 +150,15 @@ def main() -> int:
     duplicate = one(call(currency_registry, "CurrencyRegistry", register_body), secret)
     check("duplicate listing refused", duplicate[0], False)
 
-    bad_listing = (f"rcash:currency-register:v2|V4U|{sc_uri}|{custody_uri}|"
+    bad_listing = (f"rcash:currency-register:v3|V4U|{sc_uri}|{custody_uri}|"
                    f"{params_uri}|{vault_uri}|{liq_uri}|{savings_uri}|{psm_uri}|"
-                   f"{params_hash}|{sponsor}")
+                   f"{buffer_uri}|{params_hash}|{sponsor}")
     bad_sig = sign_payload.sign_payload(keys["reporter1"]["secret"],
                                         bad_listing.encode())["signature"]
     bad_body = (
         f'CurrencyRegistry!("register", "V4U", "{sc_uri}", "{custody_uri}", '
         f'"{params_uri}", "{vault_uri}", "{liq_uri}", "{savings_uri}", "{psm_uri}", '
-        f'"{params_hash}", "{sponsor}", '
+        f'"{buffer_uri}", "{params_hash}", "{sponsor}", '
         f'"{bad_sig}".hexToBytes(), *r) |\n'
         "  for (@x <- r) {\n"
         "    match x {\n"
@@ -213,6 +217,8 @@ def main() -> int:
     }.items():
         savings_text = savings_text.replace(key, value)
     savings_result = one(minify(savings_text), keys["key13"]["secret"])
+    if isinstance(savings_result, tuple) and savings_result[0] is False:
+        print("savings raw:", savings_result)
     check("savings shares", savings_result[0], 100000000)
     check("savings withdrawn", savings_result[1], 100000000)
 

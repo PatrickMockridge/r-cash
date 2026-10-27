@@ -53,16 +53,44 @@ in {
     }
   } |
 
+  // Validate the send bounds before measuring or escrowing anything. Every
+  // refusal returns the caller's payment so the account can restore custody.
+  contract bookSendCheck(@bp, @amount, @expiry, @memo, @opId, @stipend, payment, ret) = {
+    new nowCh in {
+      transferNow!(*nowCh) |
+      for (@now <- nowCh) {
+        if (amount <= 0 || amount < bp.get("minAmount")) {
+          ret!((false, "amount", *payment))
+        } else {
+          if (expiry <= now || expiry > now + bp.get("maxExpiryBlocks")) {
+            ret!((false, "expiry", *payment))
+          } else {
+            if (memo.toUtf8Bytes().length() > bp.get("maxMemoBytes")) {
+              ret!((false, "memo", *payment))
+            } else {
+              if (opId.toUtf8Bytes().length() > bp.get("maxOpIdBytes")) {
+                ret!((false, "opId", *payment))
+              } else {
+                if (stipend < 0 || stipend > bp.get("maxStipend")) {
+                  ret!((false, "stipend", *payment))
+                } else { ret!((true, Nil)) }
+              }
+            }
+          }
+        }
+      }
+    }
+  } |
+
   contract TransferBook(@"send", @senderId, @id, recipientFacet, refundFacet,
-                        @assetId, @amount, payment, @secretHash, @expiry, ret) = {
+                        @assetId, @amount, payment, @secretHash, @expiry,
+                        @memo, @opId, @stipend, ret) = {
     for (@bp <<- bookParamsState) {
-    if (amount <= 0 || amount < bp.get("minAmount")) { ret!((false, "amount")) }
-    else {
-      new nowCh in {
-        transferNow!(*nowCh) |
-        for (@now <- nowCh) {
-          if (expiry <= now || expiry > now + bp.get("maxExpiryBlocks")) { ret!((false, "expiry")) }
-          else {
+      new checkCh in {
+        bookSendCheck!(bp, amount, expiry, memo, opId, stipend, *payment, *checkCh) |
+        for (@ck <- checkCh) {
+          match ck {
+            (true, Nil) => {
             new amtCh in {
             bookAmount!(assetId, *payment, *amtCh) |
             for (@measured <- amtCh) {
@@ -99,7 +127,9 @@ in {
                                           new dCh in {
                                             recipientFacet!("deposit", *payment, *dCh) |
                                             for (@d <- dCh) {
-                                              transferState!({"status": "claimed"}) |
+                                              transferState!({"status": "claimed",
+                                                "memo": memo, "opId": opId,
+                                                "stipend": stipend}) |
                                               ret2!(d)
                                             }
                                           }
@@ -147,7 +177,9 @@ in {
                                                 new dCh in {
                                                   refundFacet!("deposit", *payment, *dCh) |
                                                   for (@d <- dCh) {
-                                                    transferState!({"status": "refunded"}) |
+                                                    transferState!({"status": "refunded",
+                                                      "memo": memo, "opId": opId,
+                                                      "stipend": stipend}) |
                                                     ret2!(d)
                                                   }
                                                 }
@@ -175,12 +207,16 @@ in {
                           "amount": amount,
                           "secretHash": secretHash,
                           "expiry": expiry,
-                          "status": ts.get("status")
+                          "status": ts.get("status"),
+                          "memo": ts.get("memo"),
+                          "opId": ts.get("opId"),
+                          "stipend": ts.get("stipend")
                         }))
                       }
                     } |
 
-              transferState!({"status": "open"}) |
+              transferState!({"status": "open", "memo": memo, "opId": opId,
+                              "stipend": stipend}) |
               rs!(bundle+{*TransferContract}, *uCh) |
               for (@uri <- uCh) { ret!((true, id, uri)) }
             }
@@ -191,10 +227,11 @@ in {
             }
             }
           }
+          _ => { ret!(ck) }
         }
       }
     }
-    }
+  }
   } |
 
   bookParamsState!(__BOOK_PARAMS__) |

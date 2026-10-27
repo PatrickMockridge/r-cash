@@ -17,22 +17,20 @@ product code.
 
 ## Adding a currency
 
-1. Deploy a stablecoin issuer system with:
-   - a fresh `makeIssuerKit` (local stablecoin),
-   - the existing `OracleHub`,
-   - the existing `AccountFactory`,
-   - the issuer, custody, vault book, liquidation engine and risk-parameter contracts,
-   - the admin public keys (2-of-3) and the starter parameters.
-2. Register the system in `StablecoinDirectory` and `CurrencyRegistry` with the sponsor
-   signature and the live attestation; `AssetResolver` derives the asset metadata.
-3. Add reporter prices for the new code (signed `oracle.submit`).
-4. Deploy a corridor pool (FPMM, optionally a CPMM backup) and register it as
-   `component:pool:<BASE>/<QUOTE>:fpmm`.
-5. Register on/off-ramp partners in `RampRegistry` for the new corridor.
-6. Seed liquidity from the stablecoin issuer or an LP.
+1. Deploy `31_stablecoin` with the sponsor's signed v2 params. The one deploy creates the
+   issuer, custody, risk parameters, vault book, liquidation engine, surplus buffer,
+   savings pool and PSM, and returns eight URIs.
+2. Register the system in `CurrencyRegistry`/`StablecoinDirectory` with the sponsor
+   signature over the v3 payload (all eight URIs, params hash and sponsor) and the live
+   attestation; `AssetResolver` derives the asset metadata.
+3. Add reporter prices for the new code (signed `oracle.submit`) and bind the feed.
+4. Create the market with `MarketFactory.createMarket` from sponsor-signed 25-field terms,
+   seed it, fund the lock and activate it (or trade through the PSM alone).
+5. Seed liquidity from the issuer, an LP, or the PSM's REV buffer.
 
-No new product code is required: `TransferBook`, `PaymentRequests` and the Router resolve the new
-currency and pool through the Directory.
+No new product code is required: `TransferBook`, `FxPool`, `SavingsPool`,
+`PegStabilityModule` and the clients resolve the new currency through the registries.
+On/off-ramp partners are outside this scope; there is no `RampRegistry`.
 
 ## Direct pairs only (for now)
 

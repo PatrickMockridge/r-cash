@@ -1,8 +1,27 @@
 # Savings, surplus and redemption (DAI-shaped)
 
-Status: design for the v0.5 economics. This is the DAI loop applied per currency; it is not
-a new mechanism. The components are created in the same `31_stablecoin` deploy as the
-issuer and hold only ERTP purses and the capabilities passed at creation.
+> **Status: non-normative historical design note.** The normative behaviour is
+> `docs/SPEC.md` §7–§11 and `docs/spec/20-INVARIANTS.md` (S3, S6, S9–S12). Where this note
+> differs, the specification governs. Corrections since the draft:
+>
+> - Interest is deposited into the `SurplusBuffer`, not sent directly to `SavingsPool`.
+>   The repay waterfall is `settle → cover(0) → paySavings` in one deploy; solvency before
+>   yield.
+> - `paySavings` is automatic on repay, moves `floor(surplus · savingsShareBps / 10000)`,
+>   and skips an empty savings pool so interest is not stranded.
+> - `savingsShareBps` and `psmFeeBps` are genesis fields of the signed params v2, not
+>   hard-coded or seeded to zero.
+> - `totalAccruedInterest` is net unsettled interest; S3 is
+>   `totalDebt + sin + psmDebt = supply + totalAccruedInterest`, with `sin` outstanding and
+>   `psmDebt` signed.
+> - The PSM charges a configurable fee on both sides (floor gross, ceil fee), keeps fees in
+>   its REV purse, and `stableDebt` may go negative: that is par redemption of vault-issued
+>   stablecoin.
+> - No MKR analogue, no debt auction and no recapitalisation token. Bad debt is an
+>   accounting residual absorbed by the surplus buffer; residual `sin` halts new minting.
+
+The components are created in the same `31_stablecoin` deploy as the issuer and hold only
+ERTP purses and the capabilities passed at creation.
 
 | r-cash | DAI | Role |
 |---|---|---|

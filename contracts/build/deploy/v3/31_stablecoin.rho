@@ -14,8 +14,10 @@ new
   SurplusBuffer, bufferState,
   PegStabilityModule, psmState,
   callerOwner, bufferCancelled,
-  stablecoinCheck, vaultLiquidateCommit,
+  stablecoinCheck, vaultLiquidateCommit, vaultWriteOff, repayCommit, vaultMintCommit,
   vaultNow, vaultPrice, vaultMath, vaultUpdate, vaultGovernor, vaultAccountFactory,
+  vaultCodec, vaultBounds, paramsValues, feeCeil,
+  psmSellCommit, psmBuyCommit,
   rl(`rho:registry:lookup`),
   rs(`rho:registry:insertArbitrary`),
   bd(`rho:block:data`),
@@ -59,7 +61,7 @@ in {
                       for (@bz <- bzCh) {
                         match bz {
                           (true, Nil) => {
-                            Codec!("hash", "rcash:stablecoin-params:v1",
+                            Codec!("hash", "rcash:stablecoin-params:v2",
                                    [currency,
                                     params.get("mcrBps").toString(),
                                     params.get("bonusBps").toString(),
@@ -68,7 +70,9 @@ in {
                                     params.get("debtCeiling").toString(),
                                     params.get("minDebt").toString(),
                                     params.get("maxDebt").toString(),
-                                    params.get("maxOracleAge").toString()], *hCh) |
+                                    params.get("maxOracleAge").toString(),
+                                    params.get("savingsShareBps").toString(),
+                                    params.get("psmFeeBps").toString()], *hCh) |
                             for (@h <- hCh) {
                               if (h != paramsHash.hexToBytes()) {
                                 ret!((false, "params hash"))
@@ -157,6 +161,136 @@ in {
     }
   } |
 
+  contract vaultCodec(ret2) = {
+    new rCh, cCh in {
+      rl!(`__ROOT_URI__`, *rCh) |
+      for (Root <- rCh) {
+        Root!("resolve", "component:codec", 1, *cCh) |
+        for (@(true, codecUri, v) <- cCh) {
+          new cc in {
+            rl!(codecUri, *cc) |
+            for (Codec <- cc) { ret2!(*Codec) }
+          }
+        }
+      }
+    }
+  } |
+
+  contract vaultBounds(ret2) = {
+    new rCh, bCh in {
+      rl!(`__ROOT_URI__`, *rCh) |
+      for (Root <- rCh) {
+        Root!("resolve", "component:bounds", 1, *bCh) |
+        for (@(true, boundsUri, v) <- bCh) {
+          new bc in {
+            rl!(boundsUri, *bc) |
+            for (Bounds <- bc) { ret2!(*Bounds) }
+          }
+        }
+      }
+    }
+  } |
+
+  // Fee ceiling in basis points, rounded up so the protocol never undercharges.
+  contract feeCeil(@amount, @bps, ret2) = {
+    ret2!(((amount * bps + 9999) / 10000).toInt())
+  } |
+
+  // PSM sell commit: burn the stablecoin, pay the net REV, then update the
+  // signed debt. The fee stays in the REV purse because only revOut leaves.
+  contract psmSellCommit(@amount, @revOut, @feeRev, @st, payment, revFacet, ret2) = {
+    new bCh, wCh, depCh in {
+      Stablecoin!("burn", *payment, amount, *psmBurnAuth, *bCh) |
+      for (@b <- bCh) {
+        match b {
+          (true, _, _) => {
+            @psmRevPurse!("withdraw", (revBrand, revOut), *wCh) |
+            for (@w <- wCh) {
+              match w {
+                (true, revPayment) => {
+                  revFacet!("deposit", revPayment, *depCh) |
+                  for (@dep <- depCh) {
+                    match dep {
+                      (true, _) => {
+                        for (@s2 <- psmState) {
+                          if (s2.get("rev") != st.get("rev")) { ret2!(1 / 0) }
+                          else {
+                            psmState!(s2.set("stableDebt",
+                              s2.get("stableDebt") - amount)
+                              .set("rev", s2.get("rev") + 1)) |
+                            ret2!((true, revOut, feeRev))
+                          }
+                        }
+                      }
+                      _ => { ret2!(1 / 0) }
+                    }
+                  }
+                }
+                _ => { ret2!(1 / 0) }
+              }
+            }
+          }
+          _ => { ret2!((false, "burn", *payment)) }
+        }
+      }
+    }
+  } |
+
+  // PSM buy commit: deposit the full REV, mint only the net stablecoin, then
+  // update the signed debt. The fee is retained as extra REV backing.
+  contract psmBuyCommit(@stableOut, @fee, @st, payment, stableFacet, ret2) = {
+    new dCh, mCh, depCh in {
+      @psmRevPurse!("deposit", *payment, *dCh) |
+      for (@d <- dCh) {
+        match d {
+          (true, _) => {
+            Stablecoin!("mint", stableOut, *psmMintAuth, *mCh) |
+            for (@m <- mCh) {
+              match m {
+                (true, stablePayment, _) => {
+                  stableFacet!("deposit", stablePayment, *depCh) |
+                  for (@dep <- depCh) {
+                    match dep {
+                      (true, _) => {
+                        for (@s2 <- psmState) {
+                          if (s2.get("rev") != st.get("rev")) { ret2!(1 / 0) }
+                          else {
+                            psmState!(s2.set("stableDebt",
+                              s2.get("stableDebt") + stableOut)
+                              .set("rev", s2.get("rev") + 1)) |
+                            ret2!((true, stableOut, fee))
+                          }
+                        }
+                      }
+                      _ => { ret2!(1 / 0) }
+                    }
+                  }
+                }
+                _ => { ret2!(1 / 0) }
+              }
+            }
+          }
+          _ => { ret2!((false, "deposit", *payment)) }
+        }
+      }
+    }
+  } |
+
+  // Canonical params values in the v2 order, from a params map.
+  contract paramsValues(@p, ret2) = {
+    ret2!([currency,
+           p.get("mcrBps").toString(),
+           p.get("bonusBps").toString(),
+           p.get("closeFactorBps").toString(),
+           p.get("ratePerBlock").toString(),
+           p.get("debtCeiling").toString(),
+           p.get("minDebt").toString(),
+           p.get("maxDebt").toString(),
+           p.get("maxOracleAge").toString(),
+           p.get("savingsShareBps").toString(),
+           p.get("psmFeeBps").toString()])
+  } |
+
   contract vaultAccountFactory(ret2) = {
     new rCh, aCh in {
       rl!(`__ROOT_URI__`, *rCh) |
@@ -198,6 +332,49 @@ in {
     }
   } |
 
+  // Write-off commit: book the cumulative badDebt memo, add the shortfall to
+  // the buffer's outstanding sin and let cover burn min(surplus, sin), then
+  // clear the vault and totals. A rev mismatch after cover fails the deploy so
+  // the cover burn and the vault write roll back together.
+  contract vaultWriteOff(@s2, @v2, @ownerId, @now2, @accrued, @amount, @seized,
+                         paymentOut, ret2) = {
+    new coverCh, nsCh in {
+      SurplusBuffer!("cover", accrued - amount, *bufferCoverAuth, *coverCh) |
+      for (@cv <- coverCh) {
+        match cv {
+          (true, cancelled, sinOut) => {
+            vaultUpdate!(s2, ownerId, {
+              "auth": v2.get("auth"),
+              "collateral": 0,
+              "debt": 0,
+              "lastHeight": now2
+            }, s2.get("totalDebt") - v2.get("debt"),
+            s2.get("totalAccruedInterest") + (accrued - v2.get("debt")),
+            s2.get("totalCollateral") - seized,
+            s2.get("badDebt") + (accrued - amount),
+            s2.get("rev") + 1, *nsCh) |
+            for (@ns <- nsCh) {
+              for (@s3 <- vaultState) {
+                if (s3.get("rev") != s2.get("rev")) { ret2!(1 / 0) }
+                else {
+                  vaultState!(ns) |
+                  ret2!((true, paymentOut, {
+                    "repaid": amount,
+                    "seized": seized,
+                    "badDebt": accrued - amount,
+                    "cancelled": cancelled,
+                    "sin": sinOut
+                  }))
+                }
+              }
+            }
+          }
+          _ => { ret2!(1 / 0) }
+        }
+      }
+    }
+  } |
+
   // Effect-then-commit liquidation: burn the liquidator's stablecoin, seize REV
   // from custody, then write the vault and totals in one cell update. Any
   // refusal aborts the deploy, so a half-settled liquidation cannot persist.
@@ -220,29 +397,8 @@ in {
                       match w {
                         (true, paymentOut) => {
                           if (writeOff == true) {
-                            vaultUpdate!(s2, ownerId, {
-                              "auth": v2.get("auth"),
-                              "collateral": 0,
-                              "debt": 0,
-                              "lastHeight": now2
-                            }, s2.get("totalDebt") - v2.get("debt"),
-                            s2.get("totalAccruedInterest") + (accrued - v2.get("debt")),
-                            s2.get("totalCollateral") - seized,
-                            s2.get("badDebt") + (accrued - amount),
-                            s2.get("rev") + 1, *nsCh) |
-                            for (@ns <- nsCh) {
-                              for (@s3 <- vaultState) {
-                                if (s3.get("rev") != s2.get("rev")) { ret2!(1 / 0) }
-                                else {
-                                  vaultState!(ns) |
-                                  ret2!((true, paymentOut, {
-                                    "repaid": amount,
-                                    "seized": seized,
-                                    "badDebt": accrued - amount
-                                  }))
-                                }
-                              }
-                            }
+                            vaultWriteOff!(s2, v2, ownerId, now2, accrued, amount,
+                                           seized, paymentOut, *ret2)
                           } else {
                             vaultUpdate!(s2, ownerId, {
                               "auth": v2.get("auth"),
@@ -274,6 +430,125 @@ in {
                     }
                   }
                   _ => { ret2!(1 / 0) }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  } |
+
+  // Repay commit: settle the measured payment (burn principal, deposit interest),
+  // absorb outstanding sin against the new surplus, pay the savings share, then
+  // write the vault and totals once. Every step is in the same deploy; a rev
+  // mismatch fails the deploy so the burn and transfers roll back together.
+  contract repayCommit(@s, @v, @ownerId, @now2, @accrued, @amount,
+                       @interestPaid, @principalPaid, payment, ret2) = {
+    new settleCh, coverCh, payCh in {
+      Stablecoin!("settle", *payment, principalPaid, interestPaid,
+                  *settlementAuth, *settleCh) |
+      for (@st <- settleCh) {
+        match st {
+          (true, p, i) => {
+            SurplusBuffer!("cover", 0, *bufferCoverAuth, *coverCh) |
+            for (@cv <- coverCh) {
+              match cv {
+                (true, cancelled, sinOut) => {
+                  SurplusBuffer!("paySavings", *bufferPayAuth, *payCh) |
+                  for (@pv <- payCh) {
+                    match pv {
+                      (true, moved, left) => {
+                        for (@s2 <- vaultState) {
+                          match s2.get("vaults").get(ownerId) {
+                            Nil => { ret2!(1 / 0) }
+                            v2 => {
+                              if (v2.get("auth") != v.get("auth")
+                                  || s2.get("rev") != s.get("rev")) {
+                                ret2!(1 / 0)
+                              } else {
+                                new nsCh in {
+                                  vaultUpdate!(s2, ownerId, {
+                                    "auth": v2.get("auth"),
+                                    "collateral": v2.get("collateral"),
+                                    "debt": accrued - amount,
+                                    "lastHeight": now2
+                                  }, s2.get("totalDebt")
+                                     + (accrued - v2.get("debt")) - amount,
+                                  s2.get("totalAccruedInterest")
+                                     + (accrued - v2.get("debt")) - interestPaid,
+                                  s2.get("totalCollateral"),
+                                  s2.get("badDebt"),
+                                  s2.get("rev") + 1, *nsCh) |
+                                  for (@ns <- nsCh) {
+                                    vaultState!(ns) |
+                                    ret2!((true, {
+                                      "debt": accrued - amount,
+                                      "repaid": amount,
+                                      "principalPaid": principalPaid,
+                                      "interestPaid": interestPaid,
+                                      "cancelled": cancelled,
+                                      "savingsPaid": moved
+                                    }))
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                      _ => { ret2!(1 / 0) }
+                    }
+                  }
+                }
+                _ => { ret2!(1 / 0) }
+              }
+            }
+          }
+          _ => { ret2!(st) }
+        }
+      }
+    }
+  } |
+
+  // Mint commit: revalidate the vault and the buffer halt after the price and
+  // health work, write the vault and totals, then mint. A mint refusal fails the
+  // deploy so the vault update rolls back.
+  contract vaultMintCommit(@s, @v, @ownerId, @now2, @accrued, @amount, ret2) = {
+    new payCh, nsCh in {
+      for (@s2 <- vaultState; @b2 <- bufferState) {
+        match s2.get("vaults").get(ownerId) {
+          Nil => { ret2!(1 / 0) }
+          v2 => {
+            if (v2.get("auth") != v.get("auth")
+                || s2.get("rev") != s.get("rev")
+                || s2.get("paused")) {
+              ret2!(1 / 0)
+            } else {
+              if (b2.get("sin") > b2.get("surplus")) {
+                ret2!((false, "recapitalise"))
+              } else {
+                vaultUpdate!(s2, ownerId, {
+                  "auth": v2.get("auth"),
+                  "collateral": v2.get("collateral"),
+                  "debt": accrued + amount,
+                  "lastHeight": now2
+                }, s2.get("totalDebt") + (accrued - v2.get("debt")) + amount,
+                s2.get("totalAccruedInterest") + (accrued - v2.get("debt")),
+                s2.get("totalCollateral"),
+                s2.get("badDebt"),
+                s2.get("rev") + 1, *nsCh) |
+                for (@ns <- nsCh) {
+                  Stablecoin!("mint", amount, *mintAuth, *payCh) |
+                  for (@p <- payCh) {
+                    match p {
+                      (true, payment, supply) => {
+                        vaultState!(ns) |
+                        ret2!((true, payment, accrued + amount))
+                      }
+                      _ => { ret2!(1 / 0) }
+                    }
+                  }
                 }
               }
             }
@@ -336,20 +611,24 @@ in {
           if (s.get("totalPrincipal") + amount > s.get("maxSupply")) {
             ret2!((false, "max supply"))
           } else {
-            for (@s2 <- issuerState) {
+            for (@s2 <- issuerState; @b2 <- bufferState) {
               if (s2.get("totalPrincipal") != s.get("totalPrincipal")) {
                 issuerState!(s2) | ret2!((false, "changed"))
               } else {
-                new payCh in {
-                  @mint!("mintPayment", (brand, amount), *payCh) |
-                  for (@p <- payCh) {
-                    match p {
-                      (true, payment) => {
-                        issuerState!(s2.set("totalPrincipal",
-                          s2.get("totalPrincipal") + amount)) |
-                        ret2!((true, payment, s2.get("totalPrincipal") + amount))
+                if (b2.get("sin") > b2.get("surplus")) {
+                  issuerState!(s2) | ret2!((false, "recapitalise"))
+                } else {
+                  new payCh in {
+                    @mint!("mintPayment", (brand, amount), *payCh) |
+                    for (@p <- payCh) {
+                      match p {
+                        (true, payment) => {
+                          issuerState!(s2.set("totalPrincipal",
+                            s2.get("totalPrincipal") + amount)) |
+                          ret2!((true, payment, s2.get("totalPrincipal") + amount))
+                        }
+                        _ => { ret2!(1 / 0) }
                       }
-                      _ => { ret2!(1 / 0) }
                     }
                   }
                 }
@@ -546,7 +825,94 @@ in {
   contract RiskParameters(@"info", ret2) = {
     for (@s <<- paramsState) {
       ret2!((true, {"params": s.get("params"), "paramsHash": paramsHash,
-                    "genesis": params, "rev": s.get("rev")}))
+                    "currentHash": s.get("hash"), "genesis": params,
+                    "rev": s.get("rev")}))
+    }
+  } |
+
+  contract RiskParameters(@"scheduleParams", @newParams, @nonce, @sigs, ret2) = {
+    new boundsCapCh, bzCh, pvCh, codecCh, argsCh, govCh, sCh in {
+      vaultBounds!(*boundsCapCh) |
+      for (Bounds <- boundsCapCh) {
+        Bounds!("checkIssuer", newParams, *bzCh) |
+        for (@bz <- bzCh) {
+          match bz {
+            (true, Nil) => {
+              paramsValues!(newParams, *pvCh) |
+              for (@values <- pvCh) {
+                vaultCodec!(*codecCh) |
+                for (Codec <- codecCh) {
+                  Codec!("canonical", "rcash:stablecoin-params:v2", values, *argsCh) |
+                  for (@argsHash <- argsCh) {
+                    vaultGovernor!(*govCh) |
+                    for (Governor <- govCh) {
+                      Governor!("schedule", "stablecoin:" ++ currency, nonce,
+                                "setRiskParams", argsHash, newParams, sigs, *sCh) |
+                      for (@gv <- sCh) {
+                        match gv {
+                          (true, readyAt) => { ret2!((true, readyAt, argsHash)) }
+                          _ => { ret2!(gv) }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            _ => { ret2!(bz) }
+          }
+        }
+      }
+    }
+  } |
+
+  contract RiskParameters(@"applyParams", @nonce, ret2) = {
+    new govCh, eCh, pvCh, codecCh, canCh, hashCh, boundsCh, bzCh in {
+      vaultGovernor!(*govCh) |
+      for (Governor <- govCh) {
+        Governor!("execute", "stablecoin:" ++ currency, nonce, *eCh) |
+        for (@ex <- eCh) {
+          match ex {
+            (true, action, argsHash, args) => {
+              if (action != "setRiskParams") { ret2!((false, "action")) }
+              else {
+                paramsValues!(args, *pvCh) |
+                for (@values <- pvCh) {
+                  vaultCodec!(*codecCh) |
+                  for (Codec <- codecCh) {
+                    Codec!("canonical", "rcash:stablecoin-params:v2", values, *canCh) |
+                    for (@canonical <- canCh) {
+                      if (canonical != argsHash) { ret2!((false, "params hash")) }
+                      else {
+                        vaultBounds!(*boundsCh) |
+                        for (Bounds <- boundsCh) {
+                          Bounds!("checkIssuer", args, *bzCh) |
+                          for (@bz <- bzCh) {
+                            match bz {
+                              (true, Nil) => {
+                                Codec!("hash", "rcash:stablecoin-params:v2", values, *hashCh) |
+                                for (@h <- hashCh) {
+                                  for (@s <- paramsState) {
+                                    paramsState!(s.set("params", args).set("hash", h)
+                                      .set("rev", s.get("rev") + 1)) |
+                                    ret2!((true, {"params": args, "currentHash": h}))
+                                  }
+                                }
+                              }
+                              _ => { ret2!(bz) }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            _ => { ret2!(ex) }
+          }
+        }
+      }
     }
   } |
 
@@ -609,7 +975,7 @@ in {
   } |
 
   contract VaultBook(@"deposit", @ownerId, @auth, payment, ret2) = {
-    for (@s <<- vaultState) {
+    for (@s <<- vaultState; @ps <- paramsState) {
       match s.get("vaults").get(ownerId) {
         Nil => { ret2!((false, "no vault")) }
         v => {
@@ -625,7 +991,7 @@ in {
                       vaultMath!(*mathCh) |
                       for (CollateralMath <- mathCh) {
                         CollateralMath!("accrue", v.get("debt"), v.get("lastHeight"),
-                                        now2, params.get("ratePerBlock"), *accCh) |
+                                        now2, ps.get("params").get("ratePerBlock"), *accCh) |
                         for (@accrued <- accCh) {
                           for (@s2 <- vaultState) {
                             match s2.get("vaults").get(ownerId) {
@@ -673,7 +1039,7 @@ in {
   contract VaultBook(@"mint", @ownerId, @auth, @amount, ret2) = {
     if (amount <= 0) { ret2!((false, "amount")) }
     else {
-      for (@s <<- vaultState) {
+      for (@s <<- vaultState; @ps <- paramsState) {
         if (s.get("paused")) { ret2!((false, "paused")) }
         else {
           match s.get("vaults").get(ownerId) {
@@ -682,7 +1048,8 @@ in {
               if (v.get("auth") != auth) { ret2!((false, "bad vault auth")) }
               else {
                 new nowCh2, rateCh, accCh, hCh, mathCh, payCh in {
-                  vaultNow!(*nowCh2) | vaultPrice!(currency, params.get("maxOracleAge"), *rateCh) |
+                  vaultNow!(*nowCh2) |
+                  vaultPrice!(currency, ps.get("params").get("maxOracleAge"), *rateCh) |
                   for (@now2 <- nowCh2; @rr <- rateCh) {
                     match rr {
                       (rate, fresh) => {
@@ -693,60 +1060,25 @@ in {
                             vaultMath!(*mathCh) |
                             for (CollateralMath <- mathCh) {
                               CollateralMath!("accrue", v.get("debt"), v.get("lastHeight"),
-                                              now2, params.get("ratePerBlock"), *accCh) |
+                                              now2, ps.get("params").get("ratePerBlock"), *accCh) |
                               for (@accrued <- accCh) {
-                                if (accrued + amount < params.get("minDebt")) {
+                                if (accrued + amount < ps.get("params").get("minDebt")) {
                                   ret2!((false, "min debt"))
                                 } else {
-                                  if (accrued + amount > params.get("maxDebt")) {
+                                  if (accrued + amount > ps.get("params").get("maxDebt")) {
                                     ret2!((false, "max debt"))
                                   } else {
                                     if (s.get("totalDebt") + (accrued - v.get("debt"))
-                                        + amount > params.get("debtCeiling")) {
+                                        + amount > ps.get("params").get("debtCeiling")) {
                                       ret2!((false, "ceiling"))
                                     } else {
                                       CollateralMath!("health", v.get("collateral"),
                                                       accrued + amount, rate,
-                                                      params.get("mcrBps"), *hCh) |
+                                                      ps.get("params").get("mcrBps"), *hCh) |
                                       for (@healthy <- hCh) {
                                         if (healthy) {
-                                          for (@s2 <- vaultState) {
-                                            match s2.get("vaults").get(ownerId) {
-                                              Nil => { ret2!(1 / 0) }
-                                              v2 => {
-                                                if (v2.get("auth") != auth
-                                                    || s2.get("rev") != s.get("rev")
-                                                    || s2.get("paused")) {
-                                                  ret2!(1 / 0)
-                                                } else {
-                                                  new nsCh in {
-                                                    vaultUpdate!(s2, ownerId, {
-                                                      "auth": v2.get("auth"),
-                                                      "collateral": v2.get("collateral"),
-                                                      "debt": accrued + amount,
-                                                      "lastHeight": now2
-                                                    }, s2.get("totalDebt") + (accrued - v2.get("debt")) + amount,
-                                                    s2.get("totalAccruedInterest") + (accrued - v2.get("debt")),
-                                                    s2.get("totalCollateral"),
-                                                    s2.get("badDebt"),
-                                                    s2.get("rev") + 1, *nsCh) |
-                                                    for (@ns <- nsCh) {
-                                                      Stablecoin!("mint", amount, *mintAuth, *payCh) |
-                                                      for (@p <- payCh) {
-                                                        match p {
-                                                          (true, payment, supply) => {
-                                                            vaultState!(ns) |
-                                                            ret2!((true, payment, accrued + amount))
-                                                          }
-                                                          _ => { ret2!(1 / 0) }
-                                                        }
-                                                      }
-                                                    }
-                                                  }
-                                                }
-                                              }
-                                            }
-                                          }
+                                          vaultMintCommit!(s, v, ownerId, now2,
+                                                           accrued, amount, *ret2)
                                         } else { ret2!((false, "below MCR")) }
                                       }
                                     }
@@ -771,7 +1103,7 @@ in {
   contract VaultBook(@"withdraw", @ownerId, @auth, @amount, ret2) = {
     if (amount <= 0) { ret2!((false, "amount")) }
     else {
-      for (@s <<- vaultState) {
+      for (@s <<- vaultState; @ps <- paramsState) {
         match s.get("vaults").get(ownerId) {
           Nil => { ret2!((false, "no vault")) }
           v => {
@@ -782,7 +1114,8 @@ in {
               if (v.get("collateral") < amount) { ret2!((false, "amount")) }
               else {
                 new nowCh2, rateCh, accCh, hCh, mathCh, payCh in {
-                  vaultNow!(*nowCh2) | vaultPrice!(currency, params.get("maxOracleAge"), *rateCh) |
+                  vaultNow!(*nowCh2) |
+                  vaultPrice!(currency, ps.get("params").get("maxOracleAge"), *rateCh) |
                   for (@now2 <- nowCh2; @rr <- rateCh) {
                     match rr {
                       (rate, fresh) => {
@@ -793,10 +1126,10 @@ in {
                             vaultMath!(*mathCh) |
                             for (CollateralMath <- mathCh) {
                               CollateralMath!("accrue", v.get("debt"), v.get("lastHeight"),
-                                              now2, params.get("ratePerBlock"), *accCh) |
+                                              now2, ps.get("params").get("ratePerBlock"), *accCh) |
                               for (@accrued <- accCh) {
                                 CollateralMath!("health", v.get("collateral") - amount,
-                                                accrued, rate, params.get("mcrBps"), *hCh) |
+                                                accrued, rate, ps.get("params").get("mcrBps"), *hCh) |
                                 for (@healthy <- hCh) {
                                   if (healthy) {
                                     for (@s2 <- vaultState) {
@@ -852,56 +1185,42 @@ in {
   } |
 
   contract VaultBook(@"repay", @ownerId, @auth, payment, ret2) = {
-    for (@s <<- vaultState) {
+    for (@s <<- vaultState; @ps <- paramsState) {
       match s.get("vaults").get(ownerId) {
         Nil => { ret2!((false, "no vault")) }
         v => {
           if (v.get("auth") != auth) { ret2!((false, "bad vault auth")) }
           else {
-            new nowCh2, accCh, mathCh, burnCh in {
-              vaultNow!(*nowCh2) |
-              for (@now2 <- nowCh2) {
-                vaultMath!(*mathCh) |
-                for (CollateralMath <- mathCh) {
-                  CollateralMath!("accrue", v.get("debt"), v.get("lastHeight"),
-                                  now2, params.get("ratePerBlock"), *accCh) |
-                  for (@accrued <- accCh) {
-                    Stablecoin!("burn", *payment, accrued, *burnAuth, *burnCh) |
-                    for (@b <- burnCh) {
-                      match b {
-                        (true, amount, supply) => {
-                          match (accrued - amount) {
-                            nd => {
-                              if (nd > 0 && nd < params.get("minDebt")) {
-                                ret2!(1 / 0)
+            new amtCh, nowCh2, accCh, mathCh in {
+              Stablecoin!("amountOf", payment, *amtCh) |
+              for (@a <- amtCh) {
+                match a {
+                  (true, amount) => {
+                    if (amount <= 0) { ret2!((false, "amount", *payment)) }
+                    else {
+                      vaultNow!(*nowCh2) |
+                      for (@now2 <- nowCh2) {
+                        vaultMath!(*mathCh) |
+                        for (CollateralMath <- mathCh) {
+                          CollateralMath!("accrue", v.get("debt"), v.get("lastHeight"),
+                                          now2, ps.get("params").get("ratePerBlock"), *accCh) |
+                          for (@accrued <- accCh) {
+                            if (amount > accrued) {
+                              ret2!((false, "amount", *payment))
+                            } else {
+                              if (accrued - amount > 0
+                                  && accrued - amount < ps.get("params").get("minDebt")) {
+                                ret2!((false, "min debt", *payment))
                               } else {
-                                for (@s2 <- vaultState) {
-                                  match s2.get("vaults").get(ownerId) {
-                                    Nil => { ret2!(1 / 0) }
-                                    v2 => {
-                                      if (v2.get("auth") != auth
-                                          || s2.get("rev") != s.get("rev")) {
-                                        ret2!(1 / 0)
-                                      } else {
-                                        new nsCh in {
-                                          vaultUpdate!(s2, ownerId, {
-                                            "auth": v2.get("auth"),
-                                            "collateral": v2.get("collateral"),
-                                            "debt": nd,
-                                            "lastHeight": now2
-                                          }, s2.get("totalDebt")
-                                             + (accrued - v2.get("debt")) - amount,
-                                          s2.get("totalAccruedInterest")
-                                             + (accrued - v2.get("debt")),
-                                          s2.get("totalCollateral"),
-                                          s2.get("badDebt"),
-                                          s2.get("rev") + 1, *nsCh) |
-                                          for (@ns <- nsCh) {
-                                            vaultState!(ns) |
-                                            ret2!((true, {"debt": nd, "repaid": amount}))
-                                          }
-                                        }
-                                      }
+                                match (accrued - v.get("debt")) {
+                                  interestDue => {
+                                    if (amount <= interestDue) {
+                                      repayCommit!(s, v, ownerId, now2, accrued, amount,
+                                                   amount, 0, *payment, *ret2)
+                                    } else {
+                                      repayCommit!(s, v, ownerId, now2, accrued, amount,
+                                                   interestDue, amount - interestDue,
+                                                   *payment, *ret2)
                                     }
                                   }
                                 }
@@ -909,10 +1228,10 @@ in {
                             }
                           }
                         }
-                        _ => { ret2!(b) }
                       }
                     }
                   }
+                  _ => { ret2!((false, "asset", *payment)) }
                 }
               }
             }
@@ -937,13 +1256,13 @@ in {
             (true, amount) => {
               if (amount <= 0) { ret2!((false, "amount", *payment)) }
               else {
-                for (@s <<- vaultState) {
+                for (@s <<- vaultState; @ps <- paramsState) {
                   match s.get("vaults").get(ownerId) {
                     Nil => { ret2!((false, "no vault", *payment)) }
                     v => {
                       new nowCh2, rateCh, accCh, mathCh in {
                         vaultNow!(*nowCh2) |
-                        vaultPrice!(currency, params.get("maxOracleAge"), *rateCh) |
+                        vaultPrice!(currency, ps.get("params").get("maxOracleAge"), *rateCh) |
                         for (@now2 <- nowCh2; @rr <- rateCh) {
                           match rr {
                             (rate, fresh) => {
@@ -954,21 +1273,21 @@ in {
                                   vaultMath!(*mathCh) |
                                   for (CollateralMath <- mathCh) {
                                     CollateralMath!("accrue", v.get("debt"), v.get("lastHeight"),
-                                                    now2, params.get("ratePerBlock"), *accCh) |
+                                                    now2, ps.get("params").get("ratePerBlock"), *accCh) |
                                     for (@accrued <- accCh) {
                                       new hCh, pCh in {
                                         CollateralMath!("health", v.get("collateral"), accrued,
-                                                        rate, params.get("mcrBps"), *hCh) |
+                                                        rate, ps.get("params").get("mcrBps"), *hCh) |
                                         for (@healthy <- hCh) {
                                           if (healthy) { ret2!((false, "healthy", *payment)) }
                                           else {
-                                            match ((accrued * params.get("closeFactorBps") + 9999) / 10000).toInt() {
+                                            match ((accrued * ps.get("params").get("closeFactorBps") + 9999) / 10000).toInt() {
                                               maxRepay => {
                                                 if (amount > maxRepay) {
                                                   ret2!((false, "close factor", *payment))
                                                 } else {
                                                   CollateralMath!("payout", amount,
-                                                                  params.get("bonusBps"),
+                                                                  ps.get("params").get("bonusBps"),
                                                                   rate, *pCh) |
                                                   for (@seized0 <- pCh) {
                                                     if (seized0 <= v.get("collateral")) {
@@ -1020,29 +1339,36 @@ in {
   } |
 
   contract VaultBook(@"vault", @ownerId, ret2) = {
-    for (@s <<- vaultState) {
+    for (@s <<- vaultState; @ps <- paramsState) {
       match s.get("vaults").get(ownerId) {
         Nil => { ret2!((false, "no vault")) }
         v => {
-          new nowCh2, rateCh, hCh, mathCh in {
-            vaultNow!(*nowCh2) | vaultPrice!(currency, params.get("maxOracleAge"), *rateCh) |
+          new nowCh2, rateCh, hCh, mathCh, accCh in {
+            vaultNow!(*nowCh2) |
+            vaultPrice!(currency, ps.get("params").get("maxOracleAge"), *rateCh) |
             for (@now2 <- nowCh2; @rr <- rateCh) {
               match rr {
                 (rate, fresh) => {
                   vaultMath!(*mathCh) |
                   for (CollateralMath <- mathCh) {
-                    CollateralMath!("health", v.get("collateral"), v.get("debt"),
-                                    rate, params.get("mcrBps"), *hCh) |
-                    for (@healthy <- hCh) {
-                      ret2!((true, {
-                        "ownerId": ownerId,
-                        "collateral": v.get("collateral"),
-                        "debt": v.get("debt"),
-                        "lastHeight": v.get("lastHeight"),
-                        "health": healthy,
-                        "fresh": fresh,
-                        "rate": rate
-                      }))
+                    CollateralMath!("accrue", v.get("debt"), v.get("lastHeight"),
+                                    now2, ps.get("params").get("ratePerBlock"), *accCh) |
+                    for (@accrued <- accCh) {
+                      CollateralMath!("health", v.get("collateral"), accrued,
+                                      rate, ps.get("params").get("mcrBps"), *hCh) |
+                      for (@healthy <- hCh) {
+                        ret2!((true, {
+                          "ownerId": ownerId,
+                          "collateral": v.get("collateral"),
+                          "debt": accrued,
+                          "storedDebt": v.get("debt"),
+                          "accruedInterest": accrued - v.get("debt"),
+                          "lastHeight": v.get("lastHeight"),
+                          "health": healthy,
+                          "fresh": fresh,
+                          "rate": rate
+                        }))
+                      }
                     }
                   }
                 }
@@ -1059,12 +1385,14 @@ in {
   } |
 
   contract VaultBook(@"totals", ret2) = {
-    for (@s <<- vaultState) {
+    for (@s <<- vaultState; @p <- psmState; @b <- bufferState) {
       ret2!((true, {
         "totalDebt": s.get("totalDebt"),
         "totalAccruedInterest": s.get("totalAccruedInterest"),
         "totalCollateral": s.get("totalCollateral"),
         "badDebt": s.get("badDebt"),
+        "sin": b.get("sin"),
+        "psmDebt": p.get("stableDebt"),
         "paused": s.get("paused"),
         "rev": s.get("rev")
       }))
@@ -1072,7 +1400,7 @@ in {
   } |
 
   contract VaultBook(@"params", ret2) = {
-    ret2!((true, params))
+    for (@ps <<- paramsState) { ret2!((true, ps.get("params"))) }
   } |
 
   contract VaultBook(@"pause", @paused, @nonce, @sigs, ret2) = {
@@ -1146,7 +1474,10 @@ in {
               else {
                 for (@s <- savingsState) {
                   if (s.get("totalShares") == 0) { shCh!(amount) }
-                  else { shCh!((amount * s.get("totalShares")) / s.get("totalAssets")) } |
+                  else {
+                    if (s.get("totalAssets") <= 0) { shCh!(0) }
+                    else { shCh!((amount * s.get("totalShares")) / s.get("totalAssets")) }
+                  } |
                   for (@shares <- shCh) {
                     if (shares <= 0) {
                       savingsState!(s) | ret2!((false, "shares", *payment))
@@ -1191,7 +1522,8 @@ in {
           match s.get("shares").get(ownerId) {
             Nil => { savingsState!(s) | ret2!((false, "shares")) }
             held => {
-              if (shares <= 0 || shares > held || s.get("totalShares") <= 0) {
+              if (shares <= 0 || shares > held || s.get("totalShares") <= 0
+                  || s.get("totalAssets") <= 0) {
                 savingsState!(s) | ret2!((false, "shares"))
               } else {
                 amtCh!(((s.get("totalAssets") * shares) / s.get("totalShares")).toInt()) |
@@ -1247,9 +1579,18 @@ in {
 
   contract SavingsPool(@"info", ret2) = {
     for (@s <<- savingsState) {
-      ret2!((true, {"totalShares": s.get("totalShares"),
-                    "totalAssets": s.get("totalAssets"),
-                    "rev": s.get("rev")}))
+      match s.get("totalShares") {
+        0 => {
+          ret2!((true, {"totalShares": 0, "totalAssets": s.get("totalAssets"),
+                        "shareValueE8": 0, "rev": s.get("rev")}))
+        }
+        ts => {
+          ret2!((true, {"totalShares": ts, "totalAssets": s.get("totalAssets"),
+                        "shareValueE8":
+                          (s.get("totalAssets") * 100000000 / ts).toInt(),
+                        "rev": s.get("rev")}))
+        }
+      }
     }
   } |
 
@@ -1298,23 +1639,31 @@ in {
           move => {
             if (move <= 0) { bufferState!(s) | ret2!((true, 0, s.get("surplus"))) }
             else {
-              new wCh, nCh in {
-                @bufferPurse!("withdraw", (brand, move), *wCh) |
-                for (@w <- wCh) {
-                  match w {
-                    (true, payment) => {
-                      SavingsPool!("notify", payment, *savingsNotifyAuth, *nCh) |
-                      for (@n <- nCh) {
-                        match n {
-                          (true, _) => {
-                            bufferState!(s.set("surplus", s.get("surplus") - move).set("rev", s.get("rev") + 1)) |
-                            ret2!((true, move, s.get("surplus") - move))
+              new ssCh in {
+                for (@ss <- savingsState) {
+                  if (ss.get("totalShares") <= 0) {
+                    bufferState!(s) | ret2!((true, 0, s.get("surplus")))
+                  } else {
+                    new wCh, nCh in {
+                      @bufferPurse!("withdraw", (brand, move), *wCh) |
+                      for (@w <- wCh) {
+                        match w {
+                          (true, payment) => {
+                            SavingsPool!("notify", payment, *savingsNotifyAuth, *nCh) |
+                            for (@n <- nCh) {
+                              match n {
+                                (true, _) => {
+                                  bufferState!(s.set("surplus", s.get("surplus") - move).set("rev", s.get("rev") + 1)) |
+                                  ret2!((true, move, s.get("surplus") - move))
+                                }
+                                _ => { ret2!(1 / 0) }
+                              }
+                            }
                           }
-                          _ => { ret2!(1 / 0) }
+                          _ => { bufferState!(s) | ret2!((false, "payment")) }
                         }
                       }
                     }
-                    _ => { bufferState!(s) | ret2!((false, "payment")) }
                   }
                 }
               }
@@ -1328,7 +1677,7 @@ in {
   contract SurplusBuffer(@"cover", @badDebt, @auth, ret2) = {
     if (auth != *bufferCoverAuth) { ret2!((false, "bad buffer authority")) }
     else {
-      if (badDebt <= 0) { ret2!((false, "amount")) }
+      if (badDebt < 0) { ret2!((false, "amount")) }
       else {
         for (@s <- bufferState) {
           match (s.get("sin") + badDebt) {
@@ -1379,24 +1728,49 @@ in {
     }
   } |
 
-  contract SurplusBuffer(@"setShare", @bps, @nonce, @sigs, ret2) = {
+  contract SurplusBuffer(@"scheduleShare", @bps, @nonce, @sigs, ret2) = {
     if (bps < 0 || bps > 10000) { ret2!((false, "bps")) }
     else {
       new gCh, vCh in {
         vaultGovernor!(*gCh) |
         for (Governor <- gCh) {
-          Governor!("authorize", "stablecoin:" ++ currency, nonce,
-                    "setSavingsShare", bps.toString(), sigs, *vCh) |
+          Governor!("schedule", "stablecoin:" ++ currency, nonce,
+                    "setSavingsShare", bps.toString(), bps, sigs, *vCh) |
           for (@v <- vCh) {
             match v {
-              (true, Nil) => {
-                for (@s <- bufferState) {
-                  bufferState!(s.set("savingsShareBps", bps).set("rev", s.get("rev") + 1)) |
-                  ret2!((true, bps))
-                }
-              }
+              (true, readyAt) => { ret2!((true, readyAt)) }
               _ => { ret2!(v) }
             }
+          }
+        }
+      }
+    }
+  } |
+
+  contract SurplusBuffer(@"applyShare", @nonce, ret2) = {
+    new gCh, eCh in {
+      vaultGovernor!(*gCh) |
+      for (Governor <- gCh) {
+        Governor!("execute", "stablecoin:" ++ currency, nonce, *eCh) |
+        for (@ex <- eCh) {
+          match ex {
+            (true, action, argsHash, args) => {
+              if (action != "setSavingsShare") { ret2!((false, "action")) }
+              else {
+                if (args < 0 || args > 10000) { ret2!((false, "bps")) }
+                else {
+                  if (argsHash != args.toString()) { ret2!((false, "params hash")) }
+                  else {
+                    for (@s <- bufferState) {
+                      bufferState!(s.set("savingsShareBps", args)
+                        .set("rev", s.get("rev") + 1)) |
+                      ret2!((true, args))
+                    }
+                  }
+                }
+              }
+            }
+            _ => { ret2!(ex) }
           }
         }
       }
@@ -1424,64 +1798,45 @@ in {
   } |
 
   contract PegStabilityModule(@"sellStable", payment, revFacet, @minRev, ret2) = {
-    new amtCh, rateCh, balCh, netCh, bCh, wCh, depCh in {
+    new amtCh, rateCh, balCh, grossCh, feeCh in {
       @issuer!("getAmountOf", *payment, *amtCh) |
       for (@a <- amtCh) {
         match a {
           (true, amount) => {
-            vaultPrice!(currency, params.get("maxOracleAge"), *rateCh) |
-            for (@rr <- rateCh) {
-              match rr {
-                (rate, fresh) => {
-                  if (fresh == false || rate <= 0) {
-                    ret2!((false, "stale feed", *payment))
-                  } else {
-                    netCh!(((amount * 100000000) / rate).toInt()) |
-                    for (@netRev <- netCh) {
-                      @psmRevPurse!("getCurrentAmount", *balCh) |
-                      for (@bal <- balCh) {
-                        match bal {
-                          (true, available) => {
-                            if (netRev < minRev) {
-                              ret2!((false, "min rev", *payment))
-                            } else {
-                              if (netRev > available) {
-                                ret2!((false, "buffer", *payment))
-                              } else {
-                                Stablecoin!("burn", *payment, amount, *psmBurnAuth, *bCh) |
-                                for (@b <- bCh) {
-                                  match b {
-                                    (true, _, _) => {
-                                      @psmRevPurse!("withdraw", (revBrand, netRev), *wCh) |
-                                      for (@w <- wCh) {
-                                        match w {
-                                          (true, revPayment) => {
-                                            revFacet!("deposit", revPayment, *depCh) |
-                                            for (@dep <- depCh) {
-                                              match dep {
-                                                (true, _) => {
-                                                  for (@s <- psmState) {
-                                                    psmState!(s.set("stableDebt",
-                                                      s.get("stableDebt") - amount)
-                                                      .set("rev", s.get("rev") + 1)) |
-                                                    ret2!((true, netRev))
-                                                  }
-                                                }
-                                                _ => { ret2!(1 / 0) }
-                                              }
-                                            }
-                                          }
-                                          _ => { ret2!(1 / 0) }
-                                        }
+            for (@ps <<- paramsState; @st <- psmState) {
+              vaultPrice!(currency, ps.get("params").get("maxOracleAge"), *rateCh) |
+              for (@rr <- rateCh) {
+                match rr {
+                  (rate, fresh) => {
+                    if (fresh == false || rate <= 0) {
+                      ret2!((false, "stale feed", *payment))
+                    } else {
+                      grossCh!(((amount * 100000000) / rate).toInt()) |
+                      for (@grossRev <- grossCh) {
+                        feeCeil!(grossRev, st.get("feeBps"), *feeCh) |
+                        for (@feeRev <- feeCh) {
+                          match (grossRev - feeRev) {
+                            revOut => {
+                              @psmRevPurse!("getCurrentAmount", *balCh) |
+                              for (@bal <- balCh) {
+                                match bal {
+                                  (true, available) => {
+                                    if (revOut <= 0 || revOut < minRev) {
+                                      ret2!((false, "min rev", *payment))
+                                    } else {
+                                      if (revOut > available) {
+                                        ret2!((false, "buffer", *payment))
+                                      } else {
+                                        psmSellCommit!(amount, revOut, feeRev, st,
+                                                       *payment, revFacet, *ret2)
                                       }
                                     }
-                                    _ => { ret2!((false, "burn", *payment)) }
                                   }
+                                  _ => { ret2!((false, "balance", *payment)) }
                                 }
                               }
                             }
                           }
-                          _ => { ret2!((false, "balance", *payment)) }
                         }
                       }
                     }
@@ -1497,60 +1852,43 @@ in {
   } |
 
   contract PegStabilityModule(@"buyStable", payment, stableFacet, @minStable, ret2) = {
-    new amtCh, rateCh, mCh, depCh in {
+    new amtCh, rateCh, grossCh, feeCh in {
       @revIssuer!("getAmountOf", *payment, *amtCh) |
       for (@a <- amtCh) {
         match a {
           (true, amount) => {
-            vaultPrice!(currency, params.get("maxOracleAge"), *rateCh) |
-            for (@rr <- rateCh) {
-              match rr {
-                (rate, fresh) => {
-                  if (fresh == false || rate <= 0) {
-                    ret2!((false, "stale feed", *payment))
-                  } else {
-                    new netSCh in {
-                      netSCh!(((amount * rate) / 100000000).toInt()) |
-                      for (@netStable <- netSCh) {
-                            for (@s <- psmState) {
-                              if (netStable < minStable) {
-                                psmState!(s) | ret2!((false, "min stable", *payment))
-                              } else {
-                                if (s.get("stableDebt") + netStable > s.get("ceiling")) {
-                                  psmState!(s) | ret2!((false, "ceiling", *payment))
+            for (@ps <<- paramsState; @st <- psmState; @vs <- vaultState) {
+              if (vs.get("paused")) {
+                ret2!((false, "paused", *payment))
+              } else {
+                vaultPrice!(currency, ps.get("params").get("maxOracleAge"), *rateCh) |
+                for (@rr <- rateCh) {
+                  match rr {
+                    (rate, fresh) => {
+                      if (fresh == false || rate <= 0) {
+                        ret2!((false, "stale feed", *payment))
+                      } else {
+                        grossCh!(((amount * rate) / 100000000).toInt()) |
+                        for (@gross <- grossCh) {
+                          feeCeil!(gross, st.get("feeBps"), *feeCh) |
+                          for (@fee <- feeCh) {
+                            match (gross - fee) {
+                              stableOut => {
+                                if (stableOut <= 0 || stableOut < minStable) {
+                                  ret2!((false, "min stable", *payment))
                                 } else {
-                                  new dCh in {
-                                    @psmRevPurse!("deposit", *payment, *dCh) |
-                                    for (@d <- dCh) {
-                                      match d {
-                                        (true, _) => {
-                                          Stablecoin!("mint", netStable, *psmMintAuth, *mCh) |
-                                          for (@m <- mCh) {
-                                            match m {
-                                              (true, stablePayment, _) => {
-                                                stableFacet!("deposit", stablePayment, *depCh) |
-                                                for (@dep <- depCh) {
-                                                  match dep {
-                                                    (true, _) => {
-                                                      psmState!(s.set("stableDebt", s.get("stableDebt") + netStable).set("rev", s.get("rev") + 1)) |
-                                                      ret2!((true, netStable))
-                                                    }
-                                                    _ => { ret2!(1 / 0) }
-                                                  }
-                                                }
-                                              }
-                                              _ => { ret2!(1 / 0) }
-                                            }
-                                          }
-                                        }
-                                        _ => { psmState!(s) | ret2!((false, "deposit", *payment)) }
-                                      }
-                                    }
+                                  if (st.get("stableDebt") + stableOut > st.get("ceiling")) {
+                                    ret2!((false, "ceiling", *payment))
+                                  } else {
+                                    psmBuyCommit!(stableOut, fee, st, *payment,
+                                                  stableFacet, *ret2)
                                   }
                                 }
                               }
                             }
                           }
+                        }
+                      }
                     }
                   }
                 }
@@ -1563,10 +1901,91 @@ in {
     }
   } |
 
+  contract PegStabilityModule(@"schedulePolicy", @feeBps, @ceiling, @nonce, @sigs, ret2) = {
+    if (feeBps < 0 || feeBps > 1000) { ret2!((false, "psm fee")) }
+    else {
+      if (ceiling < 0) { ret2!((false, "ceiling")) }
+      else {
+        new gCh, sCh in {
+          vaultGovernor!(*gCh) |
+          for (Governor <- gCh) {
+            Governor!("schedule", "stablecoin:" ++ currency, nonce, "setPsmPolicy",
+                      feeBps.toString() ++ "|" ++ ceiling.toString(),
+                      {"feeBps": feeBps, "ceiling": ceiling}, sigs, *sCh) |
+            for (@gv <- sCh) {
+              match gv {
+                (true, readyAt) => { ret2!((true, readyAt)) }
+                _ => { ret2!(gv) }
+              }
+            }
+          }
+        }
+      }
+    }
+  } |
+
+  contract PegStabilityModule(@"applyPolicy", @nonce, ret2) = {
+    new gCh, eCh in {
+      vaultGovernor!(*gCh) |
+      for (Governor <- gCh) {
+        Governor!("execute", "stablecoin:" ++ currency, nonce, *eCh) |
+        for (@ex <- eCh) {
+          match ex {
+            (true, action, argsHash, args) => {
+              if (action != "setPsmPolicy") { ret2!((false, "action")) }
+              else {
+                match (args.get("feeBps")) {
+                  feeBps => {
+                    match (args.get("ceiling")) {
+                      ceiling => {
+                        if (feeBps < 0 || feeBps > 1000) { ret2!((false, "psm fee")) }
+                        else {
+                          if (ceiling < 0) { ret2!((false, "ceiling")) }
+                          else {
+                            if (argsHash != feeBps.toString() ++ "|" ++ ceiling.toString()) {
+                              ret2!((false, "params hash"))
+                            } else {
+                              for (@s <- psmState) {
+                                if (ceiling < s.get("stableDebt")) {
+                                  ret2!((false, "ceiling"))
+                                } else {
+                                  psmState!(s.set("feeBps", feeBps)
+                                    .set("ceiling", ceiling)
+                                    .set("rev", s.get("rev") + 1)) |
+                                  ret2!((true, {"feeBps": feeBps, "ceiling": ceiling}))
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            _ => { ret2!(ex) }
+          }
+        }
+      }
+    }
+  } |
+
   contract PegStabilityModule(@"info", ret2) = {
-    for (@s <<- psmState) {
-      ret2!((true, {"stableDebt": s.get("stableDebt"), "feeBps": s.get("feeBps"),
-                    "ceiling": s.get("ceiling"), "rev": s.get("rev")}))
+    new balCh in {
+      @psmRevPurse!("getCurrentAmount", *balCh) |
+      for (@s <<- psmState; @b <- balCh) {
+        match b {
+          (true, revBalance) => {
+            ret2!((true, {"stableDebt": s.get("stableDebt"),
+                          "feeBps": s.get("feeBps"),
+                          "ceiling": s.get("ceiling"),
+                          "revBalance": revBalance,
+                          "rev": s.get("rev")}))
+          }
+          _ => { ret2!((false, "balance")) }
+        }
+      }
     }
   } |
 
@@ -1578,12 +1997,13 @@ in {
                       "totalPrincipal": 0,
                       "maxSupply": 2000000000000000
                     }) |
-                    paramsState!({"params": params, "rev": 0}) |
+                    paramsState!({"params": params, "hash": paramsHash, "rev": 0}) |
                     savingsState!({"totalShares": 0, "totalAssets": 0,
                                    "shares": {}, "rev": 0}) |
                     bufferState!({"surplus": 0, "sin": 0,
-                                  "savingsShareBps": 0, "rev": 0}) |
-                    psmState!({"stableDebt": 0, "feeBps": 0,
+                                  "savingsShareBps": params.get("savingsShareBps"),
+                                  "rev": 0}) |
+                    psmState!({"stableDebt": 0, "feeBps": params.get("psmFeeBps"),
                                "ceiling": params.get("debtCeiling"), "rev": 0}) |
                     vaultState!({
                       "vaults": {},
@@ -1605,11 +2025,11 @@ in {
                     for (@scUri <- uSC; @custodyUri <- uCustody;
                          @paramsUri <- uParams; @vaultUri <- uVault;
                          @liqUri <- uLiq; @savingsUri <- uSavings;
-                         @psmUri <- uPsm) {
+                         @psmUri <- uPsm; @bufferUri <- uBuffer) {
                       Stablecoin!("attest", *attCh) |
                       for (@att <- attCh) {
                         deployId!([scUri, custodyUri, paramsUri, vaultUri, liqUri,
-                                   savingsUri, psmUri, att])
+                                   savingsUri, psmUri, bufferUri, att])
                       }
                     }
                   }

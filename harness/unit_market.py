@@ -77,7 +77,7 @@ def main() -> int:
     factory = state["market_factory_uri"]
     index = state["market_index_uri"]
     sponsor = keys["sponsor"]
-    lock_until = node.height() + 8
+    lock_until = node.height() + 20
 
     listed = one(call(currency_registry, "CurrencyRegistry",
                       'CurrencyRegistry!("currency", "V4T", *r) | '
@@ -310,6 +310,11 @@ def main() -> int:
                                   'ListingViews!("isActive", "REV/V4T:v1", *r) | '
                                   "for (@x <- r) { deployId!(x) }"),
                              keys["deployer"]["secret"]), (True, False))
+    paused_quote = one(call(pool_uri, "FxPool",
+                            'FxPool!("quote", "b2q", 1000000, *r) | '
+                            "for (@x <- r) { deployId!(x) }"),
+                       keys["deployer"]["secret"])
+    check("quote refuses a paused market", paused_quote, (False, "not active"))
     check("market resumed", set_status("active", status_nonce + 1), (True, "active"))
     check("market delisted", set_status("delisted", status_nonce + 2), (True, "delisted"))
 

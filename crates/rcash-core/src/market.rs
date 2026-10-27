@@ -9,16 +9,26 @@ use crate::assets::{Currency, RegistryUri};
 use crate::CoreError;
 
 /// The terms schema string.
-pub const TERMS_SCHEMA: &str = "rcash:market-terms:v1";
+pub const TERMS_SCHEMA: &str = "rcash:market-terms:v4";
+
+/// The one canonical encoding shared with Rholang's `Codec` and Python:
+/// `schema|len(v):v|…`, where `len` is the UTF-8 byte length.
+pub fn encode(schema: &str, values: &[String]) -> String {
+    let encoded: Vec<String> = values
+        .iter()
+        .map(|v| format!("{}:{}", v.len(), v))
+        .collect();
+    format!("{schema}|{}", encoded.join("|"))
+}
 /// The zone-params schema string.
 /// The oracle-policy schema string.
-pub const FEED_SCHEMA: &str = "rcash:oracle-policy:v1";
+pub const FEED_SCHEMA: &str = "rcash:oracle-policy:v3";
 /// The pool-params schema string.
 pub const POOL_SCHEMA: &str = "rcash:pool-params:v1";
 /// The book-params schema string.
-pub const BOOK_SCHEMA: &str = "rcash:book-params:v1";
+pub const BOOK_SCHEMA: &str = "rcash:book-params:v4";
 /// Sponsor consent for a market.
-pub const SPONSOR_SCHEMA: &str = "rcash:listing-sponsor:v1";
+pub const SPONSOR_SCHEMA: &str = "rcash:market-create:v1";
 /// Sponsor consent for a currency.
 pub const CURRENCY_SPONSOR_SCHEMA: &str = "rcash:listing-currency:v1";
 
@@ -65,7 +75,7 @@ impl FeedPolicy {
     }
 
     pub fn canonical(&self) -> String {
-        format!("{FEED_SCHEMA}|{}", self.values().join("|"))
+        encode(FEED_SCHEMA, &self.values())
     }
 
     pub fn violations(&self) -> Vec<String> {
@@ -118,7 +128,7 @@ impl PoolParams {
     }
 
     pub fn canonical(&self) -> String {
-        format!("{POOL_SCHEMA}|{}", self.values().join("|"))
+        encode(POOL_SCHEMA, &self.values())
     }
 
     pub fn violations(&self) -> Vec<String> {
@@ -150,6 +160,10 @@ impl PoolParams {
 pub struct BookParams {
     pub default_expiry_blocks: i64,
     pub max_expiry_blocks: i64,
+    pub min_amount: i64,
+    pub max_memo_bytes: i64,
+    pub max_op_id_bytes: i64,
+    pub max_stipend: i64,
 }
 
 impl BookParams {
@@ -157,21 +171,37 @@ impl BookParams {
         vec![
             self.default_expiry_blocks.to_string(),
             self.max_expiry_blocks.to_string(),
+            self.min_amount.to_string(),
+            self.max_memo_bytes.to_string(),
+            self.max_op_id_bytes.to_string(),
+            self.max_stipend.to_string(),
         ]
     }
 
     pub fn canonical(&self) -> String {
-        format!("{BOOK_SCHEMA}|{}", self.values().join("|"))
+        encode(BOOK_SCHEMA, &self.values())
     }
 
     pub fn violations(&self) -> Vec<String> {
         let mut out = Vec::new();
-        if !(10..=1_296_000).contains(&self.default_expiry_blocks) {
-            out.push("defaultExpiryBlocks must be 10..1296000".into());
+        if !(1..=1_296_000).contains(&self.default_expiry_blocks) {
+            out.push("defaultExpiryBlocks must be 1..1296000".into());
         }
         if self.max_expiry_blocks < self.default_expiry_blocks || self.max_expiry_blocks > 1_296_000
         {
             out.push("maxExpiryBlocks must be >= default and <= 1296000".into());
+        }
+        if self.min_amount < 0 {
+            out.push("minAmount must be non-negative".into());
+        }
+        if !(0..=4_096).contains(&self.max_memo_bytes) {
+            out.push("maxMemoBytes must be 0..4096".into());
+        }
+        if !(0..=256).contains(&self.max_op_id_bytes) {
+            out.push("maxOpIdBytes must be 0..256".into());
+        }
+        if self.max_stipend < 0 {
+            out.push("maxStipend must be non-negative".into());
         }
         out
     }
@@ -187,8 +217,6 @@ pub struct MarketTerms {
     pub version: i64,
     pub sponsor_pub_key: String,
     pub sponsor_owner_id: String,
-    pub base_zone_uri: RegistryUri,
-    pub quote_zone_uri: RegistryUri,
     pub base_feed_policy_hash: String,
     pub quote_feed_policy_hash: String,
     pub base_spread_bps: i64,
@@ -196,9 +224,7 @@ pub struct MarketTerms {
     pub max_trade_bps: i64,
     pub min_liquidity: i64,
     pub first_deposit_tolerance_bps: i64,
-    pub depth_floor_usd_e8: i64,
     pub depth_floor_quote: i64,
-    pub min_ticket_usd_e8: i64,
     pub min_ticket_quote: i64,
     pub seed_base: i64,
     pub seed_quote: i64,
@@ -208,8 +234,7 @@ pub struct MarketTerms {
     pub lock_until_height: i64,
     pub book_default_expiry_blocks: i64,
     pub book_max_expiry_blocks: i64,
-    pub protocol_fee_bps: i64,
-    pub auto_pause: bool,
+    pub max_pair_age_blocks: i64,
 }
 
 impl MarketTerms {
@@ -223,8 +248,6 @@ impl MarketTerms {
             self.version.to_string(),
             self.sponsor_pub_key.clone(),
             self.sponsor_owner_id.clone(),
-            self.base_zone_uri.to_string(),
-            self.quote_zone_uri.to_string(),
             self.base_feed_policy_hash.clone(),
             self.quote_feed_policy_hash.clone(),
             self.base_spread_bps.to_string(),
@@ -232,9 +255,7 @@ impl MarketTerms {
             self.max_trade_bps.to_string(),
             self.min_liquidity.to_string(),
             self.first_deposit_tolerance_bps.to_string(),
-            self.depth_floor_usd_e8.to_string(),
             self.depth_floor_quote.to_string(),
-            self.min_ticket_usd_e8.to_string(),
             self.min_ticket_quote.to_string(),
             self.seed_base.to_string(),
             self.seed_quote.to_string(),
@@ -244,17 +265,12 @@ impl MarketTerms {
             self.lock_until_height.to_string(),
             self.book_default_expiry_blocks.to_string(),
             self.book_max_expiry_blocks.to_string(),
-            self.protocol_fee_bps.to_string(),
-            if self.auto_pause {
-                "1".into()
-            } else {
-                "0".into()
-            },
+            self.max_pair_age_blocks.to_string(),
         ]
     }
 
     pub fn canonical(&self) -> String {
-        format!("{TERMS_SCHEMA}|{}", self.values().join("|"))
+        encode(TERMS_SCHEMA, &self.values())
     }
 
     /// Validate the immutable terms against the protocol bounds.
@@ -278,37 +294,35 @@ impl MarketTerms {
         if self.max_trade_bps < 100 || self.max_trade_bps > 2_000 {
             out.push("maxTradeBps must be 100..2000".into());
         }
-        if self.min_liquidity != 100_000_000 {
-            out.push("minLiquidity must be exactly 1e8".into());
+        if self.min_liquidity < 1 {
+            out.push("minLiquidity must be positive".into());
         }
-        if self.first_deposit_tolerance_bps < 10 || self.first_deposit_tolerance_bps > 500 {
-            out.push("firstDepositToleranceBps must be 10..500".into());
+        if self.first_deposit_tolerance_bps < 0 || self.first_deposit_tolerance_bps > 1_000 {
+            out.push("firstDepositToleranceBps must be 0..1000".into());
         }
         if self.depth_floor_quote < 1 || self.min_ticket_quote < 1 {
             out.push("depth floor and min ticket must be positive quote units".into());
         }
-        if self.depth_floor_usd_e8 < 100_000_000 || self.depth_floor_usd_e8 > 1_000_000_000_000 {
-            out.push("depthFloorUsdE8 must be 1..10000 USD".into());
-        }
-        if self.min_ticket_usd_e8 < 1_000_000 || self.min_ticket_usd_e8 > 1_000_000_000_000 {
-            out.push("minTicketUsdE8 must be 0.01..10000 USD".into());
+        if self.seed_base < 1 || self.seed_quote < 1 || self.seed_initial_shares < 1 {
+            out.push("seed amounts and initial shares must be positive".into());
         }
         if self.lock_beneficiary_pub_key != self.sponsor_pub_key {
             out.push("lock beneficiary must be the sponsor".into());
         }
-        if self.lock_min_blocks < 302_400 || self.lock_min_blocks > 15_768_000 {
-            out.push("lockMinBlocks must be 302400..15768000".into());
+        if self.lock_min_blocks < 1 {
+            out.push("lockMinBlocks must be positive".into());
         }
         if self.lock_until_height < self.lock_min_blocks {
             out.push("lockUntilHeight is below the minimum lock".into());
         }
-        if self.book_default_expiry_blocks < 10
+        if self.book_default_expiry_blocks < 1
             || self.book_max_expiry_blocks < self.book_default_expiry_blocks
+            || self.book_max_expiry_blocks > 1_296_000
         {
             out.push("book expiry bounds are invalid".into());
         }
-        if self.protocol_fee_bps != 0 {
-            out.push("protocolFeeBps must be 0".into());
+        if !(1..=1_000).contains(&self.max_pair_age_blocks) {
+            out.push("maxPairAgeBlocks must be 1..1000".into());
         }
         out
     }
@@ -317,7 +331,7 @@ impl MarketTerms {
     pub fn sponsor_payload(&self, terms_hash: &str) -> String {
         format!(
             "{SPONSOR_SCHEMA}|{}|{}|{}",
-            self.market_id, self.sponsor_pub_key, terms_hash
+            self.market_id, terms_hash, self.sponsor_pub_key
         )
     }
 
@@ -372,8 +386,6 @@ mod tests {
             version: 1,
             sponsor_pub_key: "04aa".into(),
             sponsor_owner_id: "1111sponsor".into(),
-            base_zone_uri: RegistryUri::new("rho:id:ngn").unwrap(),
-            quote_zone_uri: RegistryUri::new("rho:id:kes").unwrap(),
             base_feed_policy_hash: "11".repeat(32),
             quote_feed_policy_hash: "22".repeat(32),
             base_spread_bps: 20,
@@ -381,9 +393,7 @@ mod tests {
             max_trade_bps: 500,
             min_liquidity: 100_000_000,
             first_deposit_tolerance_bps: 100,
-            depth_floor_usd_e8: 100_000_000,
             depth_floor_quote: 130_000_000_000,
-            min_ticket_usd_e8: 1_000_000,
             min_ticket_quote: 1_300_000_000,
             seed_base: 1_500_000_000_000,
             seed_quote: 130_000_000_000,
@@ -393,30 +403,38 @@ mod tests {
             lock_until_height: 500_000,
             book_default_expiry_blocks: 720,
             book_max_expiry_blocks: 129_600,
-            protocol_fee_bps: 0,
-            auto_pause: true,
+            max_pair_age_blocks: 50,
         }
     }
 
     #[test]
     fn canonical_form_is_stable_and_ordered() {
         let canonical = terms().canonical();
-        assert!(canonical.starts_with("rcash:market-terms:v1|KES/NGN:v1|KES-NGN-v1|NGN|KES|1|"));
-        assert!(canonical.ends_with("|0|1"));
-        assert_eq!(canonical.split('|').count(), 31);
+        assert!(canonical.starts_with("rcash:market-terms:v4|"));
+        assert!(canonical.contains("|8:KES/NGN:v1|9:KES-NGN-v1|3:NGN|3:KES|1:1|"));
+        assert_eq!(terms().values().len(), 25);
+        assert_eq!(canonical.split('|').count(), 27);
     }
 
     #[test]
     fn bounds_catch_bad_terms() {
         let mut bad = terms();
-        bad.protocol_fee_bps = 10;
+        bad.seed_base = 0;
         bad.base = bad.quote.clone();
         bad.max_trade_bps = 5_000;
         let violations = bad.violations();
-        assert!(violations.iter().any(|v| v.contains("protocolFeeBps")));
+        assert!(violations.iter().any(|v| v.contains("seed")));
         assert!(violations.iter().any(|v| v.contains("base and quote")));
         assert!(violations.iter().any(|v| v.contains("maxTradeBps")));
         assert!(terms().violations().is_empty());
+    }
+
+    #[test]
+    fn sponsor_payload_binds_the_terms_hash() {
+        assert_eq!(
+            terms().sponsor_payload("abc"),
+            "rcash:market-create:v1|KES/NGN:v1|abc|04aa"
+        );
     }
 
     #[test]
@@ -453,6 +471,10 @@ mod tests {
         let book = BookParams {
             default_expiry_blocks: 720,
             max_expiry_blocks: 129_600,
+            min_amount: 1,
+            max_memo_bytes: 128,
+            max_op_id_bytes: 64,
+            max_stipend: 100_000_000,
         };
         assert_eq!(
             book.canonical(),

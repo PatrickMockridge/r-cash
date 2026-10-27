@@ -18,7 +18,11 @@ mod writes;
 
 pub use rcash_chain::rho_expr::{Reply as ProtocolReply, RhoValue as ProtocolValue};
 pub use reads::{Balances, FxRate, PriceFeed, Quote, QuoteAdd, Reserves, TransferInfo};
-pub use v4::{V4Currency, V4Lock, V4Market, V4Quote, V4Reserves, V4Sent, V4Slot, V4Transfer};
+pub use v4::{
+    V4BufferInfo, V4CreatedMarket, V4Currency, V4IssuerParams, V4Lock, V4Market, V4Pending,
+    V4Price, V4PsmInfo, V4Quote, V4Reserves, V4RiskParams, V4SavingsInfo, V4SavingsPosition,
+    V4Sent, V4Slot, V4Terms, V4Totals, V4Transfer, V4Vault,
+};
 pub use writes::{SwapResult, TxResult};
 
 pub use rcash_chain;

@@ -17,8 +17,15 @@ use crate::{terms, Client};
 pub struct V4Currency {
     pub code: String,
     pub stablecoin_uri: String,
+    pub custody_uri: String,
+    pub params_uri: String,
     pub vault_uri: String,
+    pub liquidation_uri: String,
+    pub savings_uri: String,
+    pub psm_uri: String,
+    pub buffer_uri: String,
     pub params_hash: String,
+    pub sponsor: String,
     pub status: String,
 }
 
@@ -26,6 +33,7 @@ pub struct V4Currency {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct V4Market {
     pub market_id: String,
+    pub slug: String,
     pub base: String,
     pub quote: String,
     pub version: i64,
@@ -50,6 +58,9 @@ pub struct V4Transfer {
     pub amount: i64,
     pub expiry: i64,
     pub status: String,
+    pub memo: String,
+    pub op_id: String,
+    pub stipend: i64,
 }
 
 /// A pool quote.
@@ -82,6 +93,84 @@ pub struct V4Slot {
 pub struct V4Sent {
     pub id: i64,
     pub uri: String,
+}
+
+/// A vault's live position.
+#[derive(Clone, Debug, PartialEq)]
+pub struct V4Vault {
+    pub owner_id: String,
+    pub collateral: i64,
+    pub debt: i64,
+    pub stored_debt: i64,
+    pub accrued_interest: i64,
+    pub last_height: i64,
+    pub health: bool,
+    pub fresh: bool,
+    pub rate: i64,
+}
+
+/// The issuer's accounting totals.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct V4Totals {
+    pub total_debt: i64,
+    pub total_accrued_interest: i64,
+    pub total_collateral: i64,
+    pub bad_debt: i64,
+    pub sin: i64,
+    pub psm_debt: i64,
+    pub paused: bool,
+    pub rev: i64,
+}
+
+/// Savings-pool state.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct V4SavingsInfo {
+    pub total_shares: i64,
+    pub total_assets: i64,
+    pub share_value_e8: i64,
+    pub rev: i64,
+}
+
+/// A saver's position.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct V4SavingsPosition {
+    pub shares: i64,
+}
+
+/// PSM state.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct V4PsmInfo {
+    pub stable_debt: i64,
+    pub fee_bps: i64,
+    pub ceiling: i64,
+    pub rev_balance: i64,
+    pub rev: i64,
+}
+
+/// Surplus-buffer state.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct V4BufferInfo {
+    pub surplus: i64,
+    pub sin: i64,
+    pub savings_share_bps: i64,
+    pub rev: i64,
+}
+
+/// Risk-parameter state at the genesis and current hashes.
+#[derive(Clone, Debug, PartialEq)]
+pub struct V4RiskParams {
+    pub params: BTreeMap<String, RhoValue>,
+    pub genesis: BTreeMap<String, RhoValue>,
+    pub params_hash: String,
+    pub current_hash: String,
+    pub rev: i64,
+}
+
+/// A market's canonical terms record.
+#[derive(Clone, Debug, PartialEq)]
+pub struct V4Terms {
+    pub terms: BTreeMap<String, RhoValue>,
+    pub values: Vec<String>,
 }
 
 fn decode(message: impl Into<String>) -> ChainError {
@@ -191,8 +280,15 @@ impl Client {
         Ok(V4Currency {
             code: code.to_string(),
             stablecoin_uri: field_str(entry, "stablecoinUri")?,
+            custody_uri: field_str(entry, "custodyUri")?,
+            params_uri: field_str(entry, "paramsUri")?,
             vault_uri: field_str(entry, "vaultUri")?,
+            liquidation_uri: field_str(entry, "liquidationUri")?,
+            savings_uri: field_str(entry, "savingsUri")?,
+            psm_uri: field_str(entry, "psmUri")?,
+            buffer_uri: field_str(entry, "bufferUri")?,
             params_hash: field_str(entry, "paramsHash")?,
+            sponsor: field_str(entry, "sponsor")?,
             status: field_str(entry, "status")?,
         })
     }
@@ -212,6 +308,7 @@ impl Client {
                 let entry = map_at(&values, 0)?;
                 Ok(Some(V4Market {
                     market_id: field_str(entry, "marketId")?,
+                    slug: field_str(entry, "slug")?,
                     base: field_str(entry, "base")?,
                     quote: field_str(entry, "quote")?,
                     version: field_int(entry, "version")?,
@@ -343,6 +440,9 @@ impl Client {
             amount: field_int(entry, "amount")?,
             expiry: field_int(entry, "expiry")?,
             status: field_str(entry, "status")?,
+            memo: field_str(entry, "memo")?,
+            op_id: field_str(entry, "opId")?,
+            stipend: field_int(entry, "stipend")?,
         })
     }
 
@@ -387,6 +487,7 @@ impl Client {
     }
 
     /// Send a claimable transfer to a recipient's public key.
+    #[allow(clippy::too_many_arguments)]
     pub async fn v4_send_transfer(
         &self,
         recipient_pub_hex: &str,
@@ -394,9 +495,21 @@ impl Client {
         amount: i64,
         secret_hash_hex: &str,
         expiry: i64,
+        memo: &str,
+        op_id: &str,
+        stipend: i64,
     ) -> Result<V4Sent, ChainError> {
         if amount <= 0 {
             return Err(decode("amount must be positive"));
+        }
+        if stipend < 0 {
+            return Err(decode("stipend must be non-negative"));
+        }
+        if memo.len() > 128 {
+            return Err(decode("memo exceeds 128 bytes"));
+        }
+        if op_id.len() > 64 {
+            return Err(decode("opId exceeds 64 bytes"));
         }
         let hash = rcash_core::rho::hex_bytes(secret_hash_hex)?;
         let body = format!(
@@ -408,8 +521,9 @@ impl Client {
              @recipient!(\"depositFacet\", {asset_lit}, *rfacetCh) | \
              for (@rf <- rfacetCh) {{ match rf {{ \
                (true, facet) => {{ \
-                 @account!(\"sendTransfer\", *deployerId, {asset_lit}, facet, {amount}, \
-                           {hash}, {expiry}, *sCh) | \
+                 @account!(\"sendTransfer\", *deployerId, {asset_lit}, facet, \
+                           \"{recipient_pub_hex}\".hexToBytes(), {amount}, \
+                           {hash}, {expiry}, {memo_lit}, {op_id_lit}, {stipend}, *sCh) | \
                  for (@s <- sCh) {{ match s {{ \
                    (true, id, uri) => deployId!((true, id, uri)) \
                    _ => deployId!(s) }} }} }} \
@@ -420,6 +534,9 @@ impl Client {
             amount = amount,
             hash = hash,
             expiry = expiry,
+            memo_lit = terms::s(memo)?,
+            op_id_lit = terms::s(op_id)?,
+            stipend = stipend,
         );
         let values = self.v4_tx(&body).await?.into_result()?;
         Ok(V4Sent {
@@ -500,7 +617,12 @@ impl Client {
         pool_uri: &str,
         base_asset: &str,
         quote_asset: &str,
+        min_base: i64,
+        min_quote: i64,
     ) -> Result<i64, ChainError> {
+        if min_base < 0 || min_quote < 0 {
+            return Err(decode("minimums must be non-negative"));
+        }
         let body = format!(
             "new lCh, rCh, pCh, rrCh, d1, d2 in {{ \
              rl!(`{lock_uri}`, *lCh) | for (LiquidityLock <- lCh) {{ \
@@ -508,14 +630,14 @@ impl Client {
              for (@r <- rCh) {{ match r {{ \
                (true, lpPayment, shares) => {{ \
                  rl!(`{pool_uri}`, *pCh) | for (FxPool <- pCh) {{ \
-                 FxPool!(\"removeLiquidity\", lpPayment, 0, 0, *rrCh) | \
+                 FxPool!(\"removeLiquidity\", lpPayment, {min_base}, {min_quote}, *rrCh) | \
                  for (@rr <- rrCh) {{ match rr {{ \
                    (true, basePayment, quotePayment) => {{ \
                      @account!(\"deposit\", *deployerId, {base_lit}, basePayment, *d1) | \
                      @account!(\"deposit\", *deployerId, {quote_lit}, quotePayment, *d2) | \
                      for (@_ <- d1; @_ <- d2) {{ deployId!((true, shares)) }} }} \
                    _ => {{ deployId!(1 / 0) }} }} }} }} }} \
-               _ => {{ deployId!(r) }} }} }} }} }}",
+               _ => {{ deployId!(1 / 0) }} }} }} }} }}",
             base_lit = terms::s(base_asset)?,
             quote_lit = terms::s(quote_asset)?,
         );
@@ -534,7 +656,11 @@ impl Client {
         base_amount: i64,
         quote_amount: i64,
         until_height: i64,
+        min_shares: i64,
     ) -> Result<i64, ChainError> {
+        if min_shares < 0 {
+            return Err(decode("minimum shares must be non-negative"));
+        }
         // Preflight the feed before either side leaves the account.
         self.v4_quote(pool_uri, "b2q", 1).await?;
         // A funded lock refuses the funding step after the pool has already minted the
@@ -552,7 +678,7 @@ impl Client {
                @account!(\"withdraw\", *deployerId, {quote_lit}, {quote_amount}, *wq) | \
                for (@(true, quotePayment) <- wq) {{ \
                  rl!(`{pool_uri}`, *pCh) | for (FxPool <- pCh) {{ \
-                 FxPool!(\"addLiquidity\", basePayment, quotePayment, 0, *aCh) | \
+                 FxPool!(\"addLiquidity\", basePayment, quotePayment, {min_shares}, *aCh) | \
                  for (@a <- aCh) {{ match a {{ \
                    (true, lpPayment, shares) => {{ \
                      rl!(`{lock_uri}`, *lCh) | for (LiquidityLock <- lCh) {{ \
@@ -607,7 +733,7 @@ impl Client {
                  (true, stablePayment, debt) => {{ \
                    @account!(\"deposit\", *deployerId, {currency_lit}, stablePayment, *sdCh) | \
                    for (@_ <- sdCh) {{ deployId!((true, debt)) }} }} \
-                 _ => {{ deployId!(m) }} }} }} }} _ => {{ deployId!(dd) }} }} }} \
+                 _ => {{ deployId!(1 / 0) }} }} }} }} _ => {{ deployId!(1 / 0) }} }} }} \
              }} }} }} _ => {{ deployId!(z) }} }} }} }}",
             currency_lit = terms::s(currency)?,
             collateral = collateral,
@@ -635,7 +761,7 @@ impl Client {
              VaultBook!(\"repay\", ownerId, auth, payment, *rCh) | \
              for (@r <- rCh) {{ match r {{ \
                (true, summary) => {{ deployId!((true, summary)) }} \
-               _ => {{ deployId!(r) }} }} }} }} }} }} _ => {{ deployId!(z) }} }} }}",
+               _ => {{ deployId!(1 / 0) }} }} }} }} }} }} _ => {{ deployId!(z) }} }} }}",
             currency_lit = terms::s(currency)?,
             amount = amount,
             vault_uri = vault_uri,
@@ -657,9 +783,799 @@ impl Client {
                (true, payment) => {{ \
                  @account!(\"deposit\", *deployerId, \"REV\", payment, *dCh) | \
                  for (@_ <- dCh) {{ deployId!((true, {amount})) }} }} \
-               _ => {{ deployId!(w) }} }} }} }} }} _ => {{ deployId!(z) }} }} }} }}"
+               _ => {{ deployId!(1 / 0) }} }} }} }} }} _ => {{ deployId!(z) }} }} }} }}"
         );
         let values = self.v4_tx(&body).await?.into_result()?;
         int_at(&values, 0)
+    }
+}
+
+// ---- v0.5 surface: vaults, savings, PSM, discovery -------------------------
+
+fn field_bool(map: &BTreeMap<String, RhoValue>, key: &str) -> Result<bool, ChainError> {
+    field(map, key)?
+        .as_bool()
+        .ok_or_else(|| decode(format!("field {key} is not a boolean")))
+}
+
+fn currency_from_entry(
+    code: &str,
+    entry: &BTreeMap<String, RhoValue>,
+) -> Result<V4Currency, ChainError> {
+    Ok(V4Currency {
+        code: code.to_string(),
+        stablecoin_uri: field_str(entry, "stablecoinUri")?,
+        custody_uri: field_str(entry, "custodyUri")?,
+        params_uri: field_str(entry, "paramsUri")?,
+        vault_uri: field_str(entry, "vaultUri")?,
+        liquidation_uri: field_str(entry, "liquidationUri")?,
+        savings_uri: field_str(entry, "savingsUri")?,
+        psm_uri: field_str(entry, "psmUri")?,
+        buffer_uri: field_str(entry, "bufferUri")?,
+        params_hash: field_str(entry, "paramsHash")?,
+        sponsor: field_str(entry, "sponsor")?,
+        status: field_str(entry, "status")?,
+    })
+}
+
+fn market_from_entry(entry: &BTreeMap<String, RhoValue>) -> Result<V4Market, ChainError> {
+    Ok(V4Market {
+        market_id: field_str(entry, "marketId")?,
+        slug: field_str(entry, "slug")?,
+        base: field_str(entry, "base")?,
+        quote: field_str(entry, "quote")?,
+        version: field_int(entry, "version")?,
+        terms_hash: field_str(entry, "termsHash")?,
+        status: field_str(entry, "status")?,
+    })
+}
+
+impl Client {
+    async fn v4_signed_read(&self, uri: &str, args: &str) -> Result<Reply, ChainError> {
+        let term = format!(
+            "new rl(`rho:registry:lookup`), capCh, resCh, \
+             deployId(`rho:rchain:deployId`) in {{ \
+             rl!(`{uri}`, *capCh) | for (cap <- capCh) {{ \
+             cap!({args}, *resCh) | for (@r <- resCh) {{ deployId!(r) }} }} }}"
+        );
+        let value = self.signed_value(&term).await?;
+        Reply::from_value(&value)
+    }
+
+    /// Every listed currency, discovered through `ListingViews.currencies`.
+    pub async fn v4_currencies(&self) -> Result<Vec<V4Currency>, ChainError> {
+        let views = self.require_v4()?.listing_views_uri.as_str().to_string();
+        let reply = self.v4_read(&views, "\"currencies\"").await?;
+        let values = reply.into_result()?;
+        let entries = map_at(&values, 0)?;
+        let mut out = Vec::new();
+        for (code, entry) in entries {
+            match entry.as_map() {
+                Some(map) => out.push(currency_from_entry(code, map)?),
+                None => return Err(decode("currency entry is not a map")),
+            }
+        }
+        Ok(out)
+    }
+
+    /// Every staged or listed market.
+    pub async fn v4_markets(&self) -> Result<Vec<V4Market>, ChainError> {
+        let views = self.require_v4()?.listing_views_uri.as_str().to_string();
+        let reply = self.v4_read(&views, "\"markets\"").await?;
+        let values = reply.into_result()?;
+        let entries = map_at(&values, 0)?;
+        let mut out = Vec::new();
+        for entry in entries.values() {
+            match entry.as_map() {
+                Some(map) => out.push(market_from_entry(map)?),
+                None => return Err(decode("market entry is not a map")),
+            }
+        }
+        Ok(out)
+    }
+
+    /// A market's canonical terms record.
+    pub async fn v4_terms(&self, terms_hash: &str) -> Result<V4Terms, ChainError> {
+        let views = self.require_v4()?.listing_views_uri.as_str().to_string();
+        let reply = self
+            .v4_read(&views, &format!("\"terms\", {}", terms::s(terms_hash)?))
+            .await?;
+        let values = reply.into_result()?;
+        let entry = map_at(&values, 0)?;
+        let terms = field(entry, "terms")?
+            .as_map()
+            .ok_or_else(|| decode("terms is not a map"))?
+            .clone();
+        let raw_values = field(entry, "values")?
+            .as_list()
+            .ok_or_else(|| decode("values is not a list"))?;
+        let mut list = Vec::with_capacity(raw_values.len());
+        for value in raw_values {
+            list.push(
+                value
+                    .as_str()
+                    .ok_or_else(|| decode("term value is not a string"))?
+                    .to_string(),
+            );
+        }
+        Ok(V4Terms {
+            terms,
+            values: list,
+        })
+    }
+
+    /// The caller's live vault position, accrual included.
+    pub async fn v4_vault(&self, vault_uri: &str) -> Result<V4Vault, ChainError> {
+        let owner = self.address()?;
+        let reply = self
+            .v4_signed_read(vault_uri, &format!("\"vault\", {}", terms::s(&owner)?))
+            .await?;
+        let values = reply.into_result()?;
+        let entry = map_at(&values, 0)?;
+        Ok(V4Vault {
+            owner_id: field_str(entry, "ownerId")?,
+            collateral: field_int(entry, "collateral")?,
+            debt: field_int(entry, "debt")?,
+            stored_debt: field_int(entry, "storedDebt")?,
+            accrued_interest: field_int(entry, "accruedInterest")?,
+            last_height: field_int(entry, "lastHeight")?,
+            health: field_bool(entry, "health")?,
+            fresh: field_bool(entry, "fresh")?,
+            rate: field_int(entry, "rate")?,
+        })
+    }
+
+    /// The issuer's accounting totals.
+    pub async fn v4_totals(&self, vault_uri: &str) -> Result<V4Totals, ChainError> {
+        let reply = self.v4_read(vault_uri, "\"totals\"").await?;
+        let values = reply.into_result()?;
+        let entry = map_at(&values, 0)?;
+        Ok(V4Totals {
+            total_debt: field_int(entry, "totalDebt")?,
+            total_accrued_interest: field_int(entry, "totalAccruedInterest")?,
+            total_collateral: field_int(entry, "totalCollateral")?,
+            bad_debt: field_int(entry, "badDebt")?,
+            sin: field_int(entry, "sin")?,
+            psm_debt: field_int(entry, "psmDebt")?,
+            paused: field_bool(entry, "paused")?,
+            rev: field_int(entry, "rev")?,
+        })
+    }
+
+    /// Savings-pool state.
+    pub async fn v4_savings_info(&self, savings_uri: &str) -> Result<V4SavingsInfo, ChainError> {
+        let reply = self.v4_read(savings_uri, "\"info\"").await?;
+        let values = reply.into_result()?;
+        let entry = map_at(&values, 0)?;
+        Ok(V4SavingsInfo {
+            total_shares: field_int(entry, "totalShares")?,
+            total_assets: field_int(entry, "totalAssets")?,
+            share_value_e8: field_int(entry, "shareValueE8")?,
+            rev: field_int(entry, "rev")?,
+        })
+    }
+
+    /// The caller's savings position.
+    pub async fn v4_savings_position(
+        &self,
+        savings_uri: &str,
+    ) -> Result<V4SavingsPosition, ChainError> {
+        let owner = self.address()?;
+        let reply = self
+            .v4_signed_read(savings_uri, &format!("\"position\", {}", terms::s(&owner)?))
+            .await?;
+        let values = reply.into_result()?;
+        Ok(V4SavingsPosition {
+            shares: int_at(&values, 0)?,
+        })
+    }
+
+    /// PSM state, including the signed debt and REV balance.
+    pub async fn v4_psm_info(&self, psm_uri: &str) -> Result<V4PsmInfo, ChainError> {
+        let reply = self.v4_read(psm_uri, "\"info\"").await?;
+        let values = reply.into_result()?;
+        let entry = map_at(&values, 0)?;
+        Ok(V4PsmInfo {
+            stable_debt: field_int(entry, "stableDebt")?,
+            fee_bps: field_int(entry, "feeBps")?,
+            ceiling: field_int(entry, "ceiling")?,
+            rev_balance: field_int(entry, "revBalance")?,
+            rev: field_int(entry, "rev")?,
+        })
+    }
+
+    /// Surplus-buffer state.
+    pub async fn v4_buffer_info(&self, buffer_uri: &str) -> Result<V4BufferInfo, ChainError> {
+        let reply = self.v4_read(buffer_uri, "\"info\"").await?;
+        let values = reply.into_result()?;
+        let entry = map_at(&values, 0)?;
+        Ok(V4BufferInfo {
+            surplus: field_int(entry, "surplus")?,
+            sin: field_int(entry, "sin")?,
+            savings_share_bps: field_int(entry, "savingsShareBps")?,
+            rev: field_int(entry, "rev")?,
+        })
+    }
+
+    /// Risk parameters with both the genesis and current hashes.
+    pub async fn v4_risk_params(&self, params_uri: &str) -> Result<V4RiskParams, ChainError> {
+        let reply = self.v4_read(params_uri, "\"info\"").await?;
+        let values = reply.into_result()?;
+        let entry = map_at(&values, 0)?;
+        Ok(V4RiskParams {
+            params: field(entry, "params")?
+                .as_map()
+                .ok_or_else(|| decode("params is not a map"))?
+                .clone(),
+            genesis: field(entry, "genesis")?
+                .as_map()
+                .ok_or_else(|| decode("genesis is not a map"))?
+                .clone(),
+            params_hash: field_str(entry, "paramsHash")?,
+            current_hash: field_str(entry, "currentHash")?,
+            rev: field_int(entry, "rev")?,
+        })
+    }
+
+    /// The caller's transfer op ledger.
+    pub async fn v4_transfers(&self) -> Result<BTreeMap<String, RhoValue>, ChainError> {
+        let body = "new r in { @account!(\"transfers\", *deployerId, *r) | \
+                    for (@x <- r) { deployId!(x) } }";
+        let values = self.v4_tx(body).await?.into_result()?;
+        values
+            .first()
+            .and_then(RhoValue::as_map)
+            .cloned()
+            .ok_or_else(|| decode("transfers did not return a map"))
+    }
+
+    // ---- vault writes -------------------------------------------------------
+
+    /// Open (or reuse) the caller's vault.
+    pub async fn v4_vault_open(&self, vault_uri: &str) -> Result<(), ChainError> {
+        let body = format!(
+            "new zCh in {{ @account!(\"vaultOpen\", *deployerId, `{vault_uri}`, *zCh) | \
+             for (@z <- zCh) {{ match z {{ (true, _) => deployId!((true, Nil)) \
+             _ => deployId!(z) }} }} }}"
+        );
+        self.v4_tx(&body).await?.into_result()?;
+        Ok(())
+    }
+
+    /// Deposit REV collateral into the caller's vault.
+    pub async fn v4_vault_deposit(&self, vault_uri: &str, amount: i64) -> Result<i64, ChainError> {
+        if amount <= 0 {
+            return Err(decode("amount must be positive"));
+        }
+        let body = format!(
+            "new zCh, wCh, vCh, dCh in {{ \
+             @account!(\"vaultOpen\", *deployerId, `{vault_uri}`, *zCh) | \
+             for (@z <- zCh) {{ match z {{ (true, auth) => {{ \
+             @account!(\"withdraw\", *deployerId, \"REV\", {amount}, *wCh) | \
+             for (@(true, payment) <- wCh) {{ \
+             rl!(`{vault_uri}`, *vCh) | for (VaultBook <- vCh) {{ \
+             VaultBook!(\"deposit\", ownerId, auth, payment, *dCh) | \
+             for (@d <- dCh) {{ match d {{ (true, summary) => deployId!((true, summary)) \
+             _ => deployId!(1 / 0) }} }} }} }} _ => deployId!(z) }} }} }}"
+        );
+        let values = self.v4_tx(&body).await?.into_result()?;
+        let summary = map_at(&values, 0)?;
+        field_int(summary, "collateral")
+    }
+
+    /// Liquidate an unhealthy vault and deposit the seized REV into the account.
+    pub async fn v4_vault_liquidate(
+        &self,
+        liquidation_uri: &str,
+        currency: &str,
+        owner_id: &str,
+        amount: i64,
+        min_collateral: i64,
+    ) -> Result<i64, ChainError> {
+        if amount <= 0 {
+            return Err(decode("amount must be positive"));
+        }
+        let body = format!(
+            "new wCh, vCh, lrCh, dCh in {{ \
+             @account!(\"withdraw\", *deployerId, {currency_lit}, {amount}, *wCh) | \
+             for (@(true, payment) <- wCh) {{ \
+             rl!(`{liquidation_uri}`, *vCh) | for (LiquidationEngine <- vCh) {{ \
+             LiquidationEngine!(\"liquidate\", {owner_lit}, payment, {min_collateral}, *lrCh) | \
+             for (@lr <- lrCh) {{ match lr {{ \
+               (true, revPayment, summary) => {{ \
+                 @account!(\"deposit\", *deployerId, \"REV\", revPayment, *dCh) | \
+                 for (@_ <- dCh) {{ match summary {{ m => deployId!((true, m)) }} }} }} \
+               _ => deployId!(1 / 0) }} }} }} }} }}",
+            currency_lit = terms::s(currency)?,
+            owner_lit = terms::s(owner_id)?,
+        );
+        let values = self.v4_tx(&body).await?.into_result()?;
+        let summary = map_at(&values, 0)?;
+        field_int(summary, "seized")
+    }
+
+    // ---- savings writes -----------------------------------------------------
+
+    /// Deposit stablecoin into the savings pool; returns shares.
+    pub async fn v4_savings_deposit(
+        &self,
+        savings_uri: &str,
+        currency: &str,
+        amount: i64,
+    ) -> Result<i64, ChainError> {
+        if amount <= 0 {
+            return Err(decode("amount must be positive"));
+        }
+        let body = format!(
+            "new wCh, sCh, dCh in {{ \
+             @account!(\"withdraw\", *deployerId, {currency_lit}, {amount}, *wCh) | \
+             for (@(true, payment) <- wCh) {{ \
+             rl!(`{savings_uri}`, *sCh) | for (SavingsPool <- sCh) {{ \
+             SavingsPool!(\"deposit\", *deployerId, payment, *dCh) | \
+             for (@d <- dCh) {{ match d {{ (true, shares) => deployId!((true, shares)) \
+             _ => deployId!(1 / 0) }} }} }} }} }}",
+            currency_lit = terms::s(currency)?,
+        );
+        let values = self.v4_tx(&body).await?.into_result()?;
+        int_at(&values, 0)
+    }
+
+    /// Withdraw savings shares; returns the stablecoin amount.
+    pub async fn v4_savings_withdraw(
+        &self,
+        savings_uri: &str,
+        currency: &str,
+        shares: i64,
+    ) -> Result<i64, ChainError> {
+        if shares <= 0 {
+            return Err(decode("shares must be positive"));
+        }
+        let body = format!(
+            "new sCh, dCh in {{ \
+             rl!(`{savings_uri}`, *sCh) | for (SavingsPool <- sCh) {{ \
+             SavingsPool!(\"withdraw\", *deployerId, {shares}, *dCh) | \
+             for (@d <- dCh) {{ match d {{ \
+               (true, payment, amount) => {{ \
+                 @account!(\"deposit\", *deployerId, {currency_lit}, payment, *dCh) | \
+                 for (@_ <- dCh) {{ deployId!((true, amount)) }} }} \
+               _ => deployId!(1 / 0) }} }} }} }}",
+            currency_lit = terms::s(currency)?,
+        );
+        let values = self.v4_tx(&body).await?.into_result()?;
+        int_at(&values, 0)
+    }
+
+    // ---- PSM writes ---------------------------------------------------------
+
+    /// Redeem stablecoin for REV at par minus the fee.
+    pub async fn v4_psm_sell(
+        &self,
+        psm_uri: &str,
+        currency: &str,
+        amount: i64,
+        min_rev: i64,
+    ) -> Result<i64, ChainError> {
+        if amount <= 0 {
+            return Err(decode("amount must be positive"));
+        }
+        let body = format!(
+            "new wCh, fCh, pCh, rCh in {{ \
+             @account!(\"depositFacet\", \"REV\", *fCh) | \
+             for (@f <- fCh) {{ match f {{ (true, revFacet) => {{ \
+             @account!(\"withdraw\", *deployerId, {currency_lit}, {amount}, *wCh) | \
+             for (@(true, payment) <- wCh) {{ \
+             rl!(`{psm_uri}`, *pCh) | for (PegStabilityModule <- pCh) {{ \
+             PegStabilityModule!(\"sellStable\", payment, revFacet, {min_rev}, *rCh) | \
+             for (@r <- rCh) {{ match r {{ (true, revOut, fee) => deployId!((true, revOut)) \
+             _ => deployId!(1 / 0) }} }} }} }} }} _ => deployId!(f) }} }} }}",
+            currency_lit = terms::s(currency)?,
+        );
+        let values = self.v4_tx(&body).await?.into_result()?;
+        int_at(&values, 0)
+    }
+
+    /// Mint stablecoin against REV at par minus the fee.
+    pub async fn v4_psm_buy(
+        &self,
+        psm_uri: &str,
+        currency: &str,
+        rev_amount: i64,
+        min_stable: i64,
+    ) -> Result<i64, ChainError> {
+        if rev_amount <= 0 {
+            return Err(decode("rev amount must be positive"));
+        }
+        let body = format!(
+            "new wCh, fCh, pCh, rCh, dCh in {{ \
+             @account!(\"depositFacet\", {currency_lit}, *fCh) | \
+             for (@f <- fCh) {{ match f {{ (true, stableFacet) => {{ \
+             @account!(\"withdraw\", *deployerId, \"REV\", {rev_amount}, *wCh) | \
+             for (@(true, payment) <- wCh) {{ \
+             rl!(`{psm_uri}`, *pCh) | for (PegStabilityModule <- pCh) {{ \
+             PegStabilityModule!(\"buyStable\", payment, stableFacet, {min_stable}, *rCh) | \
+             for (@r <- rCh) {{ match r {{ (true, stableOut, fee) => \
+             deployId!((true, stableOut)) _ => deployId!(1 / 0) }} }} }} }} }} \
+             _ => deployId!(f) }} }} }}",
+            currency_lit = terms::s(currency)?,
+        );
+        let values = self.v4_tx(&body).await?.into_result()?;
+        int_at(&values, 0)
+    }
+}
+
+// ---- governance and market writes ------------------------------------------
+
+/// The issuer parameters accepted by a governed risk-parameter change.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct V4IssuerParams {
+    pub mcr_bps: i64,
+    pub bonus_bps: i64,
+    pub close_factor_bps: i64,
+    pub rate_per_block: i64,
+    pub debt_ceiling: i64,
+    pub min_debt: i64,
+    pub max_debt: i64,
+    pub max_oracle_age: i64,
+    pub savings_share_bps: i64,
+    pub psm_fee_bps: i64,
+}
+
+/// A market created by this client.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct V4CreatedMarket {
+    pub market_id: String,
+    pub pool_uri: String,
+    pub lock_uri: String,
+    pub terms_hash: String,
+}
+
+/// A scheduled governance action.
+#[derive(Clone, Debug, PartialEq)]
+pub struct V4Pending {
+    pub action: String,
+    pub args_hash: String,
+    pub args: RhoValue,
+    pub ready_at: i64,
+}
+
+fn render_sigs(sigs: &[String]) -> Result<String, ChainError> {
+    let parts: Result<Vec<String>, rcash_core::CoreError> = sigs
+        .iter()
+        .map(|sig| rcash_core::rho::hex_bytes(sig))
+        .collect();
+    Ok(format!("[{}]", parts?.join(", ")))
+}
+
+fn render_issuer_params(p: &V4IssuerParams) -> String {
+    format!(
+        "{{\"mcrBps\": {}, \"bonusBps\": {}, \"closeFactorBps\": {}, \
+          \"ratePerBlock\": {}, \"debtCeiling\": {}, \"minDebt\": {}, \
+          \"maxDebt\": {}, \"maxOracleAge\": {}, \"savingsShareBps\": {}, \
+          \"psmFeeBps\": {}}}",
+        p.mcr_bps,
+        p.bonus_bps,
+        p.close_factor_bps,
+        p.rate_per_block,
+        p.debt_ceiling,
+        p.min_debt,
+        p.max_debt,
+        p.max_oracle_age,
+        p.savings_share_bps,
+        p.psm_fee_bps,
+    )
+}
+
+fn render_terms(t: &rcash_core::market::MarketTerms) -> Result<(String, String), ChainError> {
+    let map = format!(
+        "{{\"marketId\": {}, \"slug\": {}, \"base\": {}, \"quote\": {}, \
+          \"version\": {}, \"sponsorPubKey\": {}, \"sponsorOwnerId\": {}, \
+          \"baseFeedPolicyHash\": {}, \"quoteFeedPolicyHash\": {}, \
+          \"baseSpreadBps\": {}, \"skewSpreadBps\": {}, \"maxTradeBps\": {}, \
+          \"minLiquidity\": {}, \"firstDepositToleranceBps\": {}, \
+          \"depthFloorQuote\": {}, \"minTicketQuote\": {}, \"seedBase\": {}, \
+          \"seedQuote\": {}, \"seedInitialShares\": {}, \
+          \"lockBeneficiaryPubKey\": {}, \"lockMinBlocks\": {}, \
+          \"lockUntilHeight\": {}, \"bookDefaultExpiryBlocks\": {}, \
+          \"bookMaxExpiryBlocks\": {}, \"maxPairAgeBlocks\": {}}}",
+        terms::s(&t.market_id)?,
+        terms::s(&t.slug)?,
+        terms::s(&t.base.to_string())?,
+        terms::s(&t.quote.to_string())?,
+        t.version,
+        terms::s(&t.sponsor_pub_key)?,
+        terms::s(&t.sponsor_owner_id)?,
+        terms::s(&t.base_feed_policy_hash)?,
+        terms::s(&t.quote_feed_policy_hash)?,
+        t.base_spread_bps,
+        t.skew_spread_bps,
+        t.max_trade_bps,
+        t.min_liquidity,
+        t.first_deposit_tolerance_bps,
+        t.depth_floor_quote,
+        t.min_ticket_quote,
+        t.seed_base,
+        t.seed_quote,
+        t.seed_initial_shares,
+        terms::s(&t.lock_beneficiary_pub_key)?,
+        t.lock_min_blocks,
+        t.lock_until_height,
+        t.book_default_expiry_blocks,
+        t.book_max_expiry_blocks,
+        t.max_pair_age_blocks,
+    );
+    let values: Result<Vec<String>, rcash_core::CoreError> =
+        t.values().iter().map(|v| terms::s(v)).collect();
+    Ok((map, format!("[{}]", values?.join(", "))))
+}
+
+impl Client {
+    /// Create a market. The client signs the sponsor payload with its own key.
+    pub async fn v4_create_market(
+        &self,
+        terms: &rcash_core::market::MarketTerms,
+    ) -> Result<V4CreatedMarket, ChainError> {
+        use rcash_chain::sign_payload_hex;
+        let key = self
+            .key()
+            .ok_or_else(|| ChainError::BadKey("market creation needs a signing key".into()))?;
+        let sponsor = key.public_hex();
+        let terms_hash = terms.canonical();
+        let payload = format!(
+            "rcash:market-create:v1|{}|{}|{}",
+            terms.market_id, terms_hash, sponsor
+        );
+        let sig = sign_payload_hex(key, payload.as_bytes())?;
+        let (map, values) = render_terms(terms)?;
+        let factory = self.require_v4()?.market_factory_uri.as_str().to_string();
+        let term = format!(
+            "new rl(`rho:registry:lookup`), fCh, rCh, \
+             deployId(`rho:rchain:deployId`) in {{ \
+             rl!(`{factory}`, *fCh) | for (MarketFactory <- fCh) {{ \
+             MarketFactory!(\"createMarket\", {map}, {values}, {sponsor_lit}, \
+                            \"{sig}\".hexToBytes(), *rCh) | \
+             for (@r <- rCh) {{ deployId!(r) }} }} }}",
+            sponsor_lit = terms::s(&sponsor)?,
+        );
+        let value = self.signed_value(&term).await?;
+        let values = Reply::from_value(&value)?.into_result()?;
+        Ok(V4CreatedMarket {
+            market_id: str_at(&values, 0)?,
+            pool_uri: str_at(&values, 1)?,
+            lock_uri: str_at(&values, 2)?,
+            terms_hash: str_at(&values, 3)?,
+        })
+    }
+
+    /// Change a market's status with governor signatures.
+    pub async fn v4_set_market_status(
+        &self,
+        market_id: &str,
+        status: &str,
+        nonce: i64,
+        sigs: &[String],
+    ) -> Result<(), ChainError> {
+        let index = self.require_v4()?.market_index_uri.as_str().to_string();
+        let term = format!(
+            "new rl(`rho:registry:lookup`), cCh, rCh, \
+             deployId(`rho:rchain:deployId`) in {{ \
+             rl!(`{index}`, *cCh) | for (MarketIndex <- cCh) {{ \
+             MarketIndex!(\"setStatus\", {}, {}, {nonce}, {sigs}, *rCh) | \
+             for (@r <- rCh) {{ deployId!(r) }} }} }}",
+            terms::s(market_id)?,
+            terms::s(status)?,
+            sigs = render_sigs(sigs)?,
+        );
+        let value = self.signed_value(&term).await?;
+        Reply::from_value(&value)?.into_result()?;
+        Ok(())
+    }
+
+    /// Pause or resume a currency with governor signatures.
+    pub async fn v4_pause_currency(
+        &self,
+        code: &str,
+        paused: bool,
+        nonce: i64,
+        sigs: &[String],
+    ) -> Result<(), ChainError> {
+        let registry = self
+            .require_v4()?
+            .currency_registry_uri
+            .as_str()
+            .to_string();
+        let term = format!(
+            "new rl(`rho:registry:lookup`), cCh, rCh, \
+             deployId(`rho:rchain:deployId`) in {{ \
+             rl!(`{registry}`, *cCh) | for (CurrencyRegistry <- cCh) {{ \
+             CurrencyRegistry!(\"setPaused\", {}, {paused}, {nonce}, {sigs}, *rCh) | \
+             for (@r <- rCh) {{ deployId!(r) }} }} }}",
+            terms::s(code)?,
+            paused = paused,
+            sigs = render_sigs(sigs)?,
+        );
+        let value = self.signed_value(&term).await?;
+        Reply::from_value(&value)?.into_result()?;
+        Ok(())
+    }
+
+    /// Schedule a risk-parameter change (timelocked).
+    pub async fn v4_schedule_risk_params(
+        &self,
+        params_uri: &str,
+        params: &V4IssuerParams,
+        nonce: i64,
+        sigs: &[String],
+    ) -> Result<i64, ChainError> {
+        let term = format!(
+            "new rl(`rho:registry:lookup`), cCh, rCh, \
+             deployId(`rho:rchain:deployId`) in {{ \
+             rl!(`{params_uri}`, *cCh) | for (RiskParameters <- cCh) {{ \
+             RiskParameters!(\"scheduleParams\", {}, {nonce}, {sigs}, *rCh) | \
+             for (@r <- rCh) {{ deployId!(r) }} }} }}",
+            render_issuer_params(params),
+            sigs = render_sigs(sigs)?,
+        );
+        let value = self.signed_value(&term).await?;
+        let values = Reply::from_value(&value)?.into_result()?;
+        int_at(&values, 0)
+    }
+
+    /// Apply a scheduled risk-parameter change after the timelock.
+    pub async fn v4_apply_risk_params(
+        &self,
+        params_uri: &str,
+        nonce: i64,
+    ) -> Result<(), ChainError> {
+        let term = format!(
+            "new rl(`rho:registry:lookup`), cCh, rCh, \
+             deployId(`rho:rchain:deployId`) in {{ \
+             rl!(`{params_uri}`, *cCh) | for (RiskParameters <- cCh) {{ \
+             RiskParameters!(\"applyParams\", {nonce}, *rCh) | \
+             for (@r <- rCh) {{ deployId!(r) }} }} }}"
+        );
+        let value = self.signed_value(&term).await?;
+        Reply::from_value(&value)?.into_result()?;
+        Ok(())
+    }
+
+    /// Schedule a savings-share change (timelocked).
+    pub async fn v4_schedule_savings_share(
+        &self,
+        buffer_uri: &str,
+        bps: i64,
+        nonce: i64,
+        sigs: &[String],
+    ) -> Result<i64, ChainError> {
+        let term = format!(
+            "new rl(`rho:registry:lookup`), cCh, rCh, \
+             deployId(`rho:rchain:deployId`) in {{ \
+             rl!(`{buffer_uri}`, *cCh) | for (SurplusBuffer <- cCh) {{ \
+             SurplusBuffer!(\"scheduleShare\", {bps}, {nonce}, {sigs}, *rCh) | \
+             for (@r <- rCh) {{ deployId!(r) }} }} }}",
+            sigs = render_sigs(sigs)?,
+        );
+        let value = self.signed_value(&term).await?;
+        let values = Reply::from_value(&value)?.into_result()?;
+        int_at(&values, 0)
+    }
+
+    /// Apply a scheduled savings-share change.
+    pub async fn v4_apply_savings_share(
+        &self,
+        buffer_uri: &str,
+        nonce: i64,
+    ) -> Result<(), ChainError> {
+        let term = format!(
+            "new rl(`rho:registry:lookup`), cCh, rCh, \
+             deployId(`rho:rchain:deployId`) in {{ \
+             rl!(`{buffer_uri}`, *cCh) | for (SurplusBuffer <- cCh) {{ \
+             SurplusBuffer!(\"applyShare\", {nonce}, *rCh) | \
+             for (@r <- rCh) {{ deployId!(r) }} }} }}"
+        );
+        let value = self.signed_value(&term).await?;
+        Reply::from_value(&value)?.into_result()?;
+        Ok(())
+    }
+
+    /// Schedule a PSM fee/ceiling change (timelocked).
+    pub async fn v4_schedule_psm_policy(
+        &self,
+        psm_uri: &str,
+        fee_bps: i64,
+        ceiling: i64,
+        nonce: i64,
+        sigs: &[String],
+    ) -> Result<i64, ChainError> {
+        let term = format!(
+            "new rl(`rho:registry:lookup`), cCh, rCh, \
+             deployId(`rho:rchain:deployId`) in {{ \
+             rl!(`{psm_uri}`, *cCh) | for (PegStabilityModule <- cCh) {{ \
+             PegStabilityModule!(\"schedulePolicy\", {fee_bps}, {ceiling}, {nonce}, {sigs}, *rCh) | \
+             for (@r <- rCh) {{ deployId!(r) }} }} }}",
+            sigs = render_sigs(sigs)?,
+        );
+        let value = self.signed_value(&term).await?;
+        let values = Reply::from_value(&value)?.into_result()?;
+        int_at(&values, 0)
+    }
+
+    /// Apply a scheduled PSM policy.
+    pub async fn v4_apply_psm_policy(&self, psm_uri: &str, nonce: i64) -> Result<(), ChainError> {
+        let term = format!(
+            "new rl(`rho:registry:lookup`), cCh, rCh, \
+             deployId(`rho:rchain:deployId`) in {{ \
+             rl!(`{psm_uri}`, *cCh) | for (PegStabilityModule <- cCh) {{ \
+             PegStabilityModule!(\"applyPolicy\", {nonce}, *rCh) | \
+             for (@r <- rCh) {{ deployId!(r) }} }} }}"
+        );
+        let value = self.signed_value(&term).await?;
+        Reply::from_value(&value)?.into_result()?;
+        Ok(())
+    }
+
+    /// A scheduled governor action, if one exists.
+    pub async fn v4_pending(
+        &self,
+        domain: &str,
+        nonce: i64,
+    ) -> Result<Option<V4Pending>, ChainError> {
+        let governor = self.require_v4()?.governor_uri.as_str().to_string();
+        let reply = self
+            .v4_read(
+                &governor,
+                &format!("\"pending\", {}, {nonce}", terms::s(domain)?),
+            )
+            .await?;
+        match reply {
+            Reply::Refused(_) => Ok(None),
+            Reply::Ok(values) => Ok(Some(V4Pending {
+                action: str_at(&values, 0)?,
+                args_hash: str_at(&values, 1)?,
+                args: values
+                    .get(2)
+                    .cloned()
+                    .ok_or_else(|| decode("pending args missing"))?,
+                ready_at: int_at(&values, 3)?,
+            })),
+        }
+    }
+}
+
+/// An oracle pair reading with per-feed ages.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct V4Price {
+    pub rate: i64,
+    pub fresh: bool,
+    pub base_price: i64,
+    pub quote_price: i64,
+    pub base_age: i64,
+    pub quote_age: i64,
+}
+
+impl Client {
+    /// The hub cross-rate and feed ages for a pair.
+    pub async fn v4_price(
+        &self,
+        base: &str,
+        quote: &str,
+        max_age: i64,
+    ) -> Result<V4Price, ChainError> {
+        let hub = self.require_v4()?.oracle_hub_uri.as_str().to_string();
+        let args = format!(
+            "\"getPair\", {}, {}, {max_age}",
+            terms::s(base)?,
+            terms::s(quote)?
+        );
+        let reply = self.v4_signed_read(&hub, &args).await?;
+        let values = reply.into_result()?;
+        let entry = map_at(&values, 0)?;
+        Ok(V4Price {
+            rate: field_int(entry, "rate")?,
+            fresh: field_bool(entry, "fresh")?,
+            base_price: field_int(entry, "basePrice")?,
+            quote_price: field_int(entry, "quotePrice")?,
+            base_age: field_int(entry, "baseAge")?,
+            quote_age: field_int(entry, "quoteAge")?,
+        })
     }
 }

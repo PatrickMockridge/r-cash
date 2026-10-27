@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Unlock from "../components/Unlock";
 import { useWallet } from "../lib/store";
-import { formatUnits } from "../lib/format";
+import { formatUnits, parseUnits } from "../lib/format";
 import type { V4Market, V4Quote, V4Slot } from "../lib/types";
 
 interface Pair {
@@ -16,7 +16,8 @@ export default function Convert() {
   const [from, setFrom] = useState("REV");
   const [to, setTo] = useState("V4T");
   const [amount, setAmount] = useState("0.1");
-  const [minOut, setMinOut] = useState("0");
+  const [minOut, setMinOut] = useState("");
+  const [slippageBps, setSlippageBps] = useState("50");
   const [quote, setQuote] = useState<V4Quote | null>(null);
   const [result, setResult] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
@@ -51,11 +52,13 @@ export default function Convert() {
     setError(null);
     setResult(null);
     try {
-      setQuote(
-        JSON.parse(
-          await client.v4_quote(slot.data.pool, pair.data.direction, amount),
-        ) as V4Quote,
-      );
+      const quoted = JSON.parse(
+        await client.v4_quote(slot.data.pool, pair.data.direction, amount),
+      ) as V4Quote;
+      setQuote(quoted);
+      const slippage = BigInt(Math.max(0, Math.min(9999, Number(slippageBps) || 0)));
+      const floor = (BigInt(quoted.amountOut) * (10000n - slippage)) / 10000n;
+      setMinOut(formatUnits(floor));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -68,6 +71,9 @@ export default function Convert() {
     setBusy(true);
     setError(null);
     try {
+      if (parseUnits(minOut) <= 0n) {
+        throw new Error("get a quote and set a non-zero minimum received");
+      }
       const reply = JSON.parse(
         await client.v4_swap(slot.data.pool, pair.data.direction, from, to, amount, minOut),
       ) as { amountOut: number };
@@ -104,10 +110,19 @@ export default function Convert() {
         Amount
         <input value={amount} onChange={(event) => setAmount(event.target.value)} />
       </label>
-      <label className="field">
-        Minimum received (slippage guard)
-        <input value={minOut} onChange={(event) => setMinOut(event.target.value)} />
-      </label>
+      <div className="row gap">
+        <label className="field">
+          Slippage (bps)
+          <input
+            value={slippageBps}
+            onChange={(event) => setSlippageBps(event.target.value)}
+          />
+        </label>
+        <label className="field">
+          Minimum received (from the quote)
+          <input value={minOut} onChange={(event) => setMinOut(event.target.value)} />
+        </label>
+      </div>
 
       {pair.isError && <p className="error">{String(pair.error)}</p>}
       {pair.data === null && (

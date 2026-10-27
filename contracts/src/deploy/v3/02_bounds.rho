@@ -2,7 +2,7 @@
 // Seven contract definitions, no state.
 // Placeholders: __ROOT_URI__.
 new
-  Bounds, boundsTermFields, boundsTerms,
+  Bounds, boundsTermFields, boundsTerms, boundsTermsSemantic,
   rl(`rho:registry:lookup`),
   rs(`rho:registry:insertArbitrary`),
   deployerId(`rho:rchain:deployerId`),
@@ -11,13 +11,15 @@ new
 in {
 
   contract Bounds(@"checkIssuer", @params, ret) = {
-    new mcr, bonus, close, rate, ceiling, minD, maxD, age in {
+    new mcr, bonus, close, rate, ceiling, minD, maxD, age, sav, fee in {
       mcr!(params.get("mcrBps")) | bonus!(params.get("bonusBps")) |
       close!(params.get("closeFactorBps")) | rate!(params.get("ratePerBlock")) |
       ceiling!(params.get("debtCeiling")) | minD!(params.get("minDebt")) |
       maxD!(params.get("maxDebt")) | age!(params.get("maxOracleAge")) |
+      sav!(params.get("savingsShareBps")) | fee!(params.get("psmFeeBps")) |
       for (@a <- mcr; @b <- bonus; @c <- close; @r <- rate;
-           @dc <- ceiling; @mn <- minD; @mx <- maxD; @ag <- age) {
+           @dc <- ceiling; @mn <- minD; @mx <- maxD; @ag <- age;
+           @sv <- sav; @pf <- fee) {
         if (a < 10000 || a > 50000) { ret!((false, "mcr")) }
         else { if (b < 0 || b > 5000) { ret!((false, "bonus")) }
         else { if (c < 1 || c > 10000) { ret!((false, "close")) }
@@ -26,7 +28,9 @@ in {
         else { if (mn < 10000 || mn > 1000000000) { ret!((false, "min debt")) }
         else { if (mx < mn || mx > dc) { ret!((false, "max debt")) }
         else { if (ag < 1 || ag > 1000) { ret!((false, "oracle age")) }
-        else { ret!((true, Nil)) } } } } } } } }
+        else { if (sv < 0 || sv > 10000) { ret!((false, "savings share")) }
+        else { if (pf < 0 || pf > 1000) { ret!((false, "psm fee")) }
+        else { ret!((true, Nil)) } } } } } } } } } }
       }
     }
   } |
@@ -61,14 +65,18 @@ in {
   } |
 
   contract Bounds(@"checkBook", @params, ret) = {
-    new de, me, ma in {
+    new de, me, ma, mm, mo, ms in {
       de!(params.get("defaultExpiryBlocks")) | me!(params.get("maxExpiryBlocks")) |
-      ma!(params.get("minAmount")) |
-      for (@a <- de; @b <- me; @c <- ma) {
+      ma!(params.get("minAmount")) | mm!(params.get("maxMemoBytes")) |
+      mo!(params.get("maxOpIdBytes")) | ms!(params.get("maxStipend")) |
+      for (@a <- de; @b <- me; @c <- ma; @d <- mm; @e <- mo; @f <- ms) {
         if (a < 1) { ret!((false, "default expiry")) }
         else { if (b < a || b > 1296000) { ret!((false, "max expiry")) }
         else { if (c < 0) { ret!((false, "min amount")) }
-        else { ret!((true, Nil)) } } }
+        else { if (d < 0 || d > 4096) { ret!((false, "max memo")) }
+        else { if (e < 0 || e > 256) { ret!((false, "max op id")) }
+        else { if (f < 0) { ret!((false, "max stipend")) }
+        else { ret!((true, Nil)) } } } } } }
       }
     }
   } |
@@ -79,6 +87,47 @@ in {
     else { if (expiry > now + params.get("maxExpiryBlocks")) {
              ret!((false, "max expiry")) }
     else { ret!((true, Nil)) } } }
+  } |
+
+  // Semantic checks for every terms field that is not already covered by
+  // checkPool: identity, pair, version, seed, lock and book ranges.
+  contract boundsTermsSemantic(@t, ret) = {
+    if (t.get("marketId").length() < 1 || t.get("slug").length() < 1
+        || t.get("base").length() < 1 || t.get("quote").length() < 1) {
+      ret!((false, "terms fields"))
+    } else {
+      if (t.get("base") == t.get("quote")) { ret!((false, "pair")) }
+      else {
+        if (t.get("version") < 1) { ret!((false, "version")) }
+        else {
+          if (t.get("seedBase") <= 0 || t.get("seedQuote") <= 0
+              || t.get("seedInitialShares") <= 0) {
+            ret!((false, "seed mismatch"))
+          } else {
+            if (t.get("lockMinBlocks") < 1) { ret!((false, "lock too short")) }
+            else {
+              if (t.get("lockUntilHeight") < t.get("lockMinBlocks")) {
+                ret!((false, "lock height"))
+              } else {
+                if (t.get("bookDefaultExpiryBlocks") < 1
+                    || t.get("bookDefaultExpiryBlocks") > t.get("bookMaxExpiryBlocks")) {
+                  ret!((false, "book expiry"))
+                } else {
+                  if (t.get("bookMaxExpiryBlocks") > 1296000) {
+                    ret!((false, "book expiry"))
+                  } else {
+                    if (t.get("maxPairAgeBlocks") < 1
+                        || t.get("maxPairAgeBlocks") > 1000) {
+                      ret!((false, "oracle age"))
+                    } else { Bounds!("checkPool", t, *ret) }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
   } |
 
   contract boundsTermFields(@terms, @values, @keys, @i, ret) = {
@@ -115,7 +164,7 @@ in {
             boundsTermFields!(terms, values, keys, 0, *fCh) |
             for (@f <- fCh) {
               match f {
-                (true, Nil) => { Bounds!("checkPool", terms, *ret) }
+                (true, Nil) => { boundsTermsSemantic!(terms, *ret) }
                 _ => { ret!(f) }
               }
             }

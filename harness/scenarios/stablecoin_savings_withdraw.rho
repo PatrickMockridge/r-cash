@@ -1,0 +1,36 @@
+// Withdraw savings shares into the caller's account. Returns [amount].
+// Placeholders: __ROOT_URI__, __SAVINGS_URI__, __PUBKEY__, __SHARES__, __ASSET__.
+new
+  rl(`rho:registry:lookup`), rootCh, afCh, ac, savCh, oCh, wdCh, depCh,
+  deployId(`rho:rchain:deployId`),
+  deployerId(`rho:rchain:deployerId`)
+in {
+  rl!(`__ROOT_URI__`, *rootCh) |
+  rl!(`__SAVINGS_URI__`, *savCh) |
+  for (Root <- rootCh; SavingsPool <- savCh) {
+    Root!("resolve", "component:account-factory", 1, *afCh) |
+    for (@(true, afUri, _) <- afCh) {
+      rl!(afUri, *ac) |
+      for (AccountFactory <- ac) {
+        AccountFactory!("getOrCreate", "__PUBKEY__".hexToBytes(), *oCh) |
+        for (@(true, account, _) <- oCh) {
+          SavingsPool!("withdraw", *deployerId, __SHARES__, *wdCh) |
+          for (@w <- wdCh) {
+            match w {
+              (true, payment, amount) => {
+                @account!("deposit", *deployerId, "__ASSET__", payment, *depCh) |
+                for (@d <- depCh) {
+                  match d {
+                    (true, _) => deployId!([amount])
+                    _ => deployId!(d)
+                  }
+                }
+              }
+              _ => deployId!(w)
+            }
+          }
+        }
+      }
+    }
+  }
+}

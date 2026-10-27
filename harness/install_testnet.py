@@ -342,7 +342,7 @@ class Installer:
                              STEP_KEYS["asset_resolver"], tip)
         self.step(
             "40_transfer", "testnet:transfer",
-            {**common, "__BOOK_PARAMS__": '{"minAmount": 1, "defaultExpiryBlocks": 720, "maxExpiryBlocks": 1296000}'},
+            {**common, "__BOOK_PARAMS__": '{"minAmount": 1, "defaultExpiryBlocks": 720, "maxExpiryBlocks": 1296000, "maxMemoBytes": 128, "maxOpIdBytes": 64, "maxStipend": 100000000}'},
             STEP_KEYS["transfer"], tip,
         )
         self.step(
@@ -352,7 +352,8 @@ class Installer:
         )
         self.step(
             "50_market", "testnet:market",
-            {"__ROOT_URI__": self.root_uri, "__ASSET_RESOLVER_URI__": resolver[0]},
+            {"__ROOT_URI__": self.root_uri, "__ASSET_RESOLVER_URI__": resolver[0],
+             "__MIN_LOCK_BLOCKS__": "302400"},
             STEP_KEYS["market"], tip,
         )
         self.step(

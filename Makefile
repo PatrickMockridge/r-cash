@@ -4,7 +4,7 @@ PY := $(VENV)/bin/python
 RHOLO_DIR ?= $(or $(RCHAIN_RUST_DIR),../rholo)
 export RHOLO_DIR
 
-.PHONY: venv image devnet down status keys build probes deploy logs clean demo client-test web-build check-languages test-wasm measure measure-check check-arch check-captures spec-check tla-check install-v3 unit-v3 unit-feed unit-hub unit-stablecoin unit-liquidation unit-interest unit-accounts unit-transfer unit-market unit-all
+.PHONY: venv image devnet down status keys build probes deploy logs clean demo client-test web-build check-languages test-wasm measure measure-check check-arch check-captures spec-check tla-check install install-v3 bootstrap setup unit-v3 unit-feed unit-hub unit-stablecoin unit-liquidation unit-interest unit-savings unit-psm unit-timelock unit-accounts unit-transfer unit-transfer-memo unit-market unit-buffer unit-pool unit-all
 
 venv:
 	python3 -m venv $(VENV)
@@ -55,9 +55,22 @@ tla-check:
 	  echo "tlc not installed; skipping TLA+ check"; \
 	fi
 
-# v0.3 kernel installer and isolated component checks.
+# v0.4 kernel installer and isolated component checks.
 install-v3: build
 	$(PY) harness/install_v3.py
+
+# The chain-aware installer used for fresh campaigns (signed-read verification).
+install: build
+	$(PY) harness/install_testnet.py --node http://localhost:40403 \
+	  --state .devnet/v3-install.json --manifest deployments/devnet-v4.json --fresh
+
+# Bootstrap the demo system and market through the acceptance suites; systems are
+# discovered by clients through ListingViews, so no separate systems manifest is
+# required.
+bootstrap: unit-stablecoin unit-market
+
+# One command from an empty host to a bootstrapped devnet.
+setup: devnet keys install bootstrap
 
 unit-v3:
 	$(VENV)/bin/python harness/unit_v3.py
@@ -77,16 +90,34 @@ unit-liquidation:
 unit-interest:
 	$(PY) harness/unit_interest.py
 
+unit-savings:
+	$(PY) harness/unit_savings.py
+
+unit-psm:
+	$(PY) harness/unit_psm.py
+
+unit-timelock:
+	$(PY) harness/unit_timelock.py
+
+# The buffer checks (sin, mint halt, cover waterfall) are part of the liquidation
+# suite; these aliases name the specification areas for the campaign report.
+unit-buffer: unit-liquidation
+
+unit-pool: unit-market
+
 unit-accounts:
 	$(VENV)/bin/python harness/unit_accounts.py
 
 unit-transfer:
 	$(VENV)/bin/python harness/unit_transfer.py
 
+unit-transfer-memo:
+	$(PY) harness/unit_transfer_memo.py
+
 unit-market:
 	$(VENV)/bin/python harness/unit_market.py
 
-unit-all: unit-v3 unit-feed unit-hub unit-stablecoin unit-liquidation unit-interest unit-accounts unit-transfer unit-market
+unit-all: unit-v3 unit-feed unit-hub unit-stablecoin unit-interest unit-liquidation unit-savings unit-psm unit-timelock unit-accounts unit-transfer unit-transfer-memo unit-market
 
 probes: build
 	$(PY) harness/rcash.py probes

@@ -16,6 +16,14 @@ export interface JournalEntry {
   deployId?: string;
   summary: string;
   createdAt: number;
+  /** Transfer handle, asset, amount and expiry for payment entries. */
+  transfer?: string;
+  asset?: string;
+  amount?: string;
+  expiry?: number;
+  opId?: string;
+  recipient?: string;
+  status?: "pending" | "submitted" | "confirmed" | "failed";
 }
 
 function open(): Promise<IDBDatabase> {

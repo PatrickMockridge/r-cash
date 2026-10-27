@@ -1,6 +1,6 @@
 # R-Cash — Intent
 
-**Status:** v0.1, devnet-only prototype. **Normative specification:** [`SPEC.md`](SPEC.md).
+**Status:** v0.5, devnet-only prototype. **Normative specification:** [`SPEC.md`](SPEC.md).
 
 ## 1. The problem
 
@@ -18,11 +18,12 @@ open a non-custodial account holding local currencies, receive money as if they 
 convert directly between currencies, and pay anyone — with a wallet or a claim link — while
 liquidity providers, not correspondent banks, earn the FX spread.
 
-R-Cash is not a general DeFi suite. Local-currency stablecoins exist to hold and move money; the FX
-pool exists to price and settle conversions and payments; the oracle prices the stablecoin issuer's collateral and FX; the
-claim link makes a recipient without a wallet reachable; and the ramp layer is the local payout
-interface. If a component does not serve **hold → receive → convert → pay → get paid**, it is not in
-this build.
+R-Cash is not a general DeFi suite. Local-currency stablecoins exist to hold and move money; they
+are DAI-shaped: REV-collateralised vaults, an oracle, liquidation, a surplus buffer that absorbs bad
+debt, a savings pool for holders and a PSM that provides par redemption and issuance. The FX pool
+prices and settles conversions and payments; the claim link makes a recipient without a wallet
+reachable. If a component does not serve **hold → receive → convert → pay → get paid**, or the
+solvency and par mechanisms that make the held currency credible, it is not in this build.
 
 ## 3. What "Wise-shaped" means here
 
@@ -30,17 +31,19 @@ Wise is not only remittance. Its surface is a multi-currency account with local 
 direct conversion, person-to-person and business payments, batch payouts, invoices, cards and an API
 for platforms. R-Cash targets the payments core on-chain:
 
-| Wise surface | R-Cash v0.1 | Status |
+| Wise surface | R-Cash v0.5 | Status |
 |---|---|---|
 | Multi-currency account | `Account`: non-custodial purses per local stablecoin and LP token | implemented |
 | Direct conversion | withdraw source, `FxPool.swap`, deposit destination (one atomic deploy) | implemented |
 | Send money | `TransferBook.send` with a claim hash | implemented |
 | Recipient without a wallet | claim secret; local ramp payout off-chain | claim implemented; ramp is a partner boundary |
-| Get paid / invoice | `PaymentRequests` | planned |
-| Business batch payouts | `TransferBook.sendBatch` | planned |
-| Local receiving details | `RampRegistry` on-ramp partners | planned |
+| Get paid / invoice | `PaymentRequests` | excluded (see `SPEC.md` §19) |
+| Business batch payouts | `TransferBook.sendBatch` | excluded |
+| Local receiving details | `RampRegistry` on-ramp partners | excluded |
 | Liquidity / FX revenue | LP tokens in the corridor pool | implemented |
-| Cards / API / interest | card issuer, platform API, yield | not in scope |
+| Savings / yield | per-owner savings pool; borrower interest reaches savers automatically on repay | implemented |
+| Par redemption | PSM: redeem or mint the stablecoin against REV at par minus a fee | implemented |
+| Cards / platform API | card issuer, platform API | not in scope |
 
 ## 4. Users and jobs
 
@@ -51,7 +54,9 @@ for platforms. R-Cash targets the payments core on-chain:
 | **SME / business** | Pay suppliers and contractors, batch payroll, hold operating balances |
 | **Recipient without a wallet** | Open a claim link, choose a local payout partner, receive mobile money or cash |
 | **Liquidity provider** | Deposit both sides of a corridor, earn the FX spread |
-| **Stablecoin issuer** | Lock REV, mint local currency, spend or supply it; issuer infrastructure, not a lending product |
+| **Vault owner** | Lock REV, mint local currency, repay with interest, withdraw collateral; the vault is the issuance mechanism |
+| **Saver** | Hold the stablecoin in the savings pool and earn the interest borrowers pay |
+| **Arbitrageur** | Redeem below par or mint above par through the PSM; trade the residual on the AMM |
 | **Ramp partner** | On-ramp fiat, pay out claims off-chain on licensed local rails |
 | **Keeper** | Liquidate unhealthy issuer vaults, watch expiries |
 

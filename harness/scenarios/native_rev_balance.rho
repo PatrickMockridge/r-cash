@@ -1,0 +1,12 @@
+// A native REV vault balance by public key. Returns [balance].
+// Placeholders: __PUBKEY__.
+new
+  revAddr(`rho:rev:address`), vault(`rho:rchain:revVault`),
+  deployId(`rho:rchain:deployId`), aCh, bCh
+in {
+  revAddr!("fromPublicKey", "__PUBKEY__".hexToBytes(), *aCh) |
+  for (@addr <- aCh) {
+    vault!("getBalance", addr, *bCh) |
+    for (@bal <- bCh) { deployId!([bal]) }
+  }
+}

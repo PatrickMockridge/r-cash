@@ -1,6 +1,7 @@
 # Frontend
 
-**Status:** R3 is implemented and the browser journey passes against the local devnet.
+**Status:** the v0.5 screens are implemented and the static gates are green. The browser
+journey is rerun in the final behavioural campaign, not before it.
 
 React 18 + Vite 6 + TypeScript. The product code talks to the node through the Rust SDK
 compiled to WebAssembly (`crates/rcash-wasm`), so signing, term construction, decoding and
@@ -27,13 +28,19 @@ claimable transfer, the recipient's claim, and the credited purse. The manifest 
 
 | Route | What it does | Notes |
 |---|---|---|
-| `/` | Accounts: native REV, per-asset account purses, deposit REV, faucet, public key | Owner balance reads are signed; the REV balance gates them |
+| `/` | Accounts: native REV, per-asset account purses, deposit REV, faucet, public key | Currency list comes from `ListingViews.currencies`; the REV balance gates the signed reads |
 | `/receive` | Public key, REV address, open a claim link | A sender needs the public key for a claimable transfer |
-| `/convert` | Discover the direct market, quote, then swap with a minimum received | One atomic withdraw→swap→deposit deploy; blocked while the market is not active |
-| `/pay` | Send a claimable transfer to a public key | Generates the 32-byte secret and its BLAKE2b hash in wasm; shows the link |
-| `/claim/:uri/:secret` | Review and claim a transfer by URI | Secret stays in the URL fragment |
-| `/liquidity` | Market slot, reserves, seed lock, add-and-lock, release | Add withdraws both sides and funds the lock; release returns both sides to the account |
-| `/batch` | Disabled | Batch payouts are not in the v0.4 protocol |
+| `/pay` | Send a claimable transfer | Memo, generated opId journaled before submit, optional non-refundable REV stipend, finalized-height expiry, claim link |
+| `/claim/:uri/:secret` | Review and claim a transfer | Status, expiry countdown, memo and stipend; the secret stays in the fragment |
+| `/vault` | Vault position and lifecycle | Collateral, accrued debt, interest, health and rate; deposit, deposit-and-mint, repay, withdraw |
+| `/earn` | Savings pool and surplus buffer | Share value, position, buffer surplus/sin, savers' share; deposit and withdraw |
+| `/redeem` | PSM par venue | Signed debt, REV buffer, fee and ceiling; redeem stablecoin for REV or mint with REV |
+| `/markets` | Market list and creation | Lists status and links to seeding/conversion; creates a market from a typed 25-field JSON terms object signed by the wallet |
+| `/convert` | Quote and swap | Slippage default 50 bps; the minimum received is derived from the quote and must be non-zero |
+| `/liquidity` | Seed lock, add and release | Non-zero minimum shares and minimum base/quote; release is the LP exit while paused |
+| `/history` | Local journal and on-chain reconciliation | Refunds an open transfer after its expiry height |
+| `/governance` | Read-only risk parameters and pending actions | Writes are CLI/ops only |
+| `/batch` | Disabled | Batch payouts are an explicit exclusion |
 | `/ramps` | Disabled | Off-chain licensed-partner boundary |
 | `/settings` | Node URL, manifest, export keystore, lock | Only non-secret config is stored |
 

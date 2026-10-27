@@ -4,10 +4,16 @@ import Layout from "./components/Layout";
 import Accounts from "./routes/Accounts";
 import Claim from "./routes/Claim";
 import Convert from "./routes/Convert";
+import Earn from "./routes/Earn";
+import Governance from "./routes/Governance";
+import History from "./routes/History";
 import Liquidity from "./routes/Liquidity";
+import Markets from "./routes/Markets";
 import Pay from "./routes/Pay";
 import Receive from "./routes/Receive";
+import Redeem from "./routes/Redeem";
 import Settings from "./routes/Settings";
+import Vault from "./routes/Vault";
 import Disabled from "./routes/Disabled";
 import { useWallet } from "./lib/store";
 
@@ -25,7 +31,13 @@ export default function App() {
         <Route path="convert" element={<Convert />} />
         <Route path="pay" element={<Pay />} />
         <Route path="claim/:uri/:secret" element={<Claim />} />
+        <Route path="vault" element={<Vault />} />
+        <Route path="earn" element={<Earn />} />
+        <Route path="redeem" element={<Redeem />} />
+        <Route path="markets" element={<Markets />} />
         <Route path="liquidity" element={<Liquidity />} />
+        <Route path="history" element={<History />} />
+        <Route path="governance" element={<Governance />} />
         <Route
           path="batch"
           element={

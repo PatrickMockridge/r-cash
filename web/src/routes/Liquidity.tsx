@@ -13,6 +13,9 @@ export default function Liquidity() {
   const [baseAmount, setBaseAmount] = useState("1");
   const [quoteAmount, setQuoteAmount] = useState("75");
   const [lockBlocks, setLockBlocks] = useState("100");
+  const [minShares, setMinShares] = useState("");
+  const [minBase, setMinBase] = useState("");
+  const [minQuote, setMinQuote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -71,6 +74,9 @@ export default function Liquidity() {
       if (!Number.isSafeInteger(blocks) || blocks < 1) {
         throw new Error("lock duration must be a positive number of blocks");
       }
+      if (!minShares || minShares.trim() === "" || Number(minShares) <= 0) {
+        throw new Error("set a non-zero minimum LP shares");
+      }
       const reply = JSON.parse(
         await client.v4_add_liquidity(
           slot.data.pool,
@@ -80,6 +86,7 @@ export default function Liquidity() {
           baseAmount,
           quoteAmount,
           BigInt(tip.height + blocks),
+          minShares,
         ),
       ) as { shares: number };
       setBusy(false);
@@ -93,12 +100,25 @@ export default function Liquidity() {
     }
   };
 
-  const release = () =>
-    slot.data &&
-    run(
-      () => client!.v4_release_lp(slot.data.lock, slot.data.pool, base, quote),
+  const release = () => {
+    if (!slot.data) return;
+    if (minBase.trim() === "" || minQuote.trim() === "") {
+      setError("set the minimum base and quote amounts before releasing");
+      return;
+    }
+    return run(
+      () =>
+        client!.v4_release_lp(
+          slot.data!.lock,
+          slot.data!.pool,
+          base,
+          quote,
+          minBase,
+          minQuote,
+        ),
       "Released the seed LP and removed it into your account.",
     );
+  };
 
   const active = market.data?.status === "active";
 
@@ -204,6 +224,24 @@ export default function Liquidity() {
           Lock for (blocks from the tip)
           <input value={lockBlocks} onChange={(event) => setLockBlocks(event.target.value)} />
         </label>
+        <div className="row gap">
+          <label className="field">
+            Minimum LP shares
+            <input value={minShares} onChange={(event) => setMinShares(event.target.value)} />
+          </label>
+          <label className="field">
+            Minimum {base} on release
+            <input value={minBase} onChange={(event) => setMinBase(event.target.value)} />
+          </label>
+          <label className="field">
+            Minimum {quote} on release
+            <input value={minQuote} onChange={(event) => setMinQuote(event.target.value)} />
+          </label>
+        </div>
+        <p className="muted small">
+          Minimums should come from the quote at a 50 bps tolerance. They are never zero in
+          production: a zero minimum accepts any output.
+        </p>
         {error && <p className="error">{error}</p>}
         {message && <p className="ok">{message}</p>}
         <div className="row gap">

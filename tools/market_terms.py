@@ -14,15 +14,16 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 VECTORS = ROOT / "tests" / "terms" / "terms-vectors.json"
 
-TERMS_SCHEMA = "rcash:market-terms:v1"
+TERMS_SCHEMA = "rcash:market-terms:v4"
 ZONE_SCHEMA = "rcash:zone-params:v1"
-FEED_SCHEMA = "rcash:oracle-policy:v1"
+FEED_SCHEMA = "rcash:oracle-policy:v3"
 POOL_SCHEMA = "rcash:pool-params:v1"
-BOOK_SCHEMA = "rcash:book-params:v1"
+BOOK_SCHEMA = "rcash:book-params:v4"
 
 
 def canonical(schema: str, values: list[str | int]) -> str:
-    return "|".join([schema, *[str(v) for v in values]])
+    encoded = [f"{len(str(v).encode('utf-8'))}:{v}" for v in values]
+    return "|".join([schema, *encoded])
 
 
 def digest(text: str) -> str:
@@ -33,7 +34,7 @@ def sample() -> dict:
     zone_values = [20000, 800, 5000, 3171, 10_000_000_000_000, 1_000_000, 10_000_000_000_000]
     feed_values = [2, 50, 200, 1, 1_000_000_000_000, 10, 4]
     pool_values = [20, 80, 500, 100_000_000, 100, 130_000_000_000, 1_300_000_000]
-    book_values = [720, 129_600]
+    book_values = [720, 129_600, 1, 128, 64, 100_000_000]
     terms_values = [
         "KES/NGN:v1",
         "KES-NGN-v1",
@@ -42,8 +43,6 @@ def sample() -> dict:
         1,
         "04aa",
         "1111sponsor",
-        "rho:id:ngn",
-        "rho:id:kes",
         "11" * 32,
         "22" * 32,
         20,
@@ -51,9 +50,7 @@ def sample() -> dict:
         500,
         100_000_000,
         100,
-        100_000_000,
         130_000_000_000,
-        1_000_000,
         1_300_000_000,
         1_500_000_000_000,
         130_000_000_000,
@@ -63,8 +60,7 @@ def sample() -> dict:
         500_000,
         720,
         129_600,
-        0,
-        1,
+        50,
     ]
 
     def entry(schema: str, values: list) -> dict:

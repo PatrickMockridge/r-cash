@@ -1,10 +1,11 @@
-import { useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Unlock from "../components/Unlock";
 import { useWallet } from "../lib/store";
 import { claimLink } from "../lib/claim";
+import { addJournal } from "../lib/db";
 import { claim_hash } from "../wasm";
-import type { V4Send } from "../lib/types";
+import type { V4Currency, V4Send } from "../lib/types";
 
 interface Sent extends V4Send {
   secret: string;
@@ -17,12 +18,25 @@ export default function Pay() {
   const [asset, setAsset] = useState("REV");
   const [amount, setAmount] = useState("0.01");
   const [expiryBlocks, setExpiryBlocks] = useState("60");
+  const [memo, setMemo] = useState("");
+  const [stipend, setStipend] = useState("0");
+  const [opId] = useState(() => crypto.randomUUID());
   const [secret, setSecret] = useState("");
   const [hash, setHash] = useState("");
   const [result, setResult] = useState<Sent | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+
+  const currencies = useQuery({
+    queryKey: ["v4-currencies"],
+    enabled: status === "unlocked" && !!client,
+    queryFn: async () => JSON.parse(await client!.v4_currencies()) as V4Currency[],
+  });
+  const assets = useMemo(
+    () => ["REV", ...(currencies.data ?? []).map((currency) => currency.code)],
+    [currencies.data],
+  );
 
   if (status !== "unlocked") return <Unlock />;
 
@@ -40,21 +54,75 @@ export default function Pay() {
     setBusy(true);
     setError(null);
     setResult(null);
+    const journalId = `send-${opId}`;
     try {
       if (!/^[0-9a-f]{64}$/.test(hash)) {
         throw new Error("generate a claim secret first");
+      }
+      if (!/^[0-9a-fA-F]+$/.test(toPub)) {
+        throw new Error("recipient public key must be hex");
+      }
+      if (memo.length > 128) {
+        throw new Error("memo is limited to 128 bytes");
       }
       const blocks = Number.parseInt(expiryBlocks, 10);
       if (!Number.isSafeInteger(blocks) || blocks < 1) {
         throw new Error("expiry must be a positive number of blocks");
       }
       const tip = JSON.parse(await client.height()) as { height: number };
+      const expiry = tip.height + blocks;
+      await addJournal({
+        id: journalId,
+        kind: "send",
+        summary: `${amount} ${asset} to ${toPub.slice(0, 12)}…`,
+        asset,
+        amount,
+        expiry,
+        opId,
+        recipient: toPub,
+        status: "pending",
+        createdAt: Date.now(),
+      });
       const sent = JSON.parse(
-        await client.v4_send_transfer(toPub, asset, amount, hash, BigInt(tip.height + blocks)),
+        await client.v4_send_transfer(
+          toPub,
+          asset,
+          amount,
+          hash,
+          BigInt(expiry),
+          memo,
+          opId,
+          stipend,
+        ),
       ) as V4Send;
       setResult({ ...sent, secret });
+      await addJournal({
+        id: journalId,
+        kind: "send",
+        summary: `${amount} ${asset} to ${toPub.slice(0, 12)}…`,
+        transfer: sent.transfer,
+        asset,
+        amount,
+        expiry,
+        opId,
+        recipient: toPub,
+        status: "confirmed",
+        createdAt: Date.now(),
+      });
       await queryClient.invalidateQueries({ queryKey: ["v4-balances"] });
+      await queryClient.invalidateQueries({ queryKey: ["journal"] });
     } catch (cause) {
+      await addJournal({
+        id: journalId,
+        kind: "send",
+        summary: `${amount} ${asset} to ${toPub.slice(0, 12)}…`,
+        asset,
+        amount,
+        opId,
+        recipient: toPub,
+        status: "failed",
+        createdAt: Date.now(),
+      }).catch(() => undefined);
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
       setBusy(false);
@@ -77,7 +145,7 @@ export default function Pay() {
       <p className="muted">
         Send an asset with a claim link. The amount is escrowed in a per-transfer contract;
         anyone with the secret can claim it, and the sender can refund after the expiry
-        height.
+        height. The transfer id is idempotent: resubmitting the same opId never double-spends.
       </p>
 
       <label className="field">
@@ -92,7 +160,16 @@ export default function Pay() {
       <div className="row gap">
         <label className="field">
           Asset
-          <input value={asset} onChange={(event) => setAsset(event.target.value)} />
+          <input
+            value={asset}
+            onChange={(event) => setAsset(event.target.value)}
+            list="pay-assets"
+          />
+          <datalist id="pay-assets">
+            {assets.map((code) => (
+              <option key={code} value={code} />
+            ))}
+          </datalist>
         </label>
         <label className="field">
           Amount
@@ -100,12 +177,24 @@ export default function Pay() {
         </label>
       </div>
       <label className="field">
-        Expiry (blocks from the tip)
+        Expiry (blocks from the finalized tip)
         <input
           value={expiryBlocks}
           onChange={(event) => setExpiryBlocks(event.target.value)}
         />
       </label>
+      <label className="field">
+        Memo (optional, 128 bytes)
+        <input value={memo} onChange={(event) => setMemo(event.target.value)} />
+      </label>
+      <label className="field">
+        REV stipend for the claimer (optional, non-refundable)
+        <input value={stipend} onChange={(event) => setStipend(event.target.value)} />
+      </label>
+      <p className="muted small">
+        The stipend is sent to the recipient's REV address so they can pay the claim's phlo.
+        It is not returned if the link is unused.
+      </p>
       <div className="row gap">
         <button className="ghost" onClick={generate}>
           {secret ? "Regenerate secret" : "Generate claim secret"}
@@ -113,7 +202,8 @@ export default function Pay() {
       </div>
       {hash && (
         <p className="muted small mono">
-          claim hash {hash.slice(0, 16)}… · expiry is absolute on-chain
+          claim hash {hash.slice(0, 16)}… · opId {opId.slice(0, 8)}… · expiry is absolute
+          on-chain
         </p>
       )}
 

@@ -7,6 +7,7 @@
 new
   AccountFactory, factoryState,
   revAddress(`rho:rev:address`),
+  revVault(`rho:rchain:revVault`),
   deployerIdOps(`rho:rchain:deployerId:ops`),
   rl(`rho:registry:lookup`),
   rs(`rho:registry:insertArbitrary`),
@@ -25,7 +26,8 @@ in {
               for (@s2 <- factoryState) {
                 match s2.get("accounts").get(ownerId) {
                   Nil => {
-                    new proof, account, PurseStore, purseState, accountState, AccountGate in {
+                    new proof, account, PurseStore, purseState, accountState, AccountGate,
+                        reserveSend, finishSend, dropReserve, sendCommit in {
 
                       contract AccountGate(@"verify", dId, ret2) = {
                         new pkCh, aCh in {
@@ -185,7 +187,90 @@ in {
                       } |
 
                       purseState!({"purses": {}, "rev": 0}) |
-                      accountState!({"nextTransferId": 0}) |
+                      accountState!({"nextTransferId": 0, "ops": {}, "rev": 0}) |
+
+                      // Reserve an opId before any funds move: a completed entry is
+                      // replayed, a pending entry is refused, a new one is stored.
+                      contract reserveSend(@opId, ret2) = {
+                        for (@as <- accountState) {
+                          match as.get("ops").get(opId) {
+                            Nil => {
+                              match as.get("nextTransferId") { id => {
+                                new nextCh in {
+                                  match opId {
+                                    "" => {
+                                      nextCh!(as.set("nextTransferId", id + 1)
+                                        .set("rev", as.get("rev") + 1))
+                                    }
+                                    _ => {
+                                      nextCh!(as.set("nextTransferId", id + 1)
+                                        .set("ops", as.get("ops").set(opId, {"id": id}))
+                                        .set("rev", as.get("rev") + 1))
+                                    }
+                                  } |
+                                  for (@nxt <- nextCh) {
+                                    accountState!(nxt) | ret2!((true, id))
+                                  }
+                                }
+                              } }
+                            }
+                            entry => {
+                              match entry.get("uri") {
+                                Nil => { ret2!((false, "pending", entry.get("id"))) }
+                                uri => { ret2!((true, entry.get("id"), uri)) }
+                              }
+                            }
+                          }
+                        }
+                      } |
+
+                      contract finishSend(@opId, @id, @uri, ret2) = {
+                        match opId {
+                          "" => { ret2!((true, id, uri)) }
+                          _ => {
+                            for (@as <- accountState) {
+                              accountState!(as.set("ops",
+                                as.get("ops").set(opId, {"id": id, "uri": uri}))
+                                .set("rev", as.get("rev") + 1)) |
+                              ret2!((true, id, uri))
+                            }
+                          }
+                        }
+                      } |
+
+                      contract dropReserve(@opId, ret2) = {
+                        match opId {
+                          "" => { ret2!((true, Nil)) }
+                          _ => {
+                            for (@as <- accountState) {
+                              accountState!(as.set("ops", as.get("ops").set(opId, Nil))
+                                .set("rev", as.get("rev") + 1)) |
+                              ret2!((true, Nil))
+                            }
+                          }
+                        }
+                      } |
+
+                      // On success, forward the optional native REV stipend from the
+                      // sender's deployer vault to the recipient's REV address (the
+                      // claimer needs native REV for phlo), then record the opId. A
+                      // failed native transfer fails the deploy, rolling back the
+                      // reservation and the book send.
+                      contract sendCommit(@opId, @id, @uri, @stipend, @recipientPub, ret2) = {
+                        if (stipend <= 0) {
+                          finishSend!(opId, id, uri, *ret2)
+                        } else {
+                          new addrCh, vCh in {
+                            revAddress!("fromPublicKey", recipientPub, *addrCh) |
+                            for (@addr <- addrCh) {
+                              revVault!("transfer", *deployerId, addr, stipend, *vCh) |
+                              for (_ <- vCh) {
+                                finishSend!(opId, id, uri, *ret2)
+                              }
+                            }
+                          }
+                        }
+                      } |
 
                       contract account(@"vaultOpen", dId, @vaultUri, ret2) = {
                         new vCh in {
@@ -257,57 +342,85 @@ in {
                       // The transfer id is per owner: consume and re-post the counter
                       // before any await, so a blocked branch cannot lose the cell.
                       contract account(@"sendTransfer", dId, @assetId, recipientFacet,
-                                       @amount, @secretHash, @expiry, ret2) = {
-                        new vCh in {
+                                       @recipientPub, @amount, @secretHash, @expiry,
+                                       @memo, @opId, @stipend, ret2) = {
+                        new vCh, rsvCh, dropCh in {
                           AccountGate!("verify", *dId, *vCh) |
                           for (@v <- vCh) {
                             match v {
                               (true, Nil) => {
-                                new idCh in {
-                                  for (@as <- accountState) {
-                                    match as.get("nextTransferId") {
-                                      id => {
-                                        accountState!(as.set("nextTransferId", id + 1)) |
-                                        idCh!(id)
-                                      }
-                                    }
-                                  } |
-                                  for (@id <- idCh) {
-                                    new fCh, wCh in {
-                                      PurseStore!("facet", assetId, *fCh) |
-                                      for (@f <- fCh) {
-                                        match f {
-                                          (true, refundFacet) => {
-                                            PurseStore!("withdraw", assetId, amount, *wCh) |
-                                            for (@w <- wCh) {
-                                              match w {
-                                                (true, payment) => {
-                                                  new rCh, bCh in {
-                                                    rl!(`__ROOT_URI__`, *rCh) |
-                                                    for (Root <- rCh) {
-                                                      Root!("resolve", "component:transfer-book", 1, *bCh) |
-                                                      for (@(true, bookUri, _) <- bCh) {
-                                                        new bc in {
-                                                          rl!(bookUri, *bc) |
-                                                          for (TransferBook <- bc) {
-                                                            TransferBook!("send", ownerId, id,
-                                                              *recipientFacet, refundFacet,
-                                                              assetId, amount, payment,
-                                                              secretHash, expiry, *ret2)
+                                reserveSend!(opId, *rsvCh) |
+                                for (@rs <- rsvCh) {
+                                  match rs {
+                                    (true, id) => {
+                                      new fCh, wCh in {
+                                        PurseStore!("facet", assetId, *fCh) |
+                                        for (@f <- fCh) {
+                                          match f {
+                                            (true, refundFacet) => {
+                                              PurseStore!("withdraw", assetId, amount, *wCh) |
+                                              for (@w <- wCh) {
+                                                match w {
+                                                  (true, payment) => {
+                                                    new rCh, bCh, resCh in {
+                                                      rl!(`__ROOT_URI__`, *rCh) |
+                                                      for (Root <- rCh) {
+                                                        Root!("resolve", "component:transfer-book", 1, *bCh) |
+                                                        for (@(true, bookUri, _) <- bCh) {
+                                                          new bc in {
+                                                            rl!(bookUri, *bc) |
+                                                            for (TransferBook <- bc) {
+                                                              TransferBook!("send", ownerId, id,
+                                                                *recipientFacet, refundFacet,
+                                                                assetId, amount, payment,
+                                                                secretHash, expiry, memo, opId,
+                                                                stipend, *resCh) |
+                                                              for (@res <- resCh) {
+                                                                match res {
+                                                                  (true, tid, uri) => {
+                                                                    sendCommit!(opId, tid, uri,
+                                                                      stipend, recipientPub, *ret2)
+                                                                  }
+                                                                  (false, why, pay) => {
+                                                                    dropReserve!(opId, *dropCh) |
+                                                                    for (@_ <- dropCh) {
+                                                                      ret2!((false, why, pay))
+                                                                    }
+                                                                  }
+                                                                  (false, why) => {
+                                                                    dropReserve!(opId, *dropCh) |
+                                                                    for (@_ <- dropCh) {
+                                                                      ret2!((false, why))
+                                                                    }
+                                                                  }
+                                                                  _ => { ret2!(1 / 0) }
+                                                                }
+                                                              }
+                                                            }
                                                           }
                                                         }
                                                       }
                                                     }
                                                   }
+                                                  (false, why) => {
+                                                    dropReserve!(opId, *dropCh) |
+                                                    for (@_ <- dropCh) { ret2!((false, why)) }
+                                                  }
+                                                  _ => { ret2!(1 / 0) }
                                                 }
-                                                _ => { ret2!(w) }
                                               }
                                             }
+                                            (false, why) => {
+                                              dropReserve!(opId, *dropCh) |
+                                              for (@_ <- dropCh) { ret2!((false, why)) }
+                                            }
+                                            _ => { ret2!(1 / 0) }
                                           }
-                                          _ => { ret2!(f) }
                                         }
                                       }
                                     }
+                                    (true, id, uri) => { ret2!((true, id, uri)) }
+                                    _ => { ret2!(rs) }
                                   }
                                 }
                               }
@@ -347,6 +460,22 @@ in {
                                   for (TransferContract <- tc) {
                                     TransferContract!("refund", *dId, *ret2)
                                   }
+                                }
+                              }
+                              _ => { ret2!((false, "not owner")) }
+                            }
+                          }
+                        }
+                      } |
+
+                      contract account(@"transfers", dId, ret2) = {
+                        new vCh in {
+                          AccountGate!("verify", *dId, *vCh) |
+                          for (@v <- vCh) {
+                            match v {
+                              (true, Nil) => {
+                                for (@as <<- accountState) {
+                                  ret2!((true, as.get("ops")))
                                 }
                               }
                               _ => { ret2!((false, "not owner")) }

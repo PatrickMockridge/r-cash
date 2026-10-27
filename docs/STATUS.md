@@ -1,37 +1,29 @@
 # Status
 
-**The v0.4 payment-first reset is in progress.** The old CDP is deleted; the kernel,
-oracle and governor layers are retained. This is still a devnet-only prototype; no real
-funds and no public testnet.
+**The v0.5 economics and UI build is implemented; the behavioural campaign has not run.**
+This tree is devnet-only; there are no real funds, no public testnet and no audit.
 
-## v0.4 payment-first reset (Phase 0)
-
-The product is a decentralised TransferWise, not a lending platform. The old CDP,
-vault, collateral and Mint surfaces are deleted from the active contracts, tests,
-docs, SDK, CLI, WASM, web app and TLA models. The kernel, oracle and governor layer
-is retained; the composable REV-backed stablecoin issuer and the payment layer are
-the next build.
+## What is implemented
 
 | Area | Result |
 |---|---|
-| Deleted | v0.1/v0.2/v0.3 CDP contracts, vault arms, CDP tests/scenarios, `CdpAccounting` TLA, SDK/CLI/WASM vault methods, web Mint screen, CDP docs sections |
-| Retained | Root, Clock, Verifier, Codec, Bounds (with `checkIssuer`), AdminGuard, Governor, AmmMath, OracleMath, ClaimCode, OracleRegistry/Feed/Hub, AccountFactory account capability |
-| Stablecoin issuer | `Stablecoin`, `CollateralCustody`, `RiskParameters`, `VaultBook`, `CollateralMath`, `LiquidationEngine`; signed params, bounded risk, mint/repay/withdraw, REV custody, partial liquidation and bad-debt write-off |
-| Listing | `CurrencyRegistry` + `StablecoinDirectory`: sponsor signature, live attestation, one system per currency, governor-gated pause |
-| Accounts | `AccountFactory` creates an `Account`, `PurseStore` and `AccountGate` per owner; `AssetResolver` maps `REV` and listed currencies to brand/issuer; deposit, withdraw, balance and deposit-facet; owner check by caller `deployerId`; the vault proof stays in the account closure |
-| Issuer checks | system deploy, attestations, supply, params, custody, open → deposit REV → mint → repay → withdraw; partial liquidation, underwater write-off, the debt/bad-debt conservation invariant and the liquidation-capability refusal all pass on the devnet |
-| Account checks | key-signed deposit via deposit facet, balance, withdraw, empty stablecoin purse through the registry, and a foreign deployer refused by `AccountGate` |
-| Transfers | `TransferBook` allocates ids and creates a per-transfer `TransferContract`; claim by secret preimage, refund after expiry by the sender, wrong-secret and foreign-refund refusals, and closed-terminal refusals all pass |
-| Markets | `MarketTerms` + `MarketIndex` + `MarketDirectory` + `MarketFactory` (`50_market`) with `PoolTemplate`/`assemblePool`/`LiquidityLock` (`51_pool`); a REV/V4T market is created from sponsor-signed terms, seeded from a vault-backed account, the seed LP locked, the market activated and swapped at the oracle rate minus the spread; after the lock height the beneficiary releases the seed and removes the liquidity; listings expose read-only views (`ListingViews`), a pure `TradabilityGate`, governor-gated pause/resume/delist, and a v2 draft staged after delist |
-| Gates | build, measure, architecture, capture, language and TLA gates pass; the old capture finding is gone |
-| Live client flow | CLI drove vault-mint → add-and-lock → activate → swap on a seeded v2 market: 0.01 REV produced 74,775,747 V4T base units and the reserves moved exactly |
-| Browser journey | Playwright creates two wallets, faucets them, funds the sender, sends a claimable transfer, claims it in the recipient context and sees the 0.01 REV purse credit (52.8 s) |
-| Next | public testnet and an external audit |
+| Kernel | Root, Clock, Verifier, Codec, Bounds, AdminGuard, Governor, the pure maths and ClaimCode |
+| Stablecoin issuer | Per-currency systems created by one signed deploy: `Stablecoin`, `CollateralCustody`, `RiskParameters`, `VaultBook`, `LiquidationEngine`, `SurplusBuffer`, `SavingsPool`, `PegStabilityModule`; v2 params include the savings share and PSM fee |
+| Economics | Repay splits principal and interest through `Stablecoin.settle`; interest reaches the surplus buffer, `cover(0)` absorbs outstanding `sin`, and `paySavings` moves the configured share to the pool in the same deploy; liquidation write-offs book `badDebt`/`sin` and halt minting while `sin > surplus`; PSM fees apply on both sides and `stableDebt` is signed |
+| Governance | 2-of-3 admin actions; `schedule`/`execute` with a 100-block timelock for risk params, savings share and PSM policy; immediate currency pause and market status; `pending` view |
+| Accounts | One account per owner; owner-gated purses; deposit facet; per-asset resolution; `accountState` holds the transfer counter and opId ledger; `transfers` history arm |
+| Transfers | Measured send, book bounds, memo (128 bytes), opId idempotency with pending/completed replay, optional native-REV stipend for the claimer, claim/refund exclusivity |
+| Markets | v4 25-field terms enforced by Bounds, the factory, the index and the pool; slug uniqueness; sponsor-owner and lock-beneficiary checks; activation seed/depth/share checks; tradability gate wired into swap; LP exit allowed while paused/delisted; `ListingViews.currencies`/`markets` |
+| Clients | Rust SDK and CLI expose vaults, savings, PSM, buffer, risk params, markets, transfers and governance; WASM exposes the same user-facing surface; `rcash devnet demo` is a send → claim journey |
+| Web | Accounts (chain-discovered currencies), Pay (memo/opId/stipend/journal), Claim, Vault, Earn, Redeem, Markets (list + create), Convert, Liquidity (non-zero minimums), History (journal + refund), Governance (read-only), Settings |
+| Static gates | Contract build/measure/architecture/capture, market-term vectors, Rust fmt/clippy/build, wasm32 check, web typecheck/build and language policy are green |
+| Behavioural campaign | Not yet run. The gate is `docs/SPEC.md` §20 and the plan: every specification item implemented first, then one fresh-devnet campaign with a per-requirement result |
 
-The stablecoin design is DAI-like: REV-only collateral, per-currency systems, MCR,
-interest, liquidation and bad debt, with separate contracts per authority. Bridged
-BTC/ETH collateral is a separate future workstream. There is no borrower-facing
-lending UI, yield product or credit market.
+The stablecoin design is DAI-shaped: REV-only collateral, per-currency systems, MCR,
+interest, liquidation, a surplus buffer that absorbs bad debt, a savings pool and a PSM.
+There is no recapitalisation token, no debt auction and no MKR analogue; a post-liquidation
+shortfall is an accounting residual. Bridged BTC/ETH collateral is a separate future
+workstream.
 
 ## Public testnet (rhobot)
 
@@ -61,8 +53,8 @@ failure mode is tracked upstream in
 The v0.1 payment scenarios (accounts, oracle, pool, transfer/claim/refund) remain as
 historical evidence. The CDP and liquidation results are removed with the old CDP code.
 
-No packaged demo runs during the v0.4 reset; the fresh v0.4 install and payment
-journey land with the new issuer and payment layers.
+The packaged demo is `rcash devnet demo` (fund → send a claimable REV transfer → claim).
+The full behavioural campaign runs from a fresh devnet after the specification gate.
 
 ## Client migration
 

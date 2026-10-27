@@ -11,14 +11,14 @@
     "contracts_fail": 12,
     "overrides": {
       "contracts/build/deploy/v3/31_stablecoin.rho": {
-        "bytes": 40960,
+        "bytes": 47104,
         "depth": 96,
-        "contracts": 64
+        "contracts": 68
       },
       "contracts/build/deploy/v3/09_identity.rho": {
         "bytes": 16384,
         "depth": 96,
-        "contracts": 18
+        "contracts": 24
       },
       "contracts/build/deploy/v3/14_asset_resolver.rho": {
         "bytes": 8192,
@@ -28,12 +28,12 @@
       "contracts/build/deploy/v3/40_transfer.rho": {
         "bytes": 12288,
         "depth": 64,
-        "contracts": 6
+        "contracts": 8
       },
       "contracts/build/deploy/v3/50_market.rho": {
         "bytes": 24576,
         "depth": 96,
-        "contracts": 26
+        "contracts": 32
       },
       "contracts/build/deploy/v3/51_pool.rho": {
         "bytes": 24576,
@@ -274,6 +274,9 @@
       "state_cell": "governorState",
       "arms": [
         "authorize",
+        "schedule",
+        "execute",
+        "pending",
         "admins",
         "admin"
       ],
@@ -289,7 +292,7 @@
       "budget": {
         "bytes": 8192,
         "depth": 48,
-        "contracts": 5
+        "contracts": 8
       }
     },
     {
@@ -471,7 +474,7 @@
     },
     {
       "name": "MarketFactory",
-      "kind": "factory",
+      "kind": "registry",
       "stateful": false,
       "state_cell": null,
       "arms": [
@@ -513,7 +516,8 @@
         "activate",
         "market",
         "marketFor",
-        "setStatus"
+        "setStatus",
+        "markets"
       ],
       "dependencies": [
         "Root",
@@ -535,7 +539,7 @@
     },
     {
       "name": "AssetResolver",
-      "kind": "view",
+      "kind": "registry",
       "stateful": false,
       "state_cell": null,
       "arms": [
@@ -570,7 +574,9 @@
         "market",
         "isActive",
         "terms",
-        "currency"
+        "currency",
+        "currencies",
+        "markets"
       ],
       "dependencies": [
         "Root",
@@ -712,7 +718,7 @@
     },
     {
       "name": "TradabilityGate",
-      "kind": "domain",
+      "kind": "view",
       "stateful": false,
       "state_cell": null,
       "arms": [
@@ -766,119 +772,6 @@
       }
     },
     {
-      "name": "AccountProvisioner",
-      "kind": "account",
-      "stateful": false,
-      "state_cell": null,
-      "arms": [
-        "create"
-      ],
-      "dependencies": [
-        "Root",
-        "AssetResolver",
-        "AccountGateTemplate",
-        "PurseStoreTemplate",
-        "AccountTemplate"
-      ],
-      "creates": [
-        "Account",
-        "PurseStore",
-        "AccountGate"
-      ],
-      "system": [
-        "rho:registry:insertArbitrary"
-      ],
-      "deploy": "contracts/src/deploy/v3/50_accounts.rho",
-      "instance_key": null,
-      "status": "planned",
-      "budget": {
-        "bytes": 12288,
-        "depth": 48,
-        "contracts": 4
-      }
-    },
-    {
-      "name": "AccountGateTemplate",
-      "kind": "template",
-      "stateful": false,
-      "state_cell": null,
-      "arms": [
-        "create"
-      ],
-      "dependencies": [
-        "Root",
-        "Verifier"
-      ],
-      "creates": [
-        "AccountGate"
-      ],
-      "system": [
-        "rho:rchain:deployerId:ops",
-        "rho:rev:address"
-      ],
-      "deploy": "contracts/src/deploy/v3/50_accounts.rho",
-      "instance_key": null,
-      "status": "planned",
-      "budget": {
-        "bytes": 4096,
-        "depth": 32,
-        "contracts": 4
-      }
-    },
-    {
-      "name": "PurseStoreTemplate",
-      "kind": "template",
-      "stateful": false,
-      "state_cell": null,
-      "arms": [
-        "create"
-      ],
-      "dependencies": [
-        "Root",
-        "AssetResolver"
-      ],
-      "creates": [
-        "PurseStore"
-      ],
-      "system": [
-        "rho:rchain:ertp"
-      ],
-      "deploy": "contracts/src/deploy/v3/50_accounts.rho",
-      "instance_key": null,
-      "status": "planned",
-      "budget": {
-        "bytes": 4096,
-        "depth": 32,
-        "contracts": 4
-      }
-    },
-    {
-      "name": "AccountTemplate",
-      "kind": "template",
-      "stateful": false,
-      "state_cell": null,
-      "arms": [
-        "create"
-      ],
-      "dependencies": [
-        "Root"
-      ],
-      "creates": [
-        "Account"
-      ],
-      "system": [
-        "rho:registry:insertArbitrary"
-      ],
-      "deploy": "contracts/src/deploy/v3/50_accounts.rho",
-      "instance_key": null,
-      "status": "planned",
-      "budget": {
-        "bytes": 8192,
-        "depth": 48,
-        "contracts": 4
-      }
-    },
-    {
       "name": "Account",
       "kind": "account",
       "stateful": false,
@@ -891,7 +784,8 @@
         "depositFacet",
         "sendTransfer",
         "claimTransfer",
-        "refundTransfer"
+        "refundTransfer",
+        "transfers"
       ],
       "dependencies": [
         "AccountGate",
@@ -908,8 +802,8 @@
       "status": "implemented",
       "budget": {
         "bytes": 16384,
-        "depth": 48,
-        "contracts": 1
+        "depth": 96,
+        "contracts": 5
       }
     },
     {
@@ -967,35 +861,6 @@
       }
     },
     {
-      "name": "TransferClient",
-      "kind": "account",
-      "stateful": false,
-      "state_cell": null,
-      "arms": [
-        "send",
-        "claim",
-        "refund",
-        "info"
-      ],
-      "dependencies": [
-        "Root",
-        "ListingViews",
-        "MarketDirectory",
-        "TransferBook",
-        "AccountFactory"
-      ],
-      "creates": [],
-      "system": [],
-      "deploy": "contracts/src/deploy/v3/53_clients.rho",
-      "instance_key": null,
-      "status": "planned",
-      "budget": {
-        "bytes": 12288,
-        "depth": 48,
-        "contracts": 2
-      }
-    },
-    {
       "name": "CollateralMath",
       "kind": "kernel",
       "stateful": false,
@@ -1029,6 +894,7 @@
         "supply",
         "mint",
         "burn",
+        "settle",
         "amountOf",
         "attest"
       ],
@@ -1074,22 +940,29 @@
     {
       "name": "RiskParameters",
       "kind": "domain",
-      "stateful": false,
-      "state_cell": null,
+      "stateful": true,
+      "state_cell": "paramsState",
       "arms": [
         "params",
-        "attest"
+        "info",
+        "attest",
+        "scheduleParams",
+        "applyParams"
       ],
-      "dependencies": [],
+      "dependencies": [
+        "Bounds",
+        "Codec",
+        "Governor"
+      ],
       "creates": [],
       "system": [],
       "deploy": "contracts/src/deploy/v3/31_stablecoin.rho",
       "instance_key": "currency",
       "status": "implemented",
       "budget": {
-        "bytes": 24576,
-        "depth": 96,
-        "contracts": 35
+        "bytes": 8192,
+        "depth": 48,
+        "contracts": 5
       }
     },
     {
@@ -1120,7 +993,9 @@
         "Stablecoin",
         "CollateralCustody",
         "RiskParameters",
-        "Governor"
+        "Governor",
+        "SurplusBuffer",
+        "SavingsPool"
       ],
       "creates": [],
       "system": [
@@ -1155,40 +1030,6 @@
         "bytes": 24576,
         "depth": 96,
         "contracts": 35
-      }
-    },
-    {
-      "name": "StablecoinFactory",
-      "kind": "factory",
-      "stateful": false,
-      "state_cell": null,
-      "arms": [
-        "create"
-      ],
-      "dependencies": [
-        "Root",
-        "Bounds",
-        "Codec",
-        "Verifier",
-        "Clock"
-      ],
-      "creates": [
-        "Stablecoin",
-        "CollateralCustody",
-        "RiskParameters",
-        "VaultBook",
-        "LiquidationEngine"
-      ],
-      "system": [
-        "rho:rchain:ertp"
-      ],
-      "deploy": "contracts/src/deploy/v4/30_stablecoin_factory.rho",
-      "instance_key": null,
-      "status": "planned",
-      "budget": {
-        "bytes": 24576,
-        "depth": 96,
-        "contracts": 30
       }
     },
     {
@@ -1239,6 +1080,101 @@
         "bytes": 16384,
         "depth": 96,
         "contracts": 14
+      }
+    },
+    {
+      "name": "SavingsPool",
+      "kind": "domain",
+      "stateful": true,
+      "state_cell": "savingsState",
+      "arms": [
+        "deposit",
+        "withdraw",
+        "notify",
+        "info",
+        "position"
+      ],
+      "dependencies": [
+        "Root",
+        "Stablecoin"
+      ],
+      "creates": [],
+      "system": [
+        "rho:rchain:deployerId:ops",
+        "rho:rev:address"
+      ],
+      "deploy": "contracts/src/deploy/v3/31_stablecoin.rho",
+      "instance_key": "currency",
+      "status": "implemented",
+      "budget": {
+        "bytes": 16384,
+        "depth": 96,
+        "contracts": 6
+      }
+    },
+    {
+      "name": "SurplusBuffer",
+      "kind": "domain",
+      "stateful": true,
+      "state_cell": "bufferState",
+      "arms": [
+        "deposit",
+        "cover",
+        "paySavings",
+        "info",
+        "scheduleShare",
+        "applyShare"
+      ],
+      "dependencies": [
+        "Root",
+        "Stablecoin",
+        "SavingsPool",
+        "Governor"
+      ],
+      "creates": [],
+      "system": [],
+      "deploy": "contracts/src/deploy/v3/31_stablecoin.rho",
+      "instance_key": "currency",
+      "status": "implemented",
+      "budget": {
+        "bytes": 16384,
+        "depth": 96,
+        "contracts": 6
+      }
+    },
+    {
+      "name": "PegStabilityModule",
+      "kind": "domain",
+      "stateful": true,
+      "state_cell": "psmState",
+      "arms": [
+        "fundRev",
+        "buyStable",
+        "sellStable",
+        "info",
+        "debt",
+        "schedulePolicy",
+        "applyPolicy"
+      ],
+      "dependencies": [
+        "Root",
+        "Stablecoin",
+        "OracleHub",
+        "Governor",
+        "VaultBook"
+      ],
+      "creates": [],
+      "system": [
+        "rho:rchain:ertp",
+        "rho:rchain:revVault"
+      ],
+      "deploy": "contracts/src/deploy/v3/31_stablecoin.rho",
+      "instance_key": "currency",
+      "status": "implemented",
+      "budget": {
+        "bytes": 16384,
+        "depth": 96,
+        "contracts": 7
       }
     }
   ]

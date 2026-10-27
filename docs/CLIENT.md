@@ -139,8 +139,9 @@ cargo run -p rcash-cli -- oracle submit --currency NGN --price 0.00066666 --inde
 `transfer send` prints the claim secret and a `#/claim/<id>/<secret>` fragment. That
 secret is bearer authority; it is printed once and never persisted.
 
-The vault/borrow commands are removed with the old CDP. `devnet demo` is retired until the
-v0.4 payment journey is built.
+`rcash devnet demo` funds the account, sends a claimable REV transfer to itself and claims
+it. The vault, savings, PSM, buffer, market and governance commands are in the `v4`
+surface below.
 
 `keygen` writes the plaintext devnet key format the harness already uses. It is local
 tooling only; the browser wallet uses the encrypted keystore added in R3a.
@@ -198,23 +199,36 @@ Writes (signed by `--key`):
 | Command | Flow |
 |---|---|
 | `fund-rev AMOUNT` | native REV purse → `Account.depositFacet` |
-| `send TO_PUB ASSET AMOUNT HASH EXPIRY` | recipient facet lookup → `Account.sendTransfer` |
+| `send TO_PUB ASSET AMOUNT HASH EXPIRY [--memo] [--op-id] [--stipend]` | recipient facet lookup → `Account.sendTransfer`; the stipend is native REV to the recipient's address |
 | `claim TRANSFER SECRET` | `Account.claimTransfer` (secret preimage) |
 | `refund TRANSFER` | `Account.refundTransfer` after expiry |
 | `swap POOL DIR ASSET_IN ASSET_OUT AMOUNT [--min-out]` | account withdraw → preflight quote → `FxPool.swap` → account deposit |
-| `add-liquidity POOL LOCK BASE QUOTE BASE_AMT QUOTE_AMT UNTIL` | both sides from the account → `FxPool.addLiquidity` → `LiquidityLock.fund` |
+| `add-liquidity POOL LOCK BASE QUOTE BASE_AMT QUOTE_AMT UNTIL --min-shares N` | both sides from the account → `FxPool.addLiquidity` → `LiquidityLock.fund` |
 | `activate MARKET_ID` | anyone may activate a sealed, seeded, lock-funded market |
-| `release-lp LOCK POOL BASE QUOTE` | lock release after its height → `FxPool.removeLiquidity` → account deposits |
+| `release-lp LOCK POOL BASE QUOTE --min-base B --min-quote Q` | lock release after its height → `FxPool.removeLiquidity` → account deposits |
+| `vault-open VAULT` | `Account.vaultOpen` |
+| `vault-deposit VAULT AMOUNT` | account withdraw → `VaultBook.deposit` |
 | `vault-mint VAULT CURRENCY COLLATERAL MINT` | vault deposit → mint → stablecoin into the account |
-| `vault-repay VAULT CURRENCY AMOUNT` | account withdraw → `VaultBook.repay` |
+| `vault-repay VAULT CURRENCY AMOUNT` | account withdraw → `VaultBook.repay` (principal burn, interest to the buffer) |
 | `vault-withdraw VAULT AMOUNT` | `VaultBook.withdraw` → REV into the account |
+| `vault-liquidate LIQUIDATION CURRENCY OWNER AMOUNT MIN_COLLATERAL` | account withdraw → `LiquidationEngine.liquidate` → seized REV into the account |
+| `savings-deposit SAVINGS CURRENCY AMOUNT` | account withdraw → `SavingsPool.deposit` |
+| `savings-withdraw SAVINGS CURRENCY SHARES` | `SavingsPool.withdraw` → stablecoin into the account |
+| `psm-buy PSM CURRENCY REV_AMOUNT MIN_STABLE` | account withdraw REV → `PegStabilityModule.buyStable` |
+| `psm-sell PSM CURRENCY AMOUNT MIN_REV` | account withdraw stablecoin → `PegStabilityModule.sellStable` |
+| `create-market TERMS.json` | sign `rcash:market-create:v1|marketId|termsHash|sponsor` → `MarketFactory.createMarket` |
+| `market-status MARKET STATUS NONCE SIGS…` | governor-gated `MarketIndex.setStatus` |
+| `pause-currency CODE PAUSED NONCE SIGS…` | governor-gated `CurrencyRegistry.setPaused` |
 
-Live-tested on a fresh devnet through the CLI: `balance` 0 → `fund-rev 0.05` →
-5,000,000 base units; `send` → `claim` credited 2,000,000 units and `transfer-info`
-reported `claimed`; a second transfer was refunded after expiry and a later `claim`
-was refused `closed`. On the market side: `vault-mint` minted 20 V4T against REV,
-`add-liquidity` seeded and locked a v2 pool (2,900,015,000 shares), `activate` moved it
-to active, and a second key swapped 0.01 REV for 74,775,747 V4T base units.
+Reads also include `currencies`, `markets`, `terms HASH`, `transfers`, `vault VAULT`,
+`totals VAULT`, `savings-info`, `savings-position`, `psm-info`, `buffer-info`,
+`risk-params` and `pending`.
+
+Historical v0.4 CLI evidence on a fresh devnet covered `balance`/`fund-rev`/`send`/`claim`/
+`refund`, vault mint, add-and-lock, activation and a swap. The v0.5 surfaces (settle,
+savings, PSM fees and signed debt, liquidation cover, memo/opId/stipend, timelocks and the
+new screens) have static-gate evidence only; the behavioural campaign is the gate and has
+not run. Do not treat an earlier devnet log as v0.5 evidence.
 
 A quote is a **signed** read on this node: `explore-deploy` has no block context, so the
 oracle freshness check would see height 0. The devnet feeds are fresh for

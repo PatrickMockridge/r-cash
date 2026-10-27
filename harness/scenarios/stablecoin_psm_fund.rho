@@ -1,0 +1,28 @@
+// Fund the PSM REV buffer from the caller's native REV purse. Returns [amount].
+// Placeholders: __ROOT_URI__, __PSM_URI__, __PSM_REV__.
+new
+  rl(`rho:registry:lookup`), rootCh, psmCh, ertpCh, revIssuerCh,
+  purseCh, fundCh, wdCh, fundRevCh,
+  deployId(`rho:rchain:deployId`),
+  deployerId(`rho:rchain:deployerId`)
+in {
+  rl!(`__ROOT_URI__`, *rootCh) |
+  rl!(`__PSM_URI__`, *psmCh) |
+  rl!(`rho:rchain:ertp`, *ertpCh) |
+  for (Root <- rootCh; PSM <- psmCh; @(_, ERTP) <- ertpCh) {
+    @ERTP!("getRevIssuer", *revIssuerCh) |
+    for (@(revBrand, revIssuer) <- revIssuerCh) {
+      @revIssuer!("makeEmptyPurse", *purseCh) |
+      for (@(true, purse) <- purseCh) {
+        @purse!("revFund", *deployerId, __PSM_REV__, *fundCh) |
+        for (@_ <- fundCh) {
+          @purse!("withdraw", (revBrand, __PSM_REV__), *wdCh) |
+          for (@(true, payment) <- wdCh) {
+            PSM!("fundRev", payment, *fundRevCh) |
+            for (@f <- fundRevCh) { deployId!([f]) }
+          }
+        }
+      }
+    }
+  }
+}

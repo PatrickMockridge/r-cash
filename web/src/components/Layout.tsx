@@ -5,11 +5,15 @@ import { shortId } from "../lib/format";
 const links = [
   ["/", "Accounts"],
   ["/receive", "Receive"],
-  ["/convert", "Convert"],
   ["/pay", "Pay"],
+  ["/vault", "Vault"],
+  ["/earn", "Earn"],
+  ["/redeem", "Redeem"],
+  ["/markets", "Markets"],
+  ["/convert", "Convert"],
   ["/liquidity", "Liquidity"],
-  ["/batch", "Batch"],
-  ["/ramps", "Ramps"],
+  ["/history", "History"],
+  ["/governance", "Governance"],
   ["/settings", "Settings"],
 ] as const;
 

@@ -37,12 +37,16 @@ old CDP accounting section is deleted; these are the issuer's invariants.
 |---|---|---|---|---|
 | S1 | `supply = totalPrincipal = minted − burned`; `supply ≤ maxSupply`; only the VaultBook/Engine hold the scoped mint/burn caps | `Stablecoin` | one `issuerState` cell; cap comparison before the ERTP mint/burn; P3 commit | unit |
 | S2 | `totalDebt = Σ vault.debt` and `totalCollateral = Σ vault.collateral` | `VaultBook` | every arm writes the vault and all totals through one `vaultUpdate` commit | unit |
-| S3 | `totalDebt + badDebt = supply + totalAccruedInterest` | `VaultBook` + `Stablecoin` | the same commit carries the debt, interest, bad-debt and supply deltas; no second principal ledger | unit, scenario |
+| S3 | `totalDebt + sin + psmDebt = supply + totalAccruedInterest`; `totalAccruedInterest` is net unsettled interest, `sin` is outstanding bad debt net of surplus, `psmDebt` is signed, and `badDebt` is a cumulative memo outside the identity | `VaultBook` + `Stablecoin` + `SurplusBuffer` + `PegStabilityModule` | the same commit carries the debt, interest, bad-debt, supply and PSM deltas; no second principal ledger | unit, scenario |
 | S4 | Mint and collateral withdrawal preserve `health(collateral, debt, rate, mcr)`; mint also enforces min/max debt and the ceiling | `VaultBook` | `CollateralMath.health` before the commit; stale feed or missing rate is a refusal | unit |
 | S5 | Only an unhealthy vault is liquidatable, bounded by the close factor, and only through the liquidation capability | `VaultBook`, `LiquidationEngine` | the engine holds the only `liquidationAuth`; the arm checks health and `ceil(debt·closeFactor)` | unit, scenario |
-| S6 | A liquidation seizes `payout(repay, bonus, rate)` or, when the vault cannot cover that slice, all collateral only if the repayment covers the collateral's value; the uncovered residual is booked to `badDebt` and the debt cleared | `VaultBook` | effect-then-commit: burn, custody withdraw, then one vault/totals write; any refusal aborts the deploy | unit, scenario |
-| S7 | REV leaves custody only through the custody capability; stablecoin leaves supply only through burn; a refusal on `liquidate` returns the payment | `CollateralCustody`, `Stablecoin`, `VaultBook` | scoped caps in closure; the liquidate arm peeks the amount and returns `(false, reason, payment)` before any consume | unit |
+| S6 | A liquidation seizes `payout(repay, bonus, rate)` or, when the vault cannot cover that slice, all collateral only if the repayment covers the collateral's value; the uncovered residual is booked to `badDebt` (memo) and `sin` (outstanding), and the debt cleared. The write-off calls `SurplusBuffer.cover` in the same deploy, which burns `min(surplus, sin)` | `VaultBook`, `SurplusBuffer` | effect-then-commit: burn, custody withdraw, cover, then one vault/totals write; a `rev` mismatch fails the deploy | unit, scenario |
+| S7 | REV leaves custody only through the custody capability; stablecoin leaves supply only through burn; repay splits principal and interest through `Stablecoin.settle`, so supply falls only by principal and interest is deposited to the buffer; a refusal on `liquidate` returns the payment | `CollateralCustody`, `Stablecoin`, `VaultBook` | scoped caps in closure; `settle` burns principal and deposits interest; the liquidate arm peeks the amount and returns `(false, reason, payment)` before any consume | unit |
 | S8 | One system per currency; listing requires the sponsor signature and the live attestation | `CurrencyRegistry` | registry consume at commit; directory write with a registry-only capability | unit, scenario |
+| S9 | Buffer waterfall: interest is deposited into `SurplusBuffer`, `cover(0)` cancels outstanding `sin` against surplus, and `paySavings` then moves `floor(surplus·savingsShareBps/10000)`; solvency precedes yield and no stablecoin is counted twice | `VaultBook`, `SurplusBuffer` | one deploy, in that order; each step consumes and reposts its own cell with `rev` | unit, scenario |
+| S10 | Savings conservation: `totalShares = Σ shares[ownerId]`; deposits and withdrawals move assets and shares together at floored pro-rata value; `notify` raises assets without minting shares; no public donation arm exists | `SavingsPool` | one `savingsState` cell; prepare/commit with `rev`; zero-share deposit refused | unit, scenario |
+| S11 | PSM conservation: `stableDebt` is signed, each buy adds exactly the minted `stableOut` to supply and debt, each sell burns exactly `stableIn` and subtracts it from debt and supply; fees stay in the REV purse | `PegStabilityModule` | the burn/mint and debt write are exercised before the cell commit; a refusal returns the payment | unit, scenario |
+| S12 | Governed parameter changes: risk params, savings share and PSM policy are scheduled, execute only after the timelock, recheck the args hash and apply to subsequent arms; emergency pause and market status remain immediate | `Governor`, `RiskParameters`, `SurplusBuffer`, `PegStabilityModule` | `schedule`/`execute` in one governor cell; each apply validates through `Bounds` and commits its own cell | unit, scenario |
 
 ## 3. Canonical groups (v3)
 
@@ -77,18 +81,18 @@ store is keyed by the Codec canonical string of these values, and the sponsor si
 | 9 | baseSpreadBps | `FxPool` fee formula |
 | 10 | skewSpreadBps | `FxPool` fee formula |
 | 11 | maxTradeBps | `FxPool` max input |
-| 12 | minLiquidity | first deposit floor |
+| 12 | minLiquidity | `FxPool` first deposit floor |
 | 13 | firstDepositToleranceBps | `FxPool` first deposit balance |
 | 14 | depthFloorQuote | `MarketIndex.activate` |
 | 15 | minTicketQuote | `FxPool` swap gate |
-| 16 | seedBase | listing intent; activation checks live reserves |
-| 17 | seedQuote | listing intent; activation checks live reserves |
-| 18 | seedInitialShares | listing intent |
-| 19 | lockBeneficiaryPubKey | `LiquidityLock` fund (beneficiary recorded) |
-| 20 | lockMinBlocks | listing intent; `untilHeight` is funded explicitly |
+| 16 | seedBase | `MarketIndex.activate` live `rb` lower bound |
+| 17 | seedQuote | `MarketIndex.activate` live `rq` lower bound |
+| 18 | seedInitialShares | `MarketIndex.activate` live `totalShares` lower bound |
+| 19 | lockBeneficiaryPubKey | `MarketFactory` equality with `sponsorPubKey`; `LiquidityLock` beneficiary |
+| 20 | lockMinBlocks | `LiquidityLock.fund` (`untilHeight >= now + lockMinBlocks`) and factory minimum |
 | 21 | lockUntilHeight | `MarketIndex.activate` compares against `LiquidityLock.info` |
-| 22 | bookDefaultExpiryBlocks | `TransferBook` client default |
-| 23 | bookMaxExpiryBlocks | `TransferBook` client maximum |
+| 22 | bookDefaultExpiryBlocks | `Bounds.checkTerms` against the global book params |
+| 23 | bookMaxExpiryBlocks | `Bounds.checkTerms` against the global book params |
 | 24 | maxPairAgeBlocks | `FxPool` bound passed to `OracleHub.getPair` |
 
 Removed from the v1 schema: `depthFloorUsdE8`, `minTicketUsdE8`, `protocolFeeBps`,
@@ -102,11 +106,12 @@ measure skew.
 trialBlocks, trialMinSubmits`. `Bounds.checkFeed` enforces distinct keys, the sponsor slot
 rule, `quorum` within 1..3, `trialMinSubmits >= quorum`, and the age/spread/band ranges.
 
-### Book params — `rcash:book-params:v3` (4 values)
+### Book params — `rcash:book-params:v4` (6 values)
 
-`marketId, defaultExpiryBlocks, maxExpiryBlocks, minAmount`. `TransferBook.send` enforces
-the expiry range and the minimum amount; `defaultExpiryBlocks` is the default when the
-caller passes zero.
+`defaultExpiryBlocks, maxExpiryBlocks, minAmount, maxMemoBytes, maxOpIdBytes, maxStipend`.
+`TransferBook.send` enforces the expiry range, the minimum amount, the memo and opId byte
+bounds and the stipend cap; `defaultExpiryBlocks` is the default when the caller passes
+zero. The book is global (one `component:transfer-book`), so there is no `marketId`.
 
 ## 4. Defect closure map
 

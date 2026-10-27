@@ -14,6 +14,9 @@ from __future__ import annotations
 
 import json
 import sys
+import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -60,6 +63,26 @@ def totals(keys: dict, vault_uri: str) -> dict:
                     "for (@x <- r) { deployId!(x) }"), keys["deployer"]["secret"])[1]
 
 
+def buffer_info(keys: dict, buffer_uri: str) -> dict:
+    return one(call(buffer_uri, "SurplusBuffer",
+                    'SurplusBuffer!("info", *r) | for (@x <- r) { deployId!(x) }'),
+               keys["deployer"]["secret"])[1]
+
+
+def wait_height(blocks: int) -> None:
+    target = time_height() + blocks
+    for _ in range(blocks * 12 + 60):
+        if time_height() >= target:
+            return
+        time.sleep(2)
+    raise AssertionError(f"height did not reach {target}")
+
+
+def time_height() -> int:
+    import deploy as node
+    return node.height()
+
+
 def supply(keys: dict, sc_uri: str) -> int:
     return one(call(sc_uri, "Stablecoin",
                     'Stablecoin!("supply", *r) | for (@x <- r) { deployId!(x) }'),
@@ -68,8 +91,8 @@ def supply(keys: dict, sc_uri: str) -> int:
 
 def check_invariant(label: str, keys: dict, sc_uri: str, vault_uri: str) -> dict:
     tot = totals(keys, vault_uri)
-    check(f"{label}: debt + badDebt == supply + interest",
-          tot["totalDebt"] + tot["badDebt"],
+    check(f"{label}: debt + sin == supply + interest",
+          tot["totalDebt"] + tot["sin"],
           supply(keys, sc_uri) + tot["totalAccruedInterest"])
     return tot
 
@@ -97,10 +120,10 @@ def main() -> int:
     params = ('{"mcrBps": 20000, "bonusBps": 800, "closeFactorBps": 5000, '
               '"ratePerBlock": 3171, "debtCeiling": 10000000000000, '
               '"minDebt": 1000000, "maxDebt": 10000000000000, '
-              '"maxOracleAge": 50}')
+              '"maxOracleAge": 50, "savingsShareBps": 5000, "psmFeeBps": 10}')
     values = [CURRENCY, "20000", "800", "5000", "3171", "10000000000000",
-              "1000000", "10000000000000", "50"]
-    params_hash = blake2b256(canonical("rcash:stablecoin-params:v1", values))
+              "1000000", "10000000000000", "50", "5000", "10"]
+    params_hash = blake2b256(canonical("rcash:stablecoin-params:v2", values))
     payload = f"rcash:stablecoin-create:v1|{CURRENCY}|{params_hash}|{sponsor}"
     sig = sign_payload.sign_payload(keys["sponsor"]["secret"],
                                     payload.encode())["signature"]
@@ -113,7 +136,8 @@ def main() -> int:
         "__SPONSOR_SIG__": sig,
     })
     system = deploy_system(term, secret)
-    sc_uri, custody_uri, params_uri, vault_uri, liq_uri, savings_uri, psm_uri, att_reply = system
+    (sc_uri, custody_uri, params_uri, vault_uri, liq_uri, savings_uri,
+     psm_uri, buffer_uri, att_reply) = system
     check("liquidation engine attestation", att_reply[1].get("template") is not None, True)
     print(f"stablecoin: {sc_uri}")
     print(f"liquidation engine: {liq_uri}")
@@ -138,6 +162,31 @@ def main() -> int:
     check("minted debt", view["debt"] >= MINT, True)
     check("collateral", view["collateral"], COLLATERAL)
     check("healthy at mint", view["health"], True)
+
+    # A second, healthy vault stays open through the write-off so the mint halt and
+    # the buffer waterfall can be exercised without creating more debt.
+    recap = keys["key20"]
+    request = urllib.request.Request(
+        "http://localhost:40403/api/v1/faucet",
+        data=json.dumps({"address": recap["address"]}).encode(),
+        headers={"content-type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=10):
+            pass
+    except urllib.error.HTTPError:
+        pass
+    time.sleep(1.1)
+    recap_mint = render_scenario("stablecoin_mint_hold.rho", {
+        "__ROOT_URI__": root,
+        "__VAULT_URI__": vault_uri,
+        "__PUBKEY__": recap["public"],
+        "__FUND__": "20000000",
+        "__COLLATERAL__": "10000000",
+        "__MINT__": "1000000",
+    })
+    _, recap_owner, _ = one(recap_mint, recap["secret"])
 
     # Partial liquidation: REV falls enough to break the MCR, but the vault still
     # covers the repay plus the 8% bonus.
@@ -172,7 +221,37 @@ def main() -> int:
     check("write-off: collateral seized", after2["collateral"], 0)
     check("write-off: debt cleared", after2["debt"], 0)
     check("write-off: bad debt booked", totals2["badDebt"] >= summary2["badDebt"], True)
+    check("write-off: sin outstanding", totals2["sin"] >= summary2["badDebt"], True)
     check_invariant("write-off", keys, sc_uri, vault_uri)
+
+    # Mint halt: a healthy vault cannot create debt while sin > surplus.
+    halt = one(render_scenario("stablecoin_mint_extra.rho", {
+        "__ROOT_URI__": root,
+        "__VAULT_URI__": vault_uri,
+        "__PUBKEY__": recap["public"],
+        "__MINT__": "1000000",
+    }), recap["secret"])
+    check("mint halted on uncovered bad debt", halt[0], (False, "recapitalise"))
+
+    before_buf = buffer_info(keys, buffer_uri)
+    check("buffer sin outstanding", before_buf["sin"] > 0, True)
+    wait_height(12)
+    repaid = one(render_scenario("stablecoin_repay_hold.rho", {
+        "__ROOT_URI__": root,
+        "__VAULT_URI__": vault_uri,
+        "__PUBKEY__": recap["public"],
+        "__AMOUNT__": "20000",
+    }), recap["secret"])[0]
+    check("interest-only repay has no principal", repaid["principalPaid"], 0)
+    check("interest-only repay pays interest", repaid["interestPaid"], 20000)
+    check("cover cancels the interest", repaid["cancelled"], 20000)
+    after_buf = buffer_info(keys, buffer_uri)
+    check("sin falls by the cancelled amount",
+          before_buf["sin"] - after_buf["sin"], repaid["cancelled"])
+    check("solvency before yield leaves the buffer flat",
+          after_buf["surplus"], before_buf["surplus"])
+    check("savers received nothing while sin was covered", repaid["savingsPaid"], 0)
+    check_invariant("post-cover", keys, sc_uri, vault_uri)
 
     # Direct VaultBook access without the liquidation cap must be refused.
     refusal = render_scenario("stablecoin_auth_refusal.rho", {

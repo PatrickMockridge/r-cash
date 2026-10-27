@@ -8,6 +8,7 @@ mod keystore;
 
 use rcash_chain::address::eth_address_from_public_key;
 use rcash_chain::deploy::DeployOptions;
+use rcash_chain::rho_expr::RhoValue;
 use rcash_chain::{ChainError, KeyPair};
 use rcash_core::manifest::Manifest;
 use rcash_core::Amount;
@@ -511,11 +512,23 @@ impl Rcash {
         amount: &str,
         secret_hash: &str,
         expiry: i64,
+        memo: &str,
+        op_id: &str,
+        stipend: &str,
     ) -> Result<String, JsValue> {
         let sent = self
             .client()
             .map_err(js_err)?
-            .v4_send_transfer(to_pub, asset, parse_amount(amount)?, secret_hash, expiry)
+            .v4_send_transfer(
+                to_pub,
+                asset,
+                parse_amount(amount)?,
+                secret_hash,
+                expiry,
+                memo,
+                op_id,
+                parse_amount(stipend)?,
+            )
             .await
             .map_err(js_err)?;
         to_json(serde_json::json!({"id": sent.id, "transfer": sent.uri}))
@@ -579,6 +592,7 @@ impl Rcash {
         base_amount: &str,
         quote_amount: &str,
         until_height: i64,
+        min_shares: &str,
     ) -> Result<String, JsValue> {
         let shares = self
             .client()
@@ -591,6 +605,7 @@ impl Rcash {
                 parse_amount(base_amount)?,
                 parse_amount(quote_amount)?,
                 until_height,
+                parse_amount(min_shares)?,
             )
             .await
             .map_err(js_err)?;
@@ -604,11 +619,20 @@ impl Rcash {
         pool: &str,
         base: &str,
         quote: &str,
+        min_base: &str,
+        min_quote: &str,
     ) -> Result<String, JsValue> {
         let shares = self
             .client()
             .map_err(js_err)?
-            .v4_release_lp(lock, pool, base, quote)
+            .v4_release_lp(
+                lock,
+                pool,
+                base,
+                quote,
+                parse_amount(min_base)?,
+                parse_amount(min_quote)?,
+            )
             .await
             .map_err(js_err)?;
         to_json(serde_json::json!({"lock": lock, "shares": shares}))
@@ -692,6 +716,370 @@ impl Rcash {
             client = client.with_v4_manifest(manifest.clone());
         }
         client
+    }
+}
+
+#[wasm_bindgen]
+impl Rcash {
+    /// Every listed currency.
+    pub async fn v4_currencies(&self) -> Result<String, JsValue> {
+        let list = self
+            .client()
+            .map_err(js_err)?
+            .v4_currencies()
+            .await
+            .map_err(js_err)?;
+        let out: Vec<serde_json::Value> = list
+            .iter()
+            .map(|c| {
+                serde_json::json!({
+                    "code": c.code, "stablecoinUri": c.stablecoin_uri,
+                    "custodyUri": c.custody_uri, "paramsUri": c.params_uri,
+                    "vaultUri": c.vault_uri, "liquidationUri": c.liquidation_uri,
+                    "savingsUri": c.savings_uri, "psmUri": c.psm_uri,
+                    "bufferUri": c.buffer_uri, "paramsHash": c.params_hash,
+                    "sponsor": c.sponsor, "status": c.status,
+                })
+            })
+            .collect();
+        to_json(serde_json::json!(out))
+    }
+
+    /// Every staged or listed market.
+    pub async fn v4_markets(&self) -> Result<String, JsValue> {
+        let list = self
+            .client()
+            .map_err(js_err)?
+            .v4_markets()
+            .await
+            .map_err(js_err)?;
+        let out: Vec<serde_json::Value> = list
+            .iter()
+            .map(|m| {
+                serde_json::json!({
+                    "marketId": m.market_id, "slug": m.slug, "base": m.base,
+                    "quote": m.quote, "version": m.version,
+                    "termsHash": m.terms_hash, "status": m.status,
+                })
+            })
+            .collect();
+        to_json(serde_json::json!(out))
+    }
+
+    /// A market's canonical terms record as JSON strings.
+    pub async fn v4_terms(&self, terms_hash: &str) -> Result<String, JsValue> {
+        let terms = self
+            .client()
+            .map_err(js_err)?
+            .v4_terms(terms_hash)
+            .await
+            .map_err(js_err)?;
+        to_json(serde_json::json!({
+            "values": terms.values,
+            "terms": terms.terms.iter().map(|(k, v)| (k.clone(), rho_json(v))).collect::<serde_json::Map<String, serde_json::Value>>(),
+        }))
+    }
+
+    /// The caller's vault position.
+    pub async fn v4_vault(&self, vault: &str) -> Result<String, JsValue> {
+        let v = self
+            .client()
+            .map_err(js_err)?
+            .v4_vault(vault)
+            .await
+            .map_err(js_err)?;
+        to_json(serde_json::json!({
+            "ownerId": v.owner_id, "collateral": v.collateral, "debt": v.debt,
+            "storedDebt": v.stored_debt, "accruedInterest": v.accrued_interest,
+            "lastHeight": v.last_height, "health": v.health, "fresh": v.fresh,
+            "rate": v.rate,
+        }))
+    }
+
+    /// The issuer's accounting totals.
+    pub async fn v4_totals(&self, vault: &str) -> Result<String, JsValue> {
+        let t = self
+            .client()
+            .map_err(js_err)?
+            .v4_totals(vault)
+            .await
+            .map_err(js_err)?;
+        to_json(serde_json::json!({
+            "totalDebt": t.total_debt, "totalAccruedInterest": t.total_accrued_interest,
+            "totalCollateral": t.total_collateral, "badDebt": t.bad_debt,
+            "sin": t.sin, "psmDebt": t.psm_debt, "paused": t.paused, "rev": t.rev,
+        }))
+    }
+
+    /// Savings-pool state.
+    pub async fn v4_savings_info(&self, savings: &str) -> Result<String, JsValue> {
+        let s = self
+            .client()
+            .map_err(js_err)?
+            .v4_savings_info(savings)
+            .await
+            .map_err(js_err)?;
+        to_json(serde_json::json!({
+            "totalShares": s.total_shares, "totalAssets": s.total_assets,
+            "shareValueE8": s.share_value_e8, "rev": s.rev,
+        }))
+    }
+
+    /// The caller's savings position.
+    pub async fn v4_savings_position(&self, savings: &str) -> Result<String, JsValue> {
+        let p = self
+            .client()
+            .map_err(js_err)?
+            .v4_savings_position(savings)
+            .await
+            .map_err(js_err)?;
+        to_json(serde_json::json!({"shares": p.shares}))
+    }
+
+    /// PSM state.
+    pub async fn v4_psm_info(&self, psm: &str) -> Result<String, JsValue> {
+        let p = self
+            .client()
+            .map_err(js_err)?
+            .v4_psm_info(psm)
+            .await
+            .map_err(js_err)?;
+        to_json(serde_json::json!({
+            "stableDebt": p.stable_debt, "feeBps": p.fee_bps,
+            "ceiling": p.ceiling, "revBalance": p.rev_balance, "rev": p.rev,
+        }))
+    }
+
+    /// Surplus-buffer state.
+    pub async fn v4_buffer_info(&self, buffer: &str) -> Result<String, JsValue> {
+        let b = self
+            .client()
+            .map_err(js_err)?
+            .v4_buffer_info(buffer)
+            .await
+            .map_err(js_err)?;
+        to_json(serde_json::json!({
+            "surplus": b.surplus, "sin": b.sin,
+            "savingsShareBps": b.savings_share_bps, "rev": b.rev,
+        }))
+    }
+
+    /// Risk parameters and hashes.
+    pub async fn v4_risk_params(&self, params: &str) -> Result<String, JsValue> {
+        let r = self
+            .client()
+            .map_err(js_err)?
+            .v4_risk_params(params)
+            .await
+            .map_err(js_err)?;
+        to_json(serde_json::json!({
+            "params": r.params.iter().map(|(k, v)| (k.clone(), rho_json(v))).collect::<serde_json::Map<String, serde_json::Value>>(),
+            "genesis": r.genesis.iter().map(|(k, v)| (k.clone(), rho_json(v))).collect::<serde_json::Map<String, serde_json::Value>>(),
+            "paramsHash": r.params_hash, "currentHash": r.current_hash, "rev": r.rev,
+        }))
+    }
+
+    /// The caller's transfer op ledger.
+    pub async fn v4_transfers(&self) -> Result<String, JsValue> {
+        let map = self
+            .client()
+            .map_err(js_err)?
+            .v4_transfers()
+            .await
+            .map_err(js_err)?;
+        to_json(serde_json::json!(map
+            .iter()
+            .map(|(k, v)| (k.clone(), rho_json(v)))
+            .collect::<serde_json::Map<String, serde_json::Value>>()))
+    }
+
+    /// Open or reuse the caller's vault.
+    pub async fn v4_vault_open(&self, vault: &str) -> Result<String, JsValue> {
+        self.client()
+            .map_err(js_err)?
+            .v4_vault_open(vault)
+            .await
+            .map_err(js_err)?;
+        to_json(serde_json::json!({"ok": true}))
+    }
+
+    /// Deposit REV collateral.
+    pub async fn v4_vault_deposit(&self, vault: &str, amount: &str) -> Result<String, JsValue> {
+        let collateral = self
+            .client()
+            .map_err(js_err)?
+            .v4_vault_deposit(vault, parse_amount(amount)?)
+            .await
+            .map_err(js_err)?;
+        to_json(serde_json::json!({"collateral": collateral}))
+    }
+
+    /// Liquidate an unhealthy vault.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn v4_vault_liquidate(
+        &self,
+        liquidation: &str,
+        currency: &str,
+        owner: &str,
+        amount: &str,
+        min_collateral: &str,
+    ) -> Result<String, JsValue> {
+        let seized = self
+            .client()
+            .map_err(js_err)?
+            .v4_vault_liquidate(
+                liquidation,
+                currency,
+                owner,
+                parse_amount(amount)?,
+                parse_amount(min_collateral)?,
+            )
+            .await
+            .map_err(js_err)?;
+        to_json(serde_json::json!({"seized": seized}))
+    }
+
+    /// Deposit stablecoin into savings.
+    pub async fn v4_savings_deposit(
+        &self,
+        savings: &str,
+        currency: &str,
+        amount: &str,
+    ) -> Result<String, JsValue> {
+        let shares = self
+            .client()
+            .map_err(js_err)?
+            .v4_savings_deposit(savings, currency, parse_amount(amount)?)
+            .await
+            .map_err(js_err)?;
+        to_json(serde_json::json!({"shares": shares}))
+    }
+
+    /// Withdraw savings shares.
+    pub async fn v4_savings_withdraw(
+        &self,
+        savings: &str,
+        currency: &str,
+        shares: &str,
+    ) -> Result<String, JsValue> {
+        let amount = self
+            .client()
+            .map_err(js_err)?
+            .v4_savings_withdraw(savings, currency, parse_amount(shares)?)
+            .await
+            .map_err(js_err)?;
+        to_json(serde_json::json!({"baseUnits": amount}))
+    }
+
+    /// Redeem stablecoin at par through the PSM.
+    pub async fn v4_psm_sell(
+        &self,
+        psm: &str,
+        currency: &str,
+        amount: &str,
+        min_rev: &str,
+    ) -> Result<String, JsValue> {
+        let out = self
+            .client()
+            .map_err(js_err)?
+            .v4_psm_sell(psm, currency, parse_amount(amount)?, parse_amount(min_rev)?)
+            .await
+            .map_err(js_err)?;
+        to_json(serde_json::json!({"revOut": out}))
+    }
+
+    /// Mint stablecoin at par through the PSM.
+    pub async fn v4_psm_buy(
+        &self,
+        psm: &str,
+        currency: &str,
+        rev_amount: &str,
+        min_stable: &str,
+    ) -> Result<String, JsValue> {
+        let out = self
+            .client()
+            .map_err(js_err)?
+            .v4_psm_buy(
+                psm,
+                currency,
+                parse_amount(rev_amount)?,
+                parse_amount(min_stable)?,
+            )
+            .await
+            .map_err(js_err)?;
+        to_json(serde_json::json!({"stableOut": out}))
+    }
+
+    /// Create a market from a typed JSON terms object. The wallet signs as sponsor.
+    pub async fn v4_create_market(&self, terms_json: &str) -> Result<String, JsValue> {
+        let terms: rcash_core::market::MarketTerms =
+            serde_json::from_str(terms_json).map_err(js_err)?;
+        let created = self
+            .client()
+            .map_err(js_err)?
+            .v4_create_market(&terms)
+            .await
+            .map_err(js_err)?;
+        to_json(serde_json::json!({
+            "marketId": created.market_id, "pool": created.pool_uri,
+            "lock": created.lock_uri, "termsHash": created.terms_hash,
+        }))
+    }
+
+    /// A hub cross-rate with per-feed ages.
+    pub async fn v4_price(&self, base: &str, quote: &str, max_age: i64) -> Result<String, JsValue> {
+        let p = self
+            .client()
+            .map_err(js_err)?
+            .v4_price(base, quote, max_age)
+            .await
+            .map_err(js_err)?;
+        to_json(serde_json::json!({
+            "rate": p.rate, "fresh": p.fresh,
+            "basePrice": p.base_price, "quotePrice": p.quote_price,
+            "baseAge": p.base_age, "quoteAge": p.quote_age,
+        }))
+    }
+
+    /// A scheduled governor action.
+    pub async fn v4_pending(&self, domain: &str, nonce: i64) -> Result<String, JsValue> {
+        match self
+            .client()
+            .map_err(js_err)?
+            .v4_pending(domain, nonce)
+            .await
+            .map_err(js_err)?
+        {
+            Some(p) => to_json(serde_json::json!({
+                "action": p.action, "argsHash": p.args_hash,
+                "args": rho_json(&p.args), "readyAt": p.ready_at,
+            })),
+            None => to_json(serde_json::json!(null)),
+        }
+    }
+}
+
+fn rho_json(value: &RhoValue) -> serde_json::Value {
+    match value {
+        RhoValue::Int(n) => serde_json::json!(n),
+        RhoValue::Bool(b) => serde_json::json!(b),
+        RhoValue::Str(s) => serde_json::json!(s),
+        RhoValue::Uri(u) => serde_json::json!(u),
+        RhoValue::Bytes(h) => serde_json::json!(h),
+        RhoValue::List(items)
+        | RhoValue::Set(items)
+        | RhoValue::Par(items)
+        | RhoValue::Tuple(items) => {
+            serde_json::json!(items.iter().map(rho_json).collect::<Vec<_>>())
+        }
+        RhoValue::Map(map) => serde_json::json!(map
+            .iter()
+            .map(|(k, v)| (k.clone(), rho_json(v)))
+            .collect::<serde_json::Map<String, serde_json::Value>>(
+        )),
+        RhoValue::Unforg { kind, hex } => {
+            serde_json::json!({"unforgeable": kind, "hex": hex})
+        }
     }
 }
 

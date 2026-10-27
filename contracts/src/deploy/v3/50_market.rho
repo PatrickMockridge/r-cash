@@ -8,9 +8,11 @@ new
   MarketIndex, indexState,
   MarketDirectory, directoryState,
   MarketFactory, TradabilityGate, ListingViews,
-  marketNow, marketVerifier, marketOracle, stageMarket, activatePool, marketTransition,
+  marketNow, marketVerifier, marketOracle, stageMarket, stagePairCheck, activatePool, marketTransition,
+  marketOwner, marketOwnerCheck,
   marketAuth,
   rl(`rho:registry:lookup`),
+  revAddress(`rho:rev:address`),
   rs(`rho:registry:insertArbitrary`),
   deployerId(`rho:rchain:deployerId`),
   deployId(`rho:rchain:deployId`),
@@ -57,6 +59,31 @@ in {
           new hc in {
             rl!(hubUri, *hc) |
             for (OracleRegistry <- hc) { ret!(*OracleRegistry) }
+          }
+        }
+      }
+    }
+  } |
+
+  contract marketOwner(@pubHex, ret) = {
+    revAddress!("fromPublicKey", pubHex.hexToBytes(), *ret)
+  } |
+
+  // Sponsor identity checks: the signer owns the named sponsor address and is
+  // also the seed-lock beneficiary; the lock length meets the factory floor.
+  contract marketOwnerCheck(@terms, @sponsorHex, ret) = {
+    if (terms.get("lockBeneficiaryPubKey") != sponsorHex) {
+      ret!((false, "lock beneficiary"))
+    } else {
+      if (terms.get("lockMinBlocks") < __MIN_LOCK_BLOCKS__) {
+        ret!((false, "lock too short"))
+      } else {
+        new oCh in {
+          marketOwner!(sponsorHex, *oCh) |
+          for (@ownerId <- oCh) {
+            if (ownerId != terms.get("sponsorOwnerId")) {
+              ret!((false, "sponsor owner"))
+            } else { ret!((true, Nil)) }
           }
         }
       }
@@ -187,6 +214,7 @@ in {
   contract stageMarket(@s, @record, ret) = {
     indexState!(s.set("markets", s.get("markets").set(record.get("marketId"), record))
                  .set("byPair", s.get("byPair").set(record.get("pairKey"), record.get("marketId")))
+                 .set("bySlug", s.get("bySlug").set(record.get("slug"), record.get("marketId")))
                  .set("rev", s.get("rev") + 1)) |
     ret!((true, record.get("marketId")))
   } |
@@ -205,17 +233,30 @@ in {
                                     if (att.get("termsHash") != record.get("termsHash")) {
                                       ret!((false, "terms mismatch"))
                                     } else {
-                                      if (att.get("rq") < entry.get("terms").get("depthFloorQuote")) {
-                                        ret!((false, "depth"))
+                                      if (att.get("rb") < entry.get("terms").get("seedBase")
+                                          || att.get("rq") < entry.get("terms").get("seedQuote")) {
+                                        ret!((false, "seed mismatch"))
                                       } else {
-                                        for (@s2 <- indexState) {
-                                          match s2.get("markets").get(marketId) {
-                                            r2 => {
-                                              indexState!(s2.set("markets",
-                                                s2.get("markets").set(marketId,
-                                                  r2.set("status", "active")))
-                                                .set("rev", s2.get("rev") + 1)) |
-                                              ret!((true, "active"))
+                                        if (att.get("totalShares") < entry.get("terms").get("seedInitialShares")) {
+                                          ret!((false, "shares mismatch"))
+                                        } else {
+                                          if (att.get("rq") < entry.get("terms").get("depthFloorQuote")) {
+                                            ret!((false, "depth"))
+                                          } else {
+                                            for (@s2 <- indexState) {
+                                              match s2.get("markets").get(marketId) {
+                                                Nil => { ret!(1 / 0) }
+                                                r2 => {
+                                                  if (r2.get("status") != "draft") { ret!(1 / 0) }
+                                                  else {
+                                                    indexState!(s2.set("markets",
+                                                      s2.get("markets").set(marketId,
+                                                        r2.set("status", "active")))
+                                                      .set("rev", s2.get("rev") + 1)) |
+                                                    ret!((true, "active"))
+                                                  }
+                                                }
+                                              }
                                             }
                                           }
                                         }
@@ -230,35 +271,38 @@ in {
                         }
   } |
 
+  contract stagePairCheck(@s, @record, ret) = {
+    match s.get("byPair").get(record.get("pairKey")) {
+      Nil => { stageMarket!(s, record, *ret) }
+      prior => {
+        match s.get("markets").get(prior) {
+          Nil => { stageMarket!(s, record, *ret) }
+          p => {
+            if (p.get("status") == "active" || p.get("status") == "paused") {
+              indexState!(s) | ret!((false, "pair active"))
+            } else {
+              if (record.get("version") <= p.get("version")) {
+                indexState!(s) | ret!((false, "version"))
+              } else { stageMarket!(s, record, *ret) }
+            }
+          }
+        }
+      }
+    }
+  } |
+
   contract MarketIndex(@"stage", @record, @auth, ret) = {
     if (auth != *marketAuth) { ret!((false, "bad index authority")) }
     else {
       for (@s <- indexState) {
         match s.get("markets").get(record.get("marketId")) {
-          existing => {
-            match existing {
-              Nil => {
-                match s.get("byPair").get(record.get("pairKey")) {
-                  Nil => { stageMarket!(s, record, *ret) }
-                  prior => {
-                    match s.get("markets").get(prior) {
-                      Nil => { stageMarket!(s, record, *ret) }
-                      p => {
-                        if (p.get("status") == "active" || p.get("status") == "paused") {
-                          indexState!(s) | ret!((false, "pair active"))
-                        } else {
-                          if (record.get("version") <= p.get("version")) {
-                            indexState!(s) | ret!((false, "version"))
-                          } else { stageMarket!(s, record, *ret) }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-              _ => { indexState!(s) | ret!((false, "exists")) }
+          Nil => {
+            match s.get("bySlug").get(record.get("slug")) {
+              Nil => { stagePairCheck!(s, record, *ret) }
+              _ => { indexState!(s) | ret!((false, "slug")) }
             }
           }
+          _ => { indexState!(s) | ret!((false, "exists")) }
         }
       }
     }
@@ -323,6 +367,10 @@ in {
         record => { ret!((true, record)) }
       }
     }
+  } |
+
+  contract MarketIndex(@"markets", ret) = {
+    for (@s <<- indexState) { ret!((true, s.get("markets"))) }
   } |
 
   contract MarketIndex(@"marketFor", @base, @quote, ret) = {
@@ -483,8 +531,38 @@ in {
     }
   } |
 
+  contract ListingViews(@"currencies", ret) = {
+    new rCh, iCh in {
+      rl!(`__ROOT_URI__`, *rCh) |
+      for (Root <- rCh) {
+        Root!("resolve", "component:currency-registry", 1, *iCh) |
+        for (@(true, regUri, _) <- iCh) {
+          new rc in {
+            rl!(regUri, *rc) |
+            for (CurrencyRegistry <- rc) { CurrencyRegistry!("currencies", *ret) }
+          }
+        }
+      }
+    }
+  } |
+
+  contract ListingViews(@"markets", ret) = {
+    new rCh, iCh in {
+      rl!(`__ROOT_URI__`, *rCh) |
+      for (Root <- rCh) {
+        Root!("resolve", "component:market-index", 1, *iCh) |
+        for (@(true, indexUri, _) <- iCh) {
+          new ic in {
+            rl!(indexUri, *ic) |
+            for (MarketIndex <- ic) { MarketIndex!("markets", *ret) }
+          }
+        }
+      }
+    }
+  } |
+
   contract MarketFactory(@"createMarket", @terms, @values, @sponsorHex, @sig, ret) = {
-    new vCh, hCh, regCh, oCh, bpCh, qpCh, lpCh, dataCh in {
+    new vCh, hCh, regCh, oCh, bpCh, qpCh, lpCh, dataCh, spCh in {
       marketVerifier!(*vCh) |
       for (Verifier <- vCh) {
         MarketTerms!("put", terms, values, *hCh) |
@@ -502,6 +580,10 @@ in {
                     if (terms.get("sponsorPubKey") != sponsorHex) {
                       ret!((false, "sponsor mismatch"))
                     } else {
+                      marketOwnerCheck!(terms, sponsorHex, *spCh) |
+                      for (@sp <- spCh) {
+                        match sp {
+                          (true, Nil) => {
                       marketOracle!(*regCh) |
                       for (Registry <- regCh) {
                         Registry!("feedEntry", terms.get("base"), *bpCh) |
@@ -546,6 +628,7 @@ in {
                                                                 (true, Nil) => {
                                                                   MarketIndex!("stage",
                                                                     {"marketId": terms.get("marketId"),
+                                                                     "slug": terms.get("slug"),
                                                                      "pairKey": "market:" ++ terms.get("base")
                                                                                 ++ "/" ++ terms.get("quote"),
                                                                      "base": terms.get("base"),
@@ -591,6 +674,10 @@ in {
                           }
                         }
                       }
+                          }
+                          _ => { ret!(sp) }
+                        }
+                      }
                     }
                   }
                 }
@@ -605,7 +692,7 @@ in {
 
   termsState!({"terms": {}, "rev": 0}) |
   directoryState!({"slots": {}, "rev": 0}) |
-  indexState!({"markets": {}, "byPair": {}, "rev": 0}) |
+  indexState!({"markets": {}, "byPair": {}, "bySlug": {}, "rev": 0}) |
 
   rl!(`rho:rchain:ertp`, *ertpCh) |
   for (@(_, ERTP) <- ertpCh) {

@@ -7,21 +7,22 @@ R-Cash is the on-chain payments core of a Wise-shaped product: hold local-curren
 receive as if local, convert directly between currencies, pay anyone with a wallet or claim link,
 and get paid — while liquidity providers earn the FX spread.
 
-## What works today (v0.4)
+## What works today (v0.5)
 
 | Area | Result |
 |---|---|
-| Kernel and oracle | Root, Clock, Verifier, Codec, Bounds, Governor, per-currency feeds, hub cross-rates |
-| Stablecoin issuer | REV-collateralised per-currency stablecoins: signed params, mint/repay, interest, liquidation, bad-debt write-off, sponsor-signed listing |
-| Accounts and purses | One account per owner, owner-gated purses, deposit facets, asset resolution through the registry |
-| Transfers | Claimable per-transfer cells: secret claim, expiry, sender refund, exactly one terminal state |
-| Markets | Signed terms, factory-built pools, seed lock, activation, swaps, liquidity, views, tradability gate, governor-gated pause/delist |
-| Clients | Rust SDK and CLI, WASM facade and React screens; a Playwright journey covers send → claim |
-| Verification | Eight fresh-chain harness suites, Rust unit tests, wasm smoke, web typecheck/build and the browser journey |
+| Kernel and oracle | Root, Clock, Verifier, Codec, Bounds, Governor (timelock), per-currency feeds, hub cross-rates |
+| Stablecoin issuer | REV-collateralised per-currency stablecoins with signed v2 params (including the savings share and PSM fee), vaults, interest, liquidation, bad debt |
+| DAI-style loop | Repay splits principal and interest; the surplus buffer absorbs bad debt (`sin`), halts minting when short, and pays the configured savings share on every repay; a per-owner savings pool and a signed-debt PSM provide par redemption and issuance |
+| Accounts and purses | One account per owner, owner-gated purses, deposit facets, asset resolution through the registry, transfer op ledger |
+| Transfers | Claimable per-transfer cells with measured payments, expiry, memo, opId idempotency, an optional native-REV stipend for the claimer, and exactly one terminal state |
+| Markets | Signed v4 terms enforced end to end, factory-built pools, seed lock, activation seed checks, swaps through the tradability gate, LP exit while paused/delisted |
+| Clients | Rust SDK and CLI, WASM facade and React screens for accounts, pay/claim/history, vault, savings, PSM redeem, markets, liquidity and governance |
+| Verification | Static gates are green. The behavioural devnet campaign runs only after every specification item is implemented; see `docs/SPEC.md` for the traceability and the campaign report format. |
 
 **Networks.** The local devnet (`make devnet`) is the harness target. The rhobot public
-testnet is documented in [`docs/TESTNET.md`](docs/TESTNET.md). No fiat custody and no real
-value; the chain is pre-mainnet.
+testnet is documented in [`docs/TESTNET.md`](docs/TESTNET.md) and is upstream-blocked. No
+fiat custody and no real value; the chain is pre-mainnet.
 
 ## Client stack
 
@@ -58,49 +59,52 @@ npm run test:e2e   # Playwright journey against the running devnet
 
 See [`docs/CLIENT.md`](docs/CLIENT.md) and [`docs/FRONTEND.md`](docs/FRONTEND.md).
 
-`rcash devnet demo` is the end-to-end client journey (oracle, vaults, liquidity, convert,
-send/claim/refund) against the running devnet.
+`rcash devnet demo` funds the account, sends a claimable REV transfer to itself and claims
+it. It is a smoke journey, not the full acceptance campaign.
 
-The Python harness below is legacy: `make demo` now runs the Rust client journey, and
-`make legacy-demo` still runs the Python scenarios for one release.
+## Quickstart
 
-## Quickstart (legacy harness)
-
-Prerequisites: Docker, Python 3.12, and the rholo checkout at `../rholo` (override `RHOLO_DIR`).
+Prerequisites: Docker, Python 3.12, Node 22, and the rholo checkout (set `RHOLO_DIR`; it
+defaults to `../rholo`).
 
 ```sh
 make venv                 # .venv + harness deps
 make image                # build rnode:local (once; slow)
-make devnet               # one-validator autopropose devnet
-make keys                 # generate/fund devnet keys
+make setup                # devnet + keys + install + bootstrap
 make probes               # phase-0 capability gates
-make bootstrap            # Directory, Accounts, Oracle, rNGN/rKES zones, Components
-make pool                 # pool setup + FxPool deploy
-make book                 # TransferBook deploy
-make legacy-demo          # the original Python pool + transfer scenarios
+make demo                 # Rust client send -> claim journey
 make down                 # stop and drop the devnet
 ```
 
-`make demo` is the end-to-end Rust client story: refresh the oracle, fund an Account, open
-NGN/KES vaults, borrow local stablecoins, add and remove liquidity, convert, send a
-claimable transfer, claim it, refund an expired one, and read the balances back. It prints
-PASS/FAIL per step and exits non-zero on the first failure.
+`make setup` chains `devnet`, `keys`, `install` (the chain-aware, signed-read installer)
+and `bootstrap` (the stablecoin and market acceptance suites, which leave the demo system
+and the REV/V4T market on chain). Systems are discovered by clients through
+`ListingViews`; there is no separate systems manifest.
 
 ## Architecture
 
-- `Account` — non-custodial, per-key; purses for REV/rNGN/rKES/LP; vault and transfer ops.
-- `CurrencyZone` (per currency) — local stablecoin kit, REV collateral, vaults, interest, liquidation.
-- `FxPool` (per corridor) — oracle-anchored fixed-price market maker; LP tokens; spread + skew.
-- `OracleHub` — allowlisted reporters, median, freshness, spread, 2-of-3 admin signatures.
-- `TransferBook` — quote/send/claim/refund with escrowed destination currency and claim secrets.
-- `Directory` + `ComponentRegistry` — names/assets and live large-contract channels.
-- `Governor`-style admin — M-of-N secp256k1 signatures in every mutable component.
+- `Account` — non-custodial, per-key; owner-gated purses, vault access, transfer ops and the
+  opId ledger.
+- Per-currency issuer cluster (`31_stablecoin`) — `Stablecoin`, `CollateralCustody`,
+  `RiskParameters`, `VaultBook`, `LiquidationEngine`, `SurplusBuffer`, `SavingsPool`,
+  `PegStabilityModule`; one signed deploy, because mint/burn/settlement capabilities cannot
+  cross a deploy boundary.
+- `FxPool` + `LiquidityLock` (per market) — oracle-anchored pool, LP tokens, spread and
+  skew, one-shot seed lock.
+- `OracleHub` — three allowlisted reporters, median, freshness, spread, signed policy.
+- `TransferBook` + `TransferContract` — measured send, memo/opId, claim, expiry, refund, one
+  terminal state per transfer.
+- `Root`, `CurrencyRegistry`, `StablecoinDirectory`, `OracleRegistry`, `MarketDirectory`,
+  `MarketIndex`, `ListingViews` — discovery and lifecycle.
+- `Governor` — 2-of-3 secp256k1 signatures, per-domain nonces and a 100-block timelock for
+  parameter changes; emergency pause and market status are immediate.
 
 ## Docs
 
 [`docs/INTENT.md`](docs/INTENT.md) — why, users, principles, scope and success criteria.
-[`docs/SPEC.md`](docs/SPEC.md) — the normative v0.1 specification: states, operations, invariants,
-formulas, conformance.
+[`docs/SPEC.md`](docs/SPEC.md) — the normative v0.5 product specification with numbered
+requirements, acceptance criteria and traceability; [`docs/spec/`](docs/spec/) — the formal
+component calculus, invariant table and wiring.
 [`docs/NETWORK.md`](docs/NETWORK.md) (corridors), [`docs/PLATFORM.md`](docs/PLATFORM.md) (pinned
 node, hard limits, measured costs), [`docs/STATUS.md`](docs/STATUS.md) (verdict + deferred work),
 [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md), [`docs/LEGAL.md`](docs/LEGAL.md).

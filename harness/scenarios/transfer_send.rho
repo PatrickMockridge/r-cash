@@ -41,16 +41,20 @@ in {
                                   match d {
                                     (true, _) => {
                                       @sender!("sendTransfer", *deployerId, "REV",
-                                               recipientFacet, __AMOUNT__,
+                                               recipientFacet,
+                                               "__RECIPIENT_PUB__".hexToBytes(),
+                                               __AMOUNT__,
                                                "__HASH_A__".hexToBytes(),
-                                               __EXPIRY_A__, *saCh) |
+                                               __EXPIRY_A__, "", "op-a", 0, *saCh) |
                                       for (@a <- saCh) {
                                         match a {
                                           (true, idA, uriA) => {
                                             @sender!("sendTransfer", *deployerId, "REV",
-                                                     recipientFacet, __AMOUNT__,
+                                                     recipientFacet,
+                                                     "__RECIPIENT_PUB__".hexToBytes(),
+                                                     __AMOUNT__,
                                                      "__HASH_B__".hexToBytes(),
-                                                     __EXPIRY_B__, *sbCh) |
+                                                     __EXPIRY_B__, "", "op-b", 0, *sbCh) |
                                             for (@b <- sbCh) {
                                               match b {
                                                 (true, idB, uriB) => {

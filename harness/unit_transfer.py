@@ -96,6 +96,18 @@ def main() -> int:
     check("claim accepted", claimed, (True, AMOUNT))
     check("recipient credited", recipient_balance, (True, AMOUNT))
 
+    # Before expiry the wrong secret is refused and a foreign refund is refused as
+    # "not expired"; the expiry gate runs before the secret and the sender check.
+    early_refuse = render_scenario("transfer_refuse.rho", {
+        "__ROOT_URI__": root,
+        "__OWN_PUB__": foreign["public"],
+        "__TRANSFER_URI__": uri_a,
+        "__WRONG_SECRET__": WRONG_SECRET.hex(),
+    })
+    wrong_secret, foreign_early = one(early_refuse, foreign["secret"])
+    check("wrong secret refused", wrong_secret, (False, "bad secret"))
+    check("foreign refund before expiry", foreign_early, (False, "not expired"))
+
     wait_height(expiry_b)
 
     refuse_term = render_scenario("transfer_refuse.rho", {
@@ -104,8 +116,8 @@ def main() -> int:
         "__TRANSFER_URI__": uri_b,
         "__WRONG_SECRET__": WRONG_SECRET.hex(),
     })
-    wrong_secret, foreign_refund = one(refuse_term, foreign["secret"])
-    check("wrong secret refused", wrong_secret, (False, "bad secret"))
+    expired_claim, foreign_refund = one(refuse_term, foreign["secret"])
+    check("claim after expiry", expired_claim, (False, "expired"))
     check("foreign refund refused", foreign_refund, (False, "not sender"))
 
     refund_term = render_scenario("transfer_refund.rho", {

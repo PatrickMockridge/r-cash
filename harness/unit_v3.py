@@ -200,7 +200,8 @@ def main() -> int:
                  ok_or_reason(f'Bounds!("checkPool", {pool_ok}, *r)')), secret),
         "ok",
     )
-    book_ok = '{"defaultExpiryBlocks": 100, "maxExpiryBlocks": 1000, "minAmount": 1}'
+    book_ok = ('{"defaultExpiryBlocks": 100, "maxExpiryBlocks": 1000, "minAmount": 1, '
+               '"maxMemoBytes": 128, "maxOpIdBytes": 64, "maxStipend": 100000000}')
     check(
         "Bounds.checkBook ok",
         one(call(state["bounds_uri"], "Bounds",

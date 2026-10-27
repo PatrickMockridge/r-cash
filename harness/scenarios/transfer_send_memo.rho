@@ -1,0 +1,79 @@
+// Fund the sender and send one transfer with a memo, opId and REV stipend.
+// Returns [senderId, recipientId, id, uri].
+// Placeholders: __ROOT_URI__, __SENDER_PUB__, __RECIPIENT_PUB__, __FUND__,
+//               __AMOUNT__, __HASH__, __EXPIRY__, __MEMO__, __OP_ID__, __STIPEND__.
+new
+  rl(`rho:registry:lookup`),
+  rootCh, afCh, ac, sCh, rCh, rfCh, sfCh, saCh,
+  ertpCh, revIssuerCh, purseCh, fundCh, wdCh, depCh,
+  deployId(`rho:rchain:deployId`),
+  deployerId(`rho:rchain:deployerId`)
+in {
+  rl!(`__ROOT_URI__`, *rootCh) |
+  rl!(`rho:rchain:ertp`, *ertpCh) |
+  for (Root <- rootCh; @(_, ERTP) <- ertpCh) {
+    Root!("resolve", "component:account-factory", 1, *afCh) |
+    for (@(true, afUri, _) <- afCh) {
+      rl!(afUri, *ac) |
+      for (AccountFactory <- ac) {
+        AccountFactory!("getOrCreate", "__SENDER_PUB__".hexToBytes(), *sCh) |
+        for (@(true, sender, senderId) <- sCh) {
+          AccountFactory!("getOrCreate", "__RECIPIENT_PUB__".hexToBytes(), *rCh) |
+          for (@(true, recipient, recipientId) <- rCh) {
+            @recipient!("depositFacet", "REV", *rfCh) |
+            for (@rf <- rfCh) {
+              match rf {
+                (true, recipientFacet) => {
+                  @sender!("depositFacet", "REV", *sfCh) |
+                  for (@sf <- sfCh) {
+                    match sf {
+                      (true, senderFacet) => {
+                        @ERTP!("getRevIssuer", *revIssuerCh) |
+                        for (@(revBrand, revIssuer) <- revIssuerCh) {
+                          @revIssuer!("makeEmptyPurse", *purseCh) |
+                          for (@(true, purse) <- purseCh) {
+                            @purse!("revFund", *deployerId, __FUND__, *fundCh) |
+                            for (@_ <- fundCh) {
+                              @purse!("withdraw", (revBrand, __FUND__), *wdCh) |
+                              for (@(true, payment) <- wdCh) {
+                                @senderFacet!("deposit", payment, *depCh) |
+                                for (@d <- depCh) {
+                                  match d {
+                                    (true, _) => {
+                                      @sender!("sendTransfer", *deployerId, "REV",
+                                               recipientFacet,
+                                               "__RECIPIENT_PUB__".hexToBytes(),
+                                               __AMOUNT__,
+                                               "__HASH__".hexToBytes(),
+                                               __EXPIRY__, "__MEMO__", "__OP_ID__",
+                                               __STIPEND__, *saCh) |
+                                      for (@a <- saCh) {
+                                        match a {
+                                          (true, id, uri) => {
+                                            deployId!([senderId, recipientId, id, uri])
+                                          }
+                                          _ => deployId!(a)
+                                        }
+                                      }
+                                    }
+                                    _ => deployId!(d)
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                      _ => deployId!(sf)
+                    }
+                  }
+                }
+                _ => deployId!(rf)
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

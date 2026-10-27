@@ -115,6 +115,13 @@ impl KeyPair {
     }
 
     /// Sign a 32-byte prehash (oracle and admin payloads use this shape).
+    /// Sign an arbitrary protocol payload: BLAKE2b-256, then RFC-6979 over the prehash.
+    /// This matches `tools/sign_payload.py` and the on-chain `Verifier.sigOk` path.
+    pub fn sign_payload(&self, payload: &[u8]) -> Result<Vec<u8>, ChainError> {
+        let digest = rchain_crypto::hash::blake2b256::hash(payload);
+        self.sign_prehash(&digest)
+    }
+
     pub fn sign_prehash(&self, prehash: &[u8]) -> Result<Vec<u8>, ChainError> {
         if prehash.len() != 32 {
             return Err(ChainError::Crypto(format!(

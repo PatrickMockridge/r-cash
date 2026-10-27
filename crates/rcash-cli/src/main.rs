@@ -138,6 +138,22 @@ enum Command {
         #[arg(long, default_value = "0")]
         min_out: String,
     },
+    /// End-to-end devnet journeys.
+    Devnet {
+        #[command(subcommand)]
+        cmd: DevnetCmd,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum DevnetCmd {
+    /// Fund the account, send a claimable REV transfer to self and claim it.
+    Demo {
+        #[arg(long, default_value = "0.01")]
+        amount: String,
+        #[arg(long, default_value = "720")]
+        blocks: i64,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -695,6 +711,9 @@ async fn run(cli: Cli) -> Result<ExitCode> {
                     amount,
                     secret_hash,
                     expiry,
+                    memo,
+                    op_id,
+                    stipend,
                 } => {
                     let sent = v4_signing_client(&cli)?
                         .v4_send_transfer(
@@ -703,6 +722,9 @@ async fn run(cli: Cli) -> Result<ExitCode> {
                             parse_amount(amount)?,
                             secret_hash,
                             *expiry,
+                            memo,
+                            op_id,
+                            parse_amount(stipend)?,
                         )
                         .await?;
                     print_json_or(
@@ -767,6 +789,7 @@ async fn run(cli: Cli) -> Result<ExitCode> {
                     base_amount,
                     quote_amount,
                     until,
+                    min_shares,
                 } => {
                     let shares = v4_signing_client(&cli)?
                         .v4_add_liquidity(
@@ -777,6 +800,7 @@ async fn run(cli: Cli) -> Result<ExitCode> {
                             parse_amount(base_amount)?,
                             parse_amount(quote_amount)?,
                             *until,
+                            parse_amount(min_shares)?,
                         )
                         .await?;
                     print_json_or(
@@ -791,9 +815,18 @@ async fn run(cli: Cli) -> Result<ExitCode> {
                     pool,
                     base,
                     quote,
+                    min_base,
+                    min_quote,
                 } => {
                     let shares = v4_signing_client(&cli)?
-                        .v4_release_lp(lock, pool, base, quote)
+                        .v4_release_lp(
+                            lock,
+                            pool,
+                            base,
+                            quote,
+                            parse_amount(min_base)?,
+                            parse_amount(min_quote)?,
+                        )
                         .await?;
                     print_json_or(
                         &cli.json,
@@ -849,9 +882,281 @@ async fn run(cli: Cli) -> Result<ExitCode> {
                         }),
                     );
                 }
+                V4Cmd::Currencies => {
+                    let list = v4_reader(&cli)?.v4_currencies().await?;
+                    print_json_or(
+                        &cli.json,
+                        &serde_json::json!(list
+                            .iter()
+                            .map(|c| serde_json::json!({
+                                "code": c.code, "stablecoinUri": c.stablecoin_uri,
+                                "vaultUri": c.vault_uri, "savingsUri": c.savings_uri,
+                                "psmUri": c.psm_uri, "bufferUri": c.buffer_uri,
+                                "status": c.status,
+                            }))
+                            .collect::<Vec<_>>()),
+                    );
+                }
+                V4Cmd::Markets => {
+                    let list = v4_reader(&cli)?.v4_markets().await?;
+                    print_json_or(
+                        &cli.json,
+                        &serde_json::json!(list
+                            .iter()
+                            .map(|m| serde_json::json!({
+                                "marketId": m.market_id, "slug": m.slug,
+                                "base": m.base, "quote": m.quote,
+                                "version": m.version, "status": m.status,
+                            }))
+                            .collect::<Vec<_>>()),
+                    );
+                }
+                V4Cmd::Terms { hash } => {
+                    let terms = v4_reader(&cli)?.v4_terms(hash).await?;
+                    print_json_or(
+                        &cli.json,
+                        &serde_json::json!({
+                            "values": terms.values,
+                            "terms": terms.terms.keys().collect::<Vec<_>>(),
+                        }),
+                    );
+                }
+                V4Cmd::Transfers => {
+                    let map = v4_signing_client(&cli)?.v4_transfers().await?;
+                    print_json_or(
+                        &cli.json,
+                        &serde_json::json!({
+                            "ops": map.keys().collect::<Vec<_>>(),
+                        }),
+                    );
+                }
+                V4Cmd::BufferInfo { buffer } => {
+                    let info = v4_reader(&cli)?.v4_buffer_info(buffer).await?;
+                    print_json_or(
+                        &cli.json,
+                        &serde_json::json!({
+                            "surplus": info.surplus, "sin": info.sin,
+                            "savingsShareBps": info.savings_share_bps, "rev": info.rev,
+                        }),
+                    );
+                }
+                V4Cmd::RiskParams { params } => {
+                    let info = v4_reader(&cli)?.v4_risk_params(params).await?;
+                    print_json_or(
+                        &cli.json,
+                        &serde_json::json!({
+                            "paramsHash": info.params_hash, "currentHash": info.current_hash,
+                            "rev": info.rev, "params": info.params.keys().collect::<Vec<_>>(),
+                        }),
+                    );
+                }
+                V4Cmd::SavingsInfo { savings } => {
+                    let info = v4_reader(&cli)?.v4_savings_info(savings).await?;
+                    print_json_or(
+                        &cli.json,
+                        &serde_json::json!({
+                            "totalShares": info.total_shares, "totalAssets": info.total_assets,
+                            "shareValueE8": info.share_value_e8, "rev": info.rev,
+                        }),
+                    );
+                }
+                V4Cmd::SavingsPosition { savings } => {
+                    let pos = v4_signing_client(&cli)?
+                        .v4_savings_position(savings)
+                        .await?;
+                    print_json_or(&cli.json, &serde_json::json!({"shares": pos.shares}));
+                }
+                V4Cmd::SavingsDeposit {
+                    savings,
+                    currency,
+                    amount,
+                } => {
+                    let shares = v4_signing_client(&cli)?
+                        .v4_savings_deposit(savings, currency, parse_amount(amount)?)
+                        .await?;
+                    print_json_or(&cli.json, &serde_json::json!({"shares": shares}));
+                }
+                V4Cmd::SavingsWithdraw {
+                    savings,
+                    currency,
+                    shares,
+                } => {
+                    let amount = v4_signing_client(&cli)?
+                        .v4_savings_withdraw(savings, currency, parse_amount(shares)?)
+                        .await?;
+                    print_json_or(&cli.json, &serde_json::json!({"baseUnits": amount}));
+                }
+                V4Cmd::PsmInfo { psm } => {
+                    let info = v4_reader(&cli)?.v4_psm_info(psm).await?;
+                    print_json_or(
+                        &cli.json,
+                        &serde_json::json!({
+                            "stableDebt": info.stable_debt, "feeBps": info.fee_bps,
+                            "ceiling": info.ceiling, "revBalance": info.rev_balance,
+                            "rev": info.rev,
+                        }),
+                    );
+                }
+                V4Cmd::PsmBuy {
+                    psm,
+                    currency,
+                    rev_amount,
+                    min_stable,
+                } => {
+                    let out = v4_signing_client(&cli)?
+                        .v4_psm_buy(
+                            psm,
+                            currency,
+                            parse_amount(rev_amount)?,
+                            parse_amount(min_stable)?,
+                        )
+                        .await?;
+                    print_json_or(&cli.json, &serde_json::json!({"stableOut": out}));
+                }
+                V4Cmd::PsmSell {
+                    psm,
+                    currency,
+                    amount,
+                    min_rev,
+                } => {
+                    let out = v4_signing_client(&cli)?
+                        .v4_psm_sell(psm, currency, parse_amount(amount)?, parse_amount(min_rev)?)
+                        .await?;
+                    print_json_or(&cli.json, &serde_json::json!({"revOut": out}));
+                }
+                V4Cmd::VaultOpen { vault } => {
+                    v4_signing_client(&cli)?.v4_vault_open(vault).await?;
+                    print_json_or(&cli.json, &serde_json::json!({"vault": vault, "ok": true}));
+                }
+                V4Cmd::VaultDeposit { vault, amount } => {
+                    let collateral = v4_signing_client(&cli)?
+                        .v4_vault_deposit(vault, parse_amount(amount)?)
+                        .await?;
+                    print_json_or(&cli.json, &serde_json::json!({"collateral": collateral}));
+                }
+                V4Cmd::VaultInfo { vault } => {
+                    let v = v4_signing_client(&cli)?.v4_vault(vault).await?;
+                    print_json_or(
+                        &cli.json,
+                        &serde_json::json!({
+                            "collateral": v.collateral, "debt": v.debt,
+                            "accruedInterest": v.accrued_interest, "health": v.health,
+                            "rate": v.rate, "fresh": v.fresh,
+                        }),
+                    );
+                }
+                V4Cmd::Totals { vault } => {
+                    let t = v4_reader(&cli)?.v4_totals(vault).await?;
+                    print_json_or(
+                        &cli.json,
+                        &serde_json::json!({
+                            "totalDebt": t.total_debt, "badDebt": t.bad_debt,
+                            "sin": t.sin, "psmDebt": t.psm_debt, "paused": t.paused,
+                        }),
+                    );
+                }
+                V4Cmd::VaultLiquidate {
+                    liquidation,
+                    currency,
+                    owner,
+                    amount,
+                    min_collateral,
+                } => {
+                    let seized = v4_signing_client(&cli)?
+                        .v4_vault_liquidate(
+                            liquidation,
+                            currency,
+                            owner,
+                            parse_amount(amount)?,
+                            parse_amount(min_collateral)?,
+                        )
+                        .await?;
+                    print_json_or(&cli.json, &serde_json::json!({"seized": seized}));
+                }
+                V4Cmd::Pending { domain, nonce } => {
+                    let pending = v4_reader(&cli)?.v4_pending(domain, *nonce).await?;
+                    print_json_or(
+                        &cli.json,
+                        &serde_json::json!(pending.map(|p| serde_json::json!({
+                            "action": p.action, "argsHash": p.args_hash,
+                            "readyAt": p.ready_at,
+                        }))),
+                    );
+                }
+                V4Cmd::MarketStatus {
+                    market,
+                    status,
+                    nonce,
+                    sigs,
+                } => {
+                    v4_signing_client(&cli)?
+                        .v4_set_market_status(market, status, *nonce, sigs)
+                        .await?;
+                    print_json_or(&cli.json, &serde_json::json!({"ok": true}));
+                }
+                V4Cmd::PauseCurrency {
+                    code,
+                    paused,
+                    nonce,
+                    sigs,
+                } => {
+                    v4_signing_client(&cli)?
+                        .v4_pause_currency(code, *paused, *nonce, sigs)
+                        .await?;
+                    print_json_or(&cli.json, &serde_json::json!({"ok": true}));
+                }
+                V4Cmd::CreateMarket { terms } => {
+                    let text = std::fs::read_to_string(terms)
+                        .map_err(|e| CliError::Usage(format!("{}: {e}", terms.display())))?;
+                    let terms: rcash_core::market::MarketTerms =
+                        serde_json::from_str(&text).map_err(|e| CliError::Usage(e.to_string()))?;
+                    let created = v4_signing_client(&cli)?.v4_create_market(&terms).await?;
+                    print_json_or(
+                        &cli.json,
+                        &serde_json::json!({
+                            "marketId": created.market_id, "pool": created.pool_uri,
+                            "lock": created.lock_uri, "termsHash": created.terms_hash,
+                        }),
+                    );
+                }
             }
             Ok(ExitCode::SUCCESS)
         }
+        Command::Devnet { ref cmd } => match cmd {
+            DevnetCmd::Demo { amount, blocks } => {
+                let client = v4_signing_client(&cli)?;
+                let amount = parse_amount(amount)?;
+                client.v4_fund_rev(amount).await?;
+                let pubkey = client
+                    .key()
+                    .ok_or_else(|| CliError::Usage("a signing key is required".into()))?
+                    .public_hex();
+                let secret = rcash_chain::claim::generate_secret_hex()?;
+                let hash = rcash_chain::claim::claim_hash(&secret)?;
+                let tip = client.height().await?;
+                let sent = client
+                    .v4_send_transfer(
+                        &pubkey,
+                        "REV",
+                        amount,
+                        &hash,
+                        tip + blocks,
+                        "devnet demo",
+                        "",
+                        0,
+                    )
+                    .await?;
+                let claimed = client.v4_claim_transfer(&sent.uri, &secret).await?;
+                print_json_or(
+                    &cli.json,
+                    &serde_json::json!({
+                        "transfer": sent.uri, "id": sent.id,
+                        "claimedBaseUnits": claimed,
+                    }),
+                );
+                Ok(ExitCode::SUCCESS)
+            }
+        },
         Command::Account { ref cmd } => match cmd {
             AccountCmd::Balances { assets } => {
                 if assets.is_empty() {
@@ -1295,6 +1600,12 @@ enum V4Cmd {
         amount: String,
         secret_hash: String,
         expiry: i64,
+        #[arg(long, default_value = "")]
+        memo: String,
+        #[arg(long, default_value = "")]
+        op_id: String,
+        #[arg(long, default_value = "0")]
+        stipend: String,
     },
     /// Claim a transfer with its secret.
     Claim { transfer: String, secret: String },
@@ -1319,6 +1630,9 @@ enum V4Cmd {
         base_amount: String,
         quote_amount: String,
         until: i64,
+        /// Minimum LP shares (use the quote-derived floor, never zero in production).
+        #[arg(long)]
+        min_shares: String,
     },
     /// Release the seed LP after the lock height and remove it.
     ReleaseLp {
@@ -1326,6 +1640,10 @@ enum V4Cmd {
         pool: String,
         base: String,
         quote: String,
+        #[arg(long)]
+        min_base: String,
+        #[arg(long)]
+        min_quote: String,
     },
     /// Mint a stablecoin against REV into the account.
     VaultMint {
@@ -1342,6 +1660,84 @@ enum V4Cmd {
     },
     /// Withdraw REV collateral into the account.
     VaultWithdraw { vault: String, amount: String },
+    /// Every listed currency.
+    Currencies,
+    /// Every staged or listed market.
+    Markets,
+    /// A market's canonical terms.
+    Terms { hash: String },
+    /// The caller's transfer op ledger.
+    Transfers,
+    /// Surplus-buffer state.
+    BufferInfo { buffer: String },
+    /// Risk parameters and hashes.
+    RiskParams { params: String },
+    /// Savings-pool state.
+    SavingsInfo { savings: String },
+    /// The caller's savings position.
+    SavingsPosition { savings: String },
+    /// Deposit stablecoin into savings.
+    SavingsDeposit {
+        savings: String,
+        currency: String,
+        amount: String,
+    },
+    /// Withdraw savings shares.
+    SavingsWithdraw {
+        savings: String,
+        currency: String,
+        shares: String,
+    },
+    /// PSM state.
+    PsmInfo { psm: String },
+    /// Mint stablecoin at par through the PSM.
+    PsmBuy {
+        psm: String,
+        currency: String,
+        rev_amount: String,
+        min_stable: String,
+    },
+    /// Redeem stablecoin at par through the PSM.
+    PsmSell {
+        psm: String,
+        currency: String,
+        amount: String,
+        min_rev: String,
+    },
+    /// Open or reuse the caller's vault.
+    VaultOpen { vault: String },
+    /// Deposit REV collateral.
+    VaultDeposit { vault: String, amount: String },
+    /// The caller's vault position.
+    VaultInfo { vault: String },
+    /// The issuer's accounting totals.
+    Totals { vault: String },
+    /// Liquidate an unhealthy vault.
+    VaultLiquidate {
+        liquidation: String,
+        currency: String,
+        owner: String,
+        amount: String,
+        min_collateral: String,
+    },
+    /// A scheduled governor action.
+    Pending { domain: String, nonce: i64 },
+    /// Change a market's status with governor signatures.
+    MarketStatus {
+        market: String,
+        status: String,
+        nonce: i64,
+        sigs: Vec<String>,
+    },
+    /// Pause or resume a currency with governor signatures.
+    PauseCurrency {
+        code: String,
+        paused: bool,
+        nonce: i64,
+        sigs: Vec<String>,
+    },
+    /// Create a market from a JSON terms file.
+    CreateMarket { terms: std::path::PathBuf },
 }
 
 fn load_key(cli: &Cli) -> Result<rcash_chain::KeyPair> {

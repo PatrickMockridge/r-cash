@@ -26,10 +26,13 @@ separately and do not create a runtime cycle.
 
 | Component | State | Interface | Responsibility |
 |---|---|---|---|
-| `Stablecoin` | `issuerState` | `brand`, `issuer`, `supply`, `mint`, `burn`, `amountOf`, `attest` | Owns the ERTP kit. Only the VaultBook holds the scoped mint/burn caps. |
+| `Stablecoin` | `issuerState` | `brand`, `issuer`, `supply`, `mint`, `burn`, `settle`, `amountOf`, `attest` | Owns the ERTP kit. Only the VaultBook holds the scoped mint/burn/settlement caps. `settle` burns principal and deposits interest into the surplus buffer. |
 | `CollateralCustody` | none; REV purse in closure | `deposit`, `withdraw`, `balance`, `attest` | Holds the currency's REV purse; only the VaultBook holds the custody cap. |
-| `RiskParameters` | none; params in closure | `params`, `attest` | Immutable MCR, bonus, close factor, rate, ceiling, min/max debt and max oracle age. |
-| `VaultBook` | `vaultState` | `open`, `deposit`, `mint`, `withdraw`, `repay`, `liquidate`, `vault`, `vaults`, `totals`, `params`, `pause`, `attest` | Atomic vault/accounting cluster. Enforces health, ceiling, min/max debt, close factor and pause; no second principal ledger. |
+| `RiskParameters` | `paramsState` | `params`, `info`, `attest`, `scheduleParams`, `applyParams` | Live MCR, bonus, close factor, rate, ceiling, min/max debt, max oracle age, savings share and PSM fee. Genesis params are signed; changes are timelocked through the governor. |
+| `VaultBook` | `vaultState` | `open`, `deposit`, `mint`, `withdraw`, `repay`, `liquidate`, `vault`, `vaults`, `totals`, `params`, `pause`, `attest` | Atomic vault/accounting cluster. Enforces health, ceiling, min/max debt, close factor, buffer halt and pause; no second principal ledger. The repay path drives `settle → cover(0) → paySavings`. |
+| `SurplusBuffer` | `bufferState`; stablecoin purse in closure | `deposit`, `cover`, `paySavings`, `info`, `scheduleShare`, `applyShare` | Holds realised interest as `surplus`, carries outstanding bad debt as `sin`, absorbs losses and distributes the configured share to savers. |
+| `SavingsPool` | `savingsState`; stablecoin purse in closure | `deposit`, `withdraw`, `notify`, `info`, `position` | Per-owner share ledger over the stablecoin purse; `notify` lifts the share value without minting shares. |
+| `PegStabilityModule` | `psmState`; REV and stablecoin purses in closure | `fundRev`, `buyStable`, `sellStable`, `info`, `debt`, `schedulePolicy`, `applyPolicy` | Par issuance/redemption against a finite REV buffer; signed `stableDebt`; fees stay in the REV purse. |
 | `CollateralMath` | none | `accrue`, `health`, `payout`, `seize` | Pure issuer arithmetic; replaces the deleted RiskMath. |
 | `LiquidationEngine` | none | `liquidate`, `attest` | Holds the only liquidation capability. Permissionless callers burn stablecoin and receive REV; the VaultBook keeps the accounting. |
 | `CurrencyRegistry` | `currencyState` | `register`, `currency`, `currencies`, `setPaused` | Sponsor-signed currency listing. Verifies the live stablecoin attestation, then writes the directory. |
@@ -44,7 +47,7 @@ factory in v0.4, because the creation path is already signature- and bounds-gate
 
 | Component | State | Interface | Responsibility |
 |---|---|---|---|
-| `Governor` | `governorState` | `authorize(domain, nonce, action, argsHash, sigs)`, `admins()`, `admin(...)` | Owns the admin set, threshold and per-domain nonce. Units call `authorize` and apply the verified intent. `AdminGuard` is its pure verifier. |
+| `Governor` | `governorState` | `authorize(domain, nonce, action, argsHash, sigs)`, `schedule(domain, nonce, action, argsHash, args, sigs)`, `execute(domain, nonce)`, `pending(domain, nonce)`, `admins()`, `admin(...)` | Owns the admin set, threshold, per-domain nonce, timelock and pending actions. Immediate actions call `authorize`; parameter changes are scheduled and executed after the timelock. `AdminGuard` is its pure verifier. |
 
 `Root` is the only singleton directory. Per-instance URIs live in `StablecoinDirectory`, `OracleRegistry` and `MarketDirectory`. `Directory` and `ComponentRegistry` are deleted.
 
@@ -64,20 +67,20 @@ factory in v0.4, because the creation path is already signature- and bounds-gate
 |---|---|---|---|
 | `OracleFeed` (currency) | `feedState` | `submit`, `get`, `activate`, `info`, `admin` | Per-currency feed deployed by the sponsor and bound by `OracleRegistry`; no factory. |
 | `OracleHub` | none | `get`, `feedStatus`, `getPair`, `reporters` | Stateless router; `getPair(base, quote, maxAgeBlocks)` returns per-feed freshness and ages. Callers enforce their own age bound. |
-| `MarketFactory` | none | `createMarket(terms, values, sponsor, sig)` | Verifies the sponsor signature, the live feed policy hashes and `Bounds.checkTerms`; resolves `PoolTemplate`, binds and seals the pool URI in `MarketDirectory`, and stages `MarketIndex`. |
-| `FxPool` (market, R) | `poolState` | `pair`, `reserves`, `attest`, `quote`, `swap`, `addLiquidity`, `removeLiquidity` | Oracle-anchored pool: base/quote purses and LP kit created by `PoolTemplate`, reserves and shares in one cell, fee from `AmmMath` weight/skew. |
+| `MarketFactory` | none | `createMarket(terms, values, sponsor, sig)` | Verifies the sponsor signature and payload, the derived sponsor owner, the lock beneficiary, the live feed policy hashes and `Bounds.checkTerms`; resolves `PoolTemplate`, binds and seals the pool URI in `MarketDirectory`, and stages `MarketIndex`. |
+| `FxPool` (market, R) | `poolState` | `pair`, `reserves`, `balances`, `attest`, `quote`, `swap`, `addLiquidity`, `removeLiquidity` | Oracle-anchored pool: base/quote purses and LP kit created by `PoolTemplate`, reserves and shares in one cell, fee from `AmmMath` weight/skew. `quote`/`swap`/`addLiquidity` require an active market and call `TradabilityGate`; removal is always available. |
 | `LiquidityLock` (market, R) | `lockState` | `fund`, `release`, `cancel`, `info` | Created by `PoolTemplate` with the pool. One-shot LP custody: the funder records the beneficiary and height; only the beneficiary's `deployerId` can release after the height; cancel is governor-gated. |
 | `PoolTemplate` | none | `create` | Resolves the base/quote issuers, creates the purses and LP kit, assembles the `FxPool` and returns its URI; the factory owns the directory/index writes. |
-| `TransferBook` | `bookState` | `send` | Allocates transfer ids and creates a registered `TransferContract` per transfer. It never holds escrow; the per-transfer cell does. |
-| `TransferContract` (transfer, R) | `transferState` | `claim`, `refund`, `info` | Authoritative transfer object: payment in closure, status in one cell. Claim and refund consume the cell and re-post a terminal `claimed`/`refunded` status, so later calls reply `closed` rather than stalling. Claim requires the secret preimage; refund requires expiry and the sender's `deployerId`. |
-| `TradabilityGate` | none | `admit(status, fresh, inputValue, poolValue, terms)` | Pure policy verdict: active, fresh, min ticket, max trade; receives all inputs and never calls back into the pool. |
+| `TransferBook` | `bookState` (`bookParamsState`) | `send` | Enforces global book params, creates a registered `TransferContract` per transfer and stores memo/opId. It never holds escrow; the per-transfer cell does. |
+| `TransferContract` (transfer, R) | `transferState` | `claim`, `refund`, `info` | Authoritative transfer object: payment in closure, status and memo/opId/stipend in one cell. Claim and refund consume the cell and re-post a terminal `claimed`/`refunded` status, so later calls reply `closed` rather than stalling. Claim requires the secret preimage; refund requires expiry and the sender's `deployerId`. |
+| `TradabilityGate` | none | `admit(status, fresh, inputValue, poolValue, terms)` | Pure policy verdict: active, fresh, min ticket, max trade; called by `FxPool.quote`/`swap`/`addLiquidity` and never calls back into the pool. |
 | `AccountFactory` | `factoryState` | `getOrCreate`, `verify`, `accountOf` | One account per owner. `getOrCreate` creates the `Account`, `PurseStore` and `AccountGate`; the vault proof is created inside the account contract and never returned or passed through a message. |
-| `Account` (owner, R) | none; `PurseStore` and proof in closure | `vaultOpen`, `deposit`, `withdraw`, `balance`, `depositFacet`; transfer arms next | Owner-authenticated thin payment router. Every arm takes the caller's `deployerId`, checks it in `AccountGate`, then routes to `PurseStore`; no vault state. |
+| `Account` (owner, R) | `accountState`; `PurseStore` and proof in closure | `vaultOpen`, `deposit`, `withdraw`, `balance`, `depositFacet`, `sendTransfer`, `claimTransfer`, `refundTransfer`, `transfers` | Owner-authenticated thin payment router. Every arm takes the caller's `deployerId`, checks it in `AccountGate`, then routes to `PurseStore` or the transfer book; `accountState` holds the transfer-id counter and the opId ledger. |
 | `PurseStore` (owner, R) | `purseState` | `ensure`, `deposit`, `withdraw`, `balance`, `facet` | One ERTP purse per asset, created through `AssetResolver`; `balance` reads the purse's `getCurrentAmount`. |
 | `AccountGate` (owner, R) | none | `verify` | Derives the caller's REV address from `deployerId` and compares it with the owner; no state. |
 | `TransferClient` | none | `send`, `claim`, `refund`, `info` | Account-side transfer orchestration; resolves the book and market. |
 | `AssetResolver` | none | `issuer(assetId)`, `kind(assetId)` | `REV` resolves through ERTP; every other id resolves through `CurrencyRegistry` and the live `Stablecoin`. Resolution happens at arm entry; no registry capability is cached. |
-| `ListingViews` | none | `marketFor`, `market`, `isActive`, `terms`, `currency` | Read-only projection over the market index, terms store and currency registry; resolves each component by Root at arm entry. |
+| `ListingViews` | none | `marketFor`, `market`, `isActive`, `terms`, `currency`, `currencies`, `markets` | Read-only projection over the market index, terms store and currency registry; resolves each component by Root at arm entry. |
 
 ## 5. Atomic clusters
 

@@ -5,7 +5,7 @@ Mints a stablecoin in one block, waits, repays part of the debt in a later block
 and checks that the principal burn, the unpaid-interest ledger and the PSM debt
 balance:
 
-    totalDebt + badDebt + psmDebt == supply + totalAccruedInterest
+    totalDebt + sin + psmDebt == supply + totalAccruedInterest
 """
 
 from __future__ import annotations
@@ -45,7 +45,7 @@ def render(name: str, values: dict[str, str]) -> str:
 
 def identity(totals: dict, psm_debt: int, supply: int) -> bool:
     return (
-        totals["totalDebt"] + totals["badDebt"] + psm_debt
+        totals["totalDebt"] + totals["sin"] + psm_debt
         == supply + totals["totalAccruedInterest"]
     )
 

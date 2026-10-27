@@ -1,0 +1,30 @@
+// Mint more stablecoin from an existing vault. Returns [paymentOrRefusal].
+// Placeholders: __ROOT_URI__, __VAULT_URI__, __PUBKEY__, __MINT__.
+new
+  rl(`rho:registry:lookup`), rootCh, afCh, ac, vc, oCh, zCh, mintCh,
+  deployId(`rho:rchain:deployId`),
+  deployerId(`rho:rchain:deployerId`)
+in {
+  rl!(`__ROOT_URI__`, *rootCh) | rl!(`__VAULT_URI__`, *vc) |
+  for (Root <- rootCh; VaultBook <- vc) {
+    Root!("resolve", "component:account-factory", 1, *afCh) |
+    for (@(true, afUri, _) <- afCh) {
+      rl!(afUri, *ac) |
+      for (AccountFactory <- ac) {
+        AccountFactory!("getOrCreate", "__PUBKEY__".hexToBytes(), *oCh) |
+        for (@(true, account, ownerId) <- oCh) {
+          @account!("vaultOpen", *deployerId, `__VAULT_URI__`, *zCh) |
+          for (@z <- zCh) {
+            match z {
+              (true, auth) => {
+                VaultBook!("mint", ownerId, auth, __MINT__, *mintCh) |
+                for (@m <- mintCh) { deployId!([m]) }
+              }
+              _ => deployId!(z)
+            }
+          }
+        }
+      }
+    }
+  }
+}

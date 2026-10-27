@@ -1,0 +1,50 @@
+// Buy the stablecoin with REV at par minus the fee. Returns [stableOut, fee].
+// Placeholders: __ROOT_URI__, __PSM_URI__, __PUBKEY__, __REV_IN__, __MIN_STABLE__.
+new
+  rl(`rho:registry:lookup`), rootCh, afCh, ac, psmCh, oCh, wdCh, facetCh,
+  buyCh, ertpCh, revIssuerCh, purseCh, fundCh,
+  deployId(`rho:rchain:deployId`),
+  deployerId(`rho:rchain:deployerId`)
+in {
+  rl!(`__ROOT_URI__`, *rootCh) |
+  rl!(`__PSM_URI__`, *psmCh) |
+  rl!(`rho:rchain:ertp`, *ertpCh) |
+  for (Root <- rootCh; PSM <- psmCh; @(_, ERTP) <- ertpCh) {
+    Root!("resolve", "component:account-factory", 1, *afCh) |
+    for (@(true, afUri, _) <- afCh) {
+      rl!(afUri, *ac) |
+      for (AccountFactory <- ac) {
+        AccountFactory!("getOrCreate", "__PUBKEY__".hexToBytes(), *oCh) |
+        for (@(true, account, _) <- oCh) {
+          @account!("depositFacet", "V4T", *facetCh) |
+          for (@fr <- facetCh) {
+            match fr {
+              (true, stableFacet) => {
+                @ERTP!("getRevIssuer", *revIssuerCh) |
+                for (@(revBrand, revIssuer) <- revIssuerCh) {
+                  @revIssuer!("makeEmptyPurse", *purseCh) |
+                  for (@(true, purse) <- purseCh) {
+                    @purse!("revFund", *deployerId, __REV_IN__, *fundCh) |
+                    for (@_ <- fundCh) {
+                      @purse!("withdraw", (revBrand, __REV_IN__), *wdCh) |
+                      for (@(true, payment) <- wdCh) {
+                        PSM!("buyStable", payment, stableFacet, __MIN_STABLE__, *buyCh) |
+                        for (@b <- buyCh) {
+                          match b {
+                            (true, stableOut, fee) => deployId!([stableOut, fee])
+                            _ => deployId!(b)
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+              _ => deployId!(fr)
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -149,6 +149,18 @@ in {
     }
   } |
 
+  contract Governor(@"pending", @domain, @nonce, ret) = {
+    for (@s <<- governorState) {
+      match s.get("pending").get(domain ++ "|" ++ nonce.toString()) {
+        Nil => { ret!((false, "unknown")) }
+        entry => {
+          ret!((true, entry.get("action"), entry.get("argsHash"),
+                entry.get("args"), entry.get("readyAt")))
+        }
+      }
+    }
+  } |
+
   contract Governor(@"admins", ret) = {
     for (@s <<- governorState) {
       ret!((true, s.get("admins"), s.get("threshold")))

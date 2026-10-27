@@ -1,14 +1,15 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Unlock from "../components/Unlock";
 import { useWallet } from "../lib/store";
 import { formatUnits } from "../lib/format";
-import { DEFAULT_ASSETS } from "../lib/types";
+import type { V4Currency } from "../lib/types";
 
 export default function Accounts() {
   const { status, client, address } = useWallet();
   const queryClient = useQueryClient();
-  const [assetsInput, setAssetsInput] = useState(DEFAULT_ASSETS);
+  const [assetsInput, setAssetsInput] = useState("REV");
+  const [assetsLoaded, setAssetsLoaded] = useState(false);
   const [fundAmount, setFundAmount] = useState("0.05");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -18,6 +19,20 @@ export default function Accounts() {
     .split(",")
     .map((asset) => asset.trim())
     .filter(Boolean);
+
+  const currencies = useQuery({
+    queryKey: ["v4-currencies"],
+    enabled: status === "unlocked" && !!client,
+    queryFn: async () => JSON.parse(await client!.v4_currencies()) as V4Currency[],
+  });
+
+  useEffect(() => {
+    if (!assetsLoaded && currencies.data) {
+      const codes = currencies.data.map((currency) => currency.code);
+      setAssetsInput(["REV", ...codes].join(","));
+      setAssetsLoaded(true);
+    }
+  }, [assetsLoaded, currencies.data]);
 
   // A signed balance read costs phlo, so a brand-new account with no REV cannot run one.
   // Read the native balance first (free), then enable the Account reads.

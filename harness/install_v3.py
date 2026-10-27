@@ -227,7 +227,7 @@ def main(argv: list[str] | None = None) -> int:
     save(state)
 
     transfer = step("40_transfer", "transfer", {
-        **common, "__BOOK_PARAMS__": '{"minAmount": 1, "defaultExpiryBlocks": 720, "maxExpiryBlocks": 1296000}'}, STEP_KEYS["transfer"])
+        **common, "__BOOK_PARAMS__": '{"minAmount": 1, "defaultExpiryBlocks": 720, "maxExpiryBlocks": 1296000, "maxMemoBytes": 128, "maxOpIdBytes": 64, "maxStipend": 100000000}'}, STEP_KEYS["transfer"])
     state["transfer_book_uri"] = transfer["uris"][0]
     save(state)
 
@@ -241,6 +241,7 @@ def main(argv: list[str] | None = None) -> int:
     market = step("50_market", "market", {
         "__ROOT_URI__": root_uri,
         "__ASSET_RESOLVER_URI__": resolver["uris"][0],
+        "__MIN_LOCK_BLOCKS__": "10",
     }, STEP_KEYS["market"])
     state["market_terms_uri"] = market["uris"][0]
     state["market_directory_uri"] = market["uris"][1]

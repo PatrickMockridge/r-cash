@@ -1,515 +1,865 @@
-# R-Cash — Formal Specification (v0.1 legacy)
+# SPEC — r-cash product specification
 
-> Legacy v0.1 document. The CDP/CurrencyZone sections are deleted in v0.4; the current
-> payment-first core specification is in [`spec/`](spec/README.md).
-
-**Status:** devnet prototype; normative for v0.1. **Intent:** [`INTENT.md`](INTENT.md).
-**Platform:** rholo at commit `e2d073dcd02f1e560ccb84749937138a1e184b0b`; the Rholang
-Mercury interpreter documented in [`PLATFORM.md`](PLATFORM.md). The key words MUST, MUST NOT,
-SHOULD, SHOULD NOT and MAY are used as in RFC 2119.
-
-This document specifies the **implemented** v0.1 protocol. Planned components appear only in §15 and
-are non-normative.
-
----
-
-## 1. Scope and conformance
-
-R-Cash v0.1 is a single-corridor payments core: the NGN↔KES corridor, with rNGN and rKES issued by
-stablecoin issuers. A conforming implementation MUST provide the contracts, states,
-operations, invariants and initialization sequence in §§4–13, under the platform constraints in §14.
-
-The reference implementation is the Rholang in `contracts/src/` and the harness in `harness/`.
-Conformance evidence is listed in §14.4.
-
----
-
-## 2. Terms and notation
-
-| Term | Meaning |
+| | |
 |---|---|
-| Deploy | One signed Rholang term executed as one transaction; a reducer error reverts all of its tuple-space and native ERTP/REV writes |
-| Block height | Consensus height from `rho:block:data`; the only clock used for staleness and interest |
-| Asset | `REV`, `NGN`, `KES`, or `LP:NGN/KES:fpmm` |
-| Base unit | `1 whole unit = 100,000,000` (1e8) for every asset; REV's native unit is the drop |
-| USD price `P_X` | USD per one whole unit of X × 1e8; e.g. NGN at 1,500/USD is `66,666` |
-| Corridor rate `R` | Quote base-units per base base-unit × 1e8; `R = P_base * 1e8 / P_quote` |
-| Basis point (bps) | 1/10,000; 10,000 bps = 100% |
-| `deployerId` | The deploy's unforgeable signer capability (`rho:rchain:deployerId`); also a bearer capability over that key's native REV |
-| `ownerId` | REV address derived from the owner public key; a public account identifier |
-| `accountProof` | Unforgeable per-account capability minted by AccountFactory; never returned by `getOrCreate` |
-| Claim secret | A caller-chosen byte string, recommended 32 random bytes |
-| `claimHash` | `blake2b256(secret)` |
-| Deploy height | The block height of the deploy that executes an operation |
+| Version | 0.5 |
+| Status | Normative. Supersedes the v0.1 text previously in this file. |
+| Date | 2026-10-27 |
+| Conformance language | RFC 2119: MUST, MUST NOT, SHOULD, MAY |
+| Formal core | `docs/spec/00-CALCULUS.md`, `10-COMPONENTS.md`, `20-INVARIANTS.md`, `30-WIRING.md` |
 
----
+This document is the product specification for the whole application: contracts, clients,
+web UI and operations. `docs/spec/00-30` remain normative for the component calculus,
+invariants and install order; this document wins for product behaviour and client
+requirements. A statement here that contradicts `00-30` is a defect in one of them and
+MUST be resolved before implementation.
+
+The non-normative design note `docs/SAVINGS-AND-PSM.md` is historical; where it differs,
+this specification and `20-INVARIANTS.md` govern.
+
+## 1. Document control
+
+### 1.1 Requirement IDs and acceptance
+
+Every requirement has an identifier `SPEC-<AREA>-NN`, a conformance level, an owner and a
+status. Every acceptance criterion is written as a state transition or a command:
+
+```
+AC-SPEC-<AREA>-NN.k
+Given <initial state>
+When <actor action>
+Then <exact reply or exact state delta>
+```
+
+Refusal strings are part of the interface. A test asserts the exact string. A requirement
+is conformant only when every acceptance criterion passes in the final campaign.
+
+Status values:
+
+| Status | Meaning |
+|---|---|
+| `implemented` | Code exists and exhibits the behaviour; final-campaign evidence pending. |
+| `planned` | Specified but not implemented, or implemented but not wired. |
+| `blocked` | Cannot be completed without an upstream change; the blocker is named. |
+| `excluded` | Out of scope, listed in §19. |
+
+### 1.2 Areas
+
+`GEN` general, `MOD` system model, `ID` identity, `PAY` payments, `ORA` oracle,
+`ISS` issuance, `LIQ` liquidation, `BUF` surplus buffer, `SAV` savings, `PSM` peg,
+`MKT` market lifecycle, `POOL` AMM and LP, `GOV` governance, `REG` registries,
+`CLI` clients, `WEB` web UI, `OPS` operations, `INV` invariants, `EXC` exclusions.
+
+## 2. Scope, actors and units
+
+**Scope.** Non-custodial multi-currency accounts on rholo; claimable asset transfers;
+per-currency REV-collateralised stablecoins with vaults, liquidation, a surplus buffer,
+savings and a peg-stability module; AMM FX markets with locked LP seeds; a Rust
+SDK/CLI/WASM and a React web client. No native code, no fiat custody, no consensus or node
+changes.
+
+**Actors.** User (account owner), recipient (claim holder), saver, vault owner, liquidator,
+market maker, LP, sponsor (currency/feed/market signer), governor (2-of-3 admins),
+installer, keeper (any caller of permissionless arms).
+
+**Units.** All amounts are integer base units with 8 decimals: `100_000_000 = 1.0`.
+Rates are quote-per-base in the same 8-decimal scale. Basis points are `1/10000`.
+Heights are block heights. `ownerId` is the REV address derived from the owner's public
+key. A payment is an ERTP holding; a purse is an ERTP name.
+
+| ID | Level | Requirement | Owner | Status |
+|---|---|---|---|---|
+| SPEC-GEN-01 | MUST | The product consists of the components and surfaces specified here; a surface not specified is not part of the product. | whole app | implemented |
+| SPEC-GEN-02 | MUST | Every refusal returns an exact reason string from the normative list in §18.3; tests assert exact equality. | contracts | implemented |
+| SPEC-GEN-03 | MUST | Documentation, manifests and Makefile targets describe the shipped behaviour only; a stale claim is a defect. | docs/ops | implemented |
+| SPEC-GEN-04 | MUST | The final conformance report is keyed by requirement ID with PASS/FAIL/BLOCKED/SKIPPED; BLOCKED is never reported as conformance. | ops | planned |
 
 ## 3. System model and authority
 
-### 3.1 Ledger and atomicity
+### 3.1 Deploy semantics
 
-State lives in the RSpace tuple space and the native ERTP/REV stores. A deploy is atomic: if its
-execution produces a reducer error, all tuple-space and native changes are reverted (verified,
-`docs/PLATFORM.md`). A deploy that ends with an unmatched receive is **not** an error; it is a
-successful deploy with a pending continuation. Contracts therefore follow:
+A deploy is atomic. A failed deploy rolls back tuple space and native REV/ERTP state. An
+arm replies exactly once. A refusal that still holds custody of a payment MUST return it
+in the refusal tuple. Once value has moved (burn, ERTP withdraw, native transfer), a later
+refusal MUST fail the deploy (`1/0`) rather than reply `false`, so the value movement rolls
+back (invariant I15).
 
-- **Reply rule.** Every arm replies exactly once with `(true, value)` or `(false, reason)`.
-- **Responder rule.** While a contract holds a consumed state cell, it MUST await only native system
-  channels or contracts specified to reply exactly once. It MUST NOT await a caller-supplied
-  channel.
-- **Validation-before-write.** Checks precede value movement; any unexpected refusal is a hard
-  failure (`fail()` = a send forcing `1 / 0`) so the deploy reverts.
+State is held in one cell per component. Every mutating arm follows:
+peek → validate → effect → commit. A cell that a nested call in the same deploy can write
+is re-read and its `rev` checked before the commit; a mismatch fails the deploy. A cell
+only the arm itself writes is re-read at commit time. No cell is held consumed across an
+await on a caller-supplied name.
 
-### 3.2 Capabilities and authority
+Capabilities (`mintAuth`, `burnAuth`, `custodyAuth`, `liquidationAuth`, `settlementAuth`,
+`psmMintAuth`, `psmBurnAuth`, `bufferDepositAuth`, `bufferPayAuth`, `bufferCoverAuth`,
+`savingsNotifyAuth`, `directoryAuth`, `marketAuth`) live only in closure. They MUST NOT
+appear in a reply, a stored map, a bundle or an attestation. Caller-supplied deposit facets
+and payments are sinks, not authority (capability-provenance exception, §3.3).
 
-Authority is possession of an unforgeable name, a claim secret, or a valid signature. There are no
-allowances and no global balance table.
+### 3.2 Replies and attestations
 
-| Authority | Held by | Used for |
-|---|---|---|
-| `deployerId` | The deploying key's deploy | Account owner authentication only |
-| `ownerId` (public) | Everyone | Identifying Accounts; never authority |
-| `accountProof` | The Account contract | Authorising book send/refund |
-| Claim secret | Sender and intended recipient/ramp | Claiming an escrowed transfer |
-| `bootstrapCap`/unlocked state | The protocol deployer, during installation | Directory registration, Components naming |
-| Reporter public key | Allowlisted reporter | Oracle submission |
-| Admin public keys | 2-of-3 admins | Oracle/zone/pool parameter changes |
-
-**DeployerId containment (normative).** The Account is the only application contract that receives a
-`deployerId`. It makes exactly one read-only call, `deployerId:ops!("pubKeyBytes", *deployerId, ret)`,
-compares the result with the stored owner public key, and MUST NOT store, emit, log or use the
-`deployerId` for value movement. Other contracts receive `accountProof`, claim secrets
-or signatures instead.
-
-### 3.3 Trust assumptions (A1–A10)
-
-- **A1** The three oracle reporters are honest enough that at least two report within tolerance, or
-  the feed reports not fresh.
-- **A2** Local ramp partners are trusted to pay fiat after redeeming a claim; v0.1 does not use a live
-  ramp.
-- **A3** Admin keys are held by distinct parties and 2-of-3 is not colluded.
-- **A4** The protocol deployer performs the bootstrap and installation sequence without an
-  adversarial interleaving.
-- **A5** Claim secrets are generated with sufficient entropy and shared only with the intended
-  claimant/ramp.
-- **A6** REV has a market price that the oracle committee can report; the chain's native vault and
-  ERTP ledger are sound.
-- **A7** The rholo node is not Byzantine beyond its pre-testnet assumptions; v0.1 is devnet-only.
-- **A8** Users understand that the stablecoin is a market instrument, not a bank deposit.
-- **A9** A deployer key is not shared; a leaked `deployerId` is a REV-spending capability.
-- **A10** Off-chain systems (ramps, wallets, KYC) are outside this specification.
-
----
-
-## 4. Component topology and initialization
-
-### 4.1 Components
-
-| Component | Cardinality | Where its live channel lives |
-|---|---|---|
-| Directory | one | registry URI in the deployment manifest; URI also published on `@"rcash:directory"` |
-| ComponentRegistry ("Components") | one | registry URI |
-| AccountFactory | one | Directory key `component:accounts` |
-| Account | one per ownerId | AccountFactory state |
-| OracleHub | one | Directory key `component:oracle` |
-| FxPool | one per corridor | Components key `pool:NGN/KES:fpmm` |
-| TransferBook | one per corridor | Components key `transfer:NGN/KES` |
-
-Large contracts (FxPool, TransferBook) are **not** wrapped in a registry bundle in v0.1 because the
-node's bundle free-variable check rejects their nested captures. Their live channels are held in
-ComponentRegistry; Components is a simple contract and is installed normally.
-
-### 4.2 Directory entries
-
-```
-names:
-  component:accounts       -> URI(AccountFactory)
-  component:oracle         -> URI(OracleHub)
-  component:pools          -> URI(ComponentRegistry)
-assets:
-  REV                    {kind:"rev",    controllerKey:"system:ertp",          decimals:8}
-  NGN                    {kind:"stable", controllerKey:"component:zone:NGN",    decimals:8}
-  KES                    {kind:"stable", controllerKey:"component:zone:KES",    decimals:8}
-  LP:NGN/KES:fpmm        {kind:"lp",     controllerKey:"pool:NGN/KES:fpmm",     decimals:8}
-```
-
-### 4.3 Initialization sequence (normative)
-
-   rKES, ComponentRegistry. Seed reporters/admins/params. Register the Directory names/assets above.
-   Lock the Directory. Publish the Directory URI on `@"rcash:directory"`.
-2. **Pool setup** (one deploy): create the rNGN/rKES ERTP purses and the LP kit/burn purse; store
-   `baseBrand`, `baseIssuer`, `basePurse`, `quoteBrand`, `quoteIssuer`, `quotePurse`, `lpBrand`,
-   `lpMint`, `lpIssuer`, `lpBurnFacet` in Components.
-3. **Pool deploy** (one deploy): create the FxPool with the live purses/kit; store
-   `pool:NGN/KES:fpmm` in Components.
-4. **Book deploy** (one deploy): create the TransferBook with the pool, escrow purses and zone
-   issuers; store `transfer:NGN/KES` in Components; **lock Components**.
-5. The deployment manifest records the Directory, AccountFactory, OracleHub, zone and Components
-   URIs and installation markers.
-
-The Components registry is unlocked from step 1 until the end of step 4. A conforming production
-deployment MUST make this installation window atomic or use signed/URI-bound registration; in v0.1
-it is a trusted deployer sequence (A4). The Directory is locked at the end of step 1 and has no
-working admin arm in v0.1; adding a currency or component requires a new bootstrap/deployment.
-
----
-
-## 5. Common conventions
-
-### 5.1 Reply shapes
-
-| Shape | Meaning |
+| Arm class | Reply |
 |---|---|
-| `(true, value)` | Success |
-| `(false, reason)` | Business refusal; no value moved |
-| `fail()` | Reducer error; deploy and all its writes revert |
+| Read | `(true, value)` or `(false, reason)` |
+| Value-moving write | `(true, …)` with the receipt; refusal `(false, reason[, payment])` |
+| Attestation | `(true, {template, currency, …immutable identity})` |
 
-Reason strings are stable for tests: e.g. `"not owner"`, `"unknown asset"`,
-`"stale oracle"`, `"bad secret"`, `"expired"`, `"not open"`, `"above close factor"`, `"locked"`,
-`"replay"`, `"signatures"`.
+`attest` never returns a capability or a live key.
 
-### 5.2 Units and rounding
+### 3.3 Requirements
 
-- All asset amounts are integers in base units (1e8/whole unit), fitting `NonNegI64` for ERTP.
-- Prices are integers (`P_X`) at 1e8 per whole unit.
-- Intermediate arithmetic MAY promote to `BigInt`; any value that must be an ERTP amount is
-  converted with `.toInt()`, which fails closed if it does not fit. There is no silent truncation.
-- Outputs of swaps, LP shares and redemptions round **down**; debts, interest, fees and charged
-  amounts round **up**.
-- Division is integer division; operands are non-negative in every formula in this specification.
-
-### 5.3 Canonical signed payloads
-
-Oracle update:
-```
-"rcash:oracle:v1|" ++ shard ++ "|" ++ currency ++ "|" ++ price.toString() ++ "|" ++ height.toString()
-shard = "/root"
-digest = blake2b256(payload UTF-8 bytes)          // exactly 32 bytes
-signature = DER secp256k1 over digest
-```
-Admin action:
-```
-"rcash:admin:v1|" ++ component ++ "|" ++ nonce.toString() ++ "|" ++ action ++ "|" ++ args.join(",")
-```
-`args` are strings or integers; strings MUST NOT contain `,` or `|`. `component` is `"oracle"`,
-`"zone:NGN"`, `"zone:KES"` or `"pool:NGN/KES:fpmm"`. M distinct admin signatures over the digest are
-required; the nonce MUST exceed the stored `govNonce`.
-
----
-
-## 6. Directory
-
-**State:** `{names: Map<String, String>, assets: Map<String, {kind, controllerKey, decimals}>, locked: Bool, admins: List, threshold: Int, govNonce: Int}`.
-
-| Arm | Args | Auth | Pre | Post / reply |
+| ID | Level | Requirement | Owner | Status |
 |---|---|---|---|---|
-| `get` | `name` | none | — | `(true, uri)` or `(false, "unknown")` |
-| `asset` | `assetId` | none | — | `(true, {kind, controllerKey, decimals})` or `(false, "unknown asset")` |
-| `names` | — | none | — | `(true, names)` |
-| `register` | `name, uri` | unlocked | `locked == false` | adds/updates `names`; `(true, Nil)` or `(false,"locked")` |
-| `registerAsset` | `assetId, kind, controllerKey, decimals` | unlocked | `locked == false` | adds/updates `assets`; `(true, Nil)` |
-| `lock` | — | none | — | sets `locked = true`; `(true, Nil)` |
-| `admin` | `nonce, action, args, sigs` | — | — | v0.1 returns `(false, "admin actions are phase 2")` |
+| SPEC-MOD-01 | MUST | Every deploy is atomic; a failure rolls back tuple space, REV and ERTP (AC: a failing arm after a burn leaves supply unchanged). | all | implemented |
+| SPEC-MOD-02 | MUST | Every arm replies exactly once; no arm leaves a caller waiting. | all | implemented |
+| SPEC-MOD-03 | MUST | A refusal before any value movement returns the payment; after value movement the arm fails `1/0`. | all value arms | implemented |
+| SPEC-MOD-04 | MUST | State commits revalidate the consumed cell's `rev`; a mismatch fails the deploy. | all stateful | implemented |
+| SPEC-MOD-05 | MUST | Capabilities are closure-held and never returned or stored. `check_captures` passes. | all | implemented |
+| SPEC-MOD-06 | MUST | Caller-supplied facets are sinks: they may receive value, never authority. | Account, TransferContract, FxPool, PSM | implemented |
+| SPEC-MOD-07 | MUST | Unmatched receives are silent in Rholang; every call path either replies or is documented as fire-and-forget. | all | implemented |
+| SPEC-MOD-08 | MUST | An attestation identifies template and currency and reveals no secret. | all attest arms | implemented |
 
-**Invariants.** `locked` is monotone (false → true). After the bootstrap, no `register`/`registerAsset`
-succeeds. `get`/`asset` only read.
+## 4. Identity, accounts and purses
 
----
+`AccountFactory.getOrCreate(pubKeyBytes)` derives `ownerId = revAddress(pubKey)` and returns
+`(true, account, ownerId)`. It is idempotent: a second call returns the same account. The
+factory creates one `Account`, one `PurseStore` and one `AccountGate` per owner. The vault
+proof is created inside the account contract and never returned.
 
-## 7. ComponentRegistry
+`AccountGate.verify(dId)` derives the caller's REV address and compares it to `ownerId`;
+only the owner passes owner arms. `Account.depositFacet` is deliberately public and can
+only receive.
 
-**State:** `{locked: Bool, <key>: value | channel, ...}`.
+`PurseStore.ensure(assetId)` resolves the issuer through `AssetResolver` and creates one
+purse per asset. `deposit` measures nothing (the purse's ERTP deposit validates the
+payment); `withdraw` refuses a non-positive amount; `balance` reads the purse.
 
-| Arm | Args | Auth | Pre | Post / reply |
+`vaultOpen(dId, vaultUri)` opens (or returns) this owner's vault in the named
+`VaultBook` and returns the one-shot vault capability.
+
+| ID | Level | Requirement | Owner | Status |
 |---|---|---|---|---|
-| `set` | `key, cap` | unlocked | `locked == false` | stores the channel; `(true, Nil)` |
-| `setValue` | `key, value` | unlocked | `locked == false` | stores a value; `(true, Nil)` |
-| `lock` | — | none | — | sets `locked = true`; `(true, Nil)` |
-| `get` | `key` | none | — | `(true, value)` or `(false, "unknown component")` |
-| `has` | `key` | none | — | `(true, Bool)` |
+| SPEC-ID-01 | MUST | One account per owner; `getOrCreate` is idempotent and returns the same account and ownerId. | AccountFactory | implemented |
+| SPEC-ID-02 | MUST | Owner arms require the caller's `deployerId` to derive `ownerId`; others refuse `"not owner"`. | AccountGate | implemented |
+| SPEC-ID-03 | MUST | The vault proof is never returned after creation and authorises only that owner's vault. | Account, VaultBook | implemented |
+| SPEC-ID-04 | MUST | A purse exists per asset at first use via `AssetResolver`; an unknown asset refuses `"unknown asset"`. | PurseStore, AssetResolver | implemented |
+| SPEC-ID-05 | MUST | `depositFacet` can only receive; it cannot withdraw or act as the owner. | Account | implemented |
+| SPEC-ID-06 | MUST | `deposit`/`withdraw`/`balance` use the caller's own purse only; a foreign deployer is refused. | Account, PurseStore | implemented |
+| SPEC-ID-07 | MUST | REV is resolved through the native ERTP issuer, every other asset through `CurrencyRegistry` → live `Stablecoin`. | AssetResolver | implemented |
+| SPEC-ID-08 | MUST | Account state is `{nextTransferId, ops, rev}`; every mutation revalidates `rev`. | Account | implemented |
+| SPEC-ID-09 | MUST | `Account.transfers` returns the owner's op map for history. | Account | implemented |
+| SPEC-ID-10 | MUST | Account creation and purse creation are paid by the creator; no protocol subsidy. | Account | implemented |
 
-**Invariants.** `locked` is monotone. After the book deploy locks it, no `set`/`setValue` succeeds.
-The registry holds `pool:NGN/KES:fpmm` and `transfer:NGN/KES` in v0.1, plus pool setup values.
+## 5. Payments
 
----
+### 5.1 Send
 
-## 8. AccountFactory and Account
+`Account.sendTransfer(dId, assetId, recipientPub, amount, secretHash, expiry, memo, opId,
+stipend, ret)` is owner-authenticated. It reserves `opId`, withdraws `amount` of `assetId`
+into a payment, calls `TransferBook.send`, and optionally sends `stipend` native REV to the
+recipient's REV address.
 
-### 8.1 AccountFactory
+`TransferBook.send(senderId, id, recipientFacet, refundFacet, assetId, amount, payment,
+secretHash, expiry, memo, opId, ret)`:
 
-**State:** `Map<ownerId, {account: bundle, proof: name}>`.
+1. reads `bookParamsState`;
+2. refuses `amount <= 0` or `amount < minAmount` with `"amount"`;
+3. refuses `expiry <= now` or `expiry > now + maxExpiryBlocks` with `"expiry"`;
+4. refuses a memo longer than `maxMemoBytes` with `"memo"`, an opId longer than
+   `maxOpIdBytes` with `"opId"`, and a stipend above `maxStipend` with `"stipend"`;
+5. measures the payment through `AssetResolver.issuer.getAmountOf` and refuses
+   `actual != amount` with `"amount mismatch"`, returning the payment;
+6. creates the per-transfer `TransferContract` holding the payment, stores `memo` and
+   `opId`, registers it, and replies `(true, id, uri)`.
 
-| Arm | Args | Auth | Pre | Post / reply |
+`opId` is unique per owner. An empty `opId` disables idempotency. A replay after a
+completed send returns the stored `(id, uri)` without moving funds. A replay while a send
+is in flight returns `(false, "pending", id)`. A refused send removes the reservation.
+
+The stipend is optional native REV, default 0, non-refundable if unclaimed. It is sent
+from the sender's deployer vault to the recipient's REV address in the same deploy so the
+recipient can pay claim phlo. ERTP REV in an account purse cannot pay phlo and is not a
+substitute.
+
+### 5.2 Claim and refund
+
+`TransferContract.claim(secret)` refuses `"expired"` when `now >= expiry`, refuses
+`"bad secret"` when `claimHash(secret) != secretHash`, deposits the payment into the
+recipient facet, and re-posts `{"status": "claimed"}`. `refund(dId)` refuses `"not
+expired"` before expiry, refuses `"not sender"` unless the caller's REV address equals
+`senderId`, deposits to the refund facet, and re-posts `{"status": "refunded"}`. A
+terminal transfer refuses `"closed"`. Claim and refund race on one cell; exactly one wins.
+
+`info` returns `{sender, asset, amount, secretHash, expiry, status, id, memo, opId,
+stipend}`. The claim secret is never stored on chain.
+
+| ID | Level | Requirement | Owner | Status |
 |---|---|---|---|---|
-| `getOrCreate` | `pubKeyBytes` | none | — | derives `ownerId = rho:rev:address("fromPublicKey", pubKey)`; creates an Account if absent; `(true, accountCap, ownerId)`. The proof is never returned |
-| `verify` | `ownerId, proof` | — | — | `(true, Bool)` — equality of the presented proof and the stored proof |
-| `accountOf` | `ownerId` | none | — | `(true, accountCap)` or `(false, "no account")` |
+| SPEC-PAY-01 | MUST | Send measures the payment and refuses a declared/actual mismatch with `"amount mismatch"`, returning the payment. | TransferBook | implemented |
+| SPEC-PAY-02 | MUST | Minimum amount, minimum expiry lead and maximum expiry are enforced from book params. | TransferBook, Bounds | implemented |
+| SPEC-PAY-03 | MUST | Memo, opId and stipend bounds are enforced; refusals are `"memo"`, `"opId"`, `"stipend"`. | TransferBook, Bounds | implemented |
+| SPEC-PAY-04 | MUST | A completed opId replay returns the same `(id, uri)` and moves no funds; a pending replay returns `(false, "pending", id)`. | Account | implemented |
+| SPEC-PAY-05 | MUST | A refused send leaves no reservation. | Account | implemented |
+| SPEC-PAY-06 | MUST | The stipend is a direct native REV transfer to the recipient's REV address, capped, non-refundable, default 0. | Account | implemented |
+| SPEC-PAY-07 | MUST | Claim requires the secret preimage and an unexpired transfer; expiry is checked before the secret. | TransferContract | implemented |
+| SPEC-PAY-08 | MUST | Refund requires expiry and the sender; a third party is refused `"not sender"`. | TransferContract | implemented |
+| SPEC-PAY-09 | MUST | Claim and refund are mutually exclusive; the loser refuses `"closed"`. | TransferContract | implemented |
+| SPEC-PAY-10 | MUST | `info` exposes memo, opId and stipend without exposing the secret. | TransferContract | implemented |
+| SPEC-PAY-11 | MUST | Account history returns the owner's transfers; the web journal is the client-side copy. | Account, web | implemented |
+| SPEC-PAY-12 | MUST | Book params are `{defaultExpiryBlocks, maxExpiryBlocks, minAmount, maxMemoBytes, maxOpIdBytes, maxStipend}` under `rcash:book-params:v4`. | 40_transfer, Bounds | implemented |
 
-Anyone MAY create an empty Account for a public key; only the key's deployer can use it because the
-Account compares the caller's public key. The `proof` is passed only into the Account at creation.
+## 6. Oracle and feeds
 
-### 8.2 Account state
+### 6.1 Feed policy
 
-```
-ownerPubKey : ByteArray            // the owner's 65-byte uncompressed public key
-ownerId     : String               // REV address
-proof       : name                 // accountProof
-purseState  : Map<assetId, {purse: name, brand: value}>
-directory   : channel              // Directory
-```
+`rcash:oracle-policy:v3` is `currency, k0, k1, k2, sponsor, quorum, maxAgeBlocks,
+maxSpreadBps, minPrice, maxPrice, trialBlocks, trialMinSubmits`. `Bounds.checkFeed`
+enforces three distinct reporter keys, sponsor in at most one slot, `quorum` in 1..3,
+`trialMinSubmits >= quorum`, and the age/spread/band ranges.
 
-**Authentication.** Every owner operation takes `*deployerId`, reads its public-key bytes through
-`rho:rchain:deployerId:ops`, and compares with `ownerPubKey`. Mismatch → `(false, "not owner")`.
-The `deployerId` is never stored, emitted or used for value movement.
+Each reporter submits `(index, price, height, pubKey, sig)`. The signature is over
+`rcash:oracle-submit:v3|feedId|currency|index|price|height`; the slot pubkey must match;
+height must be monotonic and no more than 1000 blocks stale. `activate` requires the trial
+length, minimum submissions, a quorum of reporter slots and a fresh median. `get` refuses
+while paused, before activation and when the median is not fresh, with `"paused feed"`,
+`"trial"`, `"stale feed"`, `"quorum"`, `"spread"` or `"band"`.
 
-### 8.3 Account operations
+`OracleHub.getPair(base, quote, maxAgeBlocks)` returns
+`(true, {rate, fresh, basePrice, quotePrice, baseAge, quoteAge})`; `rate =
+floor(basePrice * 1e8 / quotePrice)`. `fresh` requires both feeds fresh and both ages
+within the caller's bound. Callers enforce their own bound.
 
-| Arm | Args | Auth | Semantics |
-|---|---|---|---|
-| `deposit` | `assetId, payment` | payment is authority | creates the purse lazily via the Directory controller; deposits; `(true, balance)` |
-| `depositFacet` | `assetId` | none | lazily creates the purse; `(true, depositFacet)` |
-| `withdraw` | `*deployerId, assetId, amount` | owner | `(true, payment)` or `(false, "no purse")` |
-| `balance` | `*deployerId, assetId` | owner | `(true, Int)` |
-| `repay` | `*deployerId, currency, amount` | owner | withdraws stablecoin; `zone.repay` |
-| `sendTransfer` | `*deployerId, sourceAsset, destAsset, sourceAmount, minDest, claimHash, expiry` | owner | withdraws source; `book.send(..., ownerId, proof)` |
-| `claimTransfer` | `transferId, destAsset, secret` | claim secret | `book.claim`; deposits the returned payment into the Account; `(true, amount)` |
-| `refundTransfer` | `*deployerId, transferId, destAsset` | owner | `book.refund(..., ownerId, proof)`; deposits the returned payment |
+`OracleRegistry.registerFeed` requires the sponsor as deployer, the sponsor signature over
+`rcash:feed-bind:v3|code|feedId|feedUri|policyHash|sponsorHex`, and a live `feed.info`
+attestation matching the policy. One feed per currency; the registry is governor-gated for
+reporter allowlist changes.
 
-There is **no `convert` arm** in v0.1; conversion is a client/deploy composition:
-`withdraw(source) → pool.swap → deposit(dest)`, atomic in one deploy.
+| ID | Level | Requirement | Owner | Status |
+|---|---|---|---|---|
+| SPEC-ORA-01 | MUST | Exactly three distinct reporters; the sponsor occupies at most one slot; one feed per currency. | OracleRegistry, Bounds | implemented |
+| SPEC-ORA-02 | MUST | Submissions are signed over the exact v3 preimage, slot-bound, monotone in height and stale-limited. | OracleFeed | implemented |
+| SPEC-ORA-03 | MUST | Activation requires the trial length, minimum submissions, quorum and a fresh median. | OracleFeed | implemented |
+| SPEC-ORA-04 | MUST | `get` refuses paused, trial and stale states with the exact strings. | OracleFeed | implemented |
+| SPEC-ORA-05 | MUST | `getPair` computes the cross rate and per-feed ages; callers pass and enforce their own max age. | OracleHub | implemented |
+| SPEC-ORA-06 | MUST | Feed binding requires the sponsor signature and the live attestation; a bad signature refuses `"bad sponsor signature"`. | OracleRegistry | implemented |
+| SPEC-ORA-07 | MUST | A stale or missing rate refuses mint, withdraw, liquidate, PSM buy/sell and pool quote/swap/add; repay and exits continue. | consumers | implemented |
+| SPEC-ORA-08 | MUST | Policy hash is `H(rcash:oracle-policy:v3, values)` in the length-prefixed encoding. | Codec, clients | implemented |
+| SPEC-ORA-09 | MUST | Governor suspension (`setPaused`) and trial restart are immediate and domain-scoped. | OracleFeed, Governor | implemented |
+| SPEC-ORA-10 | MUST | The web and clients display the feed status and ages; no client invents a price. | clients | implemented |
 
-**Asset resolution.** `REV` uses the ERTP `getRevIssuer`; `NGN`/`KES` resolve the zone through the
-Directory and call `issuer`/`brand`; `LP:NGN/KES:fpmm` resolves Components → pool and calls
-`lpAsset`. Unknown assets are refused.
+## 7. Stablecoin issuance
 
-**Invariants.**
-- AC1: A purse is only spent by an owner-authenticated operation, except `claimTransfer`, which is
-  authorised by the claim secret and deposits into the Account itself.
-- AC2: The `proof` is never emitted to the caller or stored outside the Account and
-  the trusted contract that issued them.
-- AC3: An Account never holds a consumed state cell across a caller-supplied await; purse creation
-  happens before any state consume.
+### 7.1 System creation and listing
 
----
+One system per currency code. `31_stablecoin.rho` is deployed by the installer and
+validates a sponsor signature over `rcash:stablecoin-create:v1|currency|paramsHash|sponsor`,
+`Bounds.checkIssuer`, and `Codec.hash` of the signed params.
 
-## 9. OracleHub
-
-**State:** `{reporters: [ByteArray × 3], prices: Map<currency, Map<index, {price, height}>>, params: {quorum, maxAgeBlocks, maxSpreadBps, minPrice, maxPrice}, admins: [ByteArray], threshold: Int, govNonce: Int}`.
-
-| Arm | Args | Auth | Semantics |
-|---|---|---|---|
-| `submit` | `currency, price, height, index, pubKey, sig` | reporter signature | index ∈ {0,1,2}; `pubKey == reporters.nth(index)`; payload per §5.3; `height <= now`, `now-height <= 1000`, `height > stored`; stores; `(true, Nil)` or `(false, reason)` |
-| `get` | `currency` | none | median of the three latest prices; `fresh` per §9.1; `(true, {price, height, fresh, reason})` |
-| `getPair` | `base, quote` | none | `rate = P_base * 1e8 / P_quote`; `(true, {rate, fresh, reason})`; fresh requires both feeds fresh |
-| `reporters` | — | none | `(true, [pubKeyHex])` |
-| `admin` | `nonce, action, args, sigs` | 2-of-3 | `setParams [quorum, maxAgeBlocks, maxSpreadBps, minPrice, maxPrice]`; `setReporters [hex, hex, hex]`; nonce/replay checks |
-
-### 9.1 Freshness decision
-
-With the three latest prices `p0,p1,p2` and heights `h0,h1,h2`:
-
-- **fresh count** = number of reporters with `0 < h_i <= now`, `now-h_i <= maxAgeBlocks`, and
-  `minPrice <= p_i <= maxPrice`.
-- **median** = the middle of `p0,p1,p2` by pairwise comparison (odd reporter set).
-- **spread** = `max(p0,p1,p2) - min(p0,p1,p2)`.
-- `fresh` iff `fresh count >= quorum` AND `median > 0` AND
-  `minPrice <= median <= maxPrice` AND `spread * 10000 <= median * maxSpreadBps`.
-- The v0.1 spread is computed over all three prices (not only the fresh subset); a stale outlier can
-  therefore make the feed not fresh. This is conservative and intentional.
-
-A reporter's update is accepted even if it is a large move (a crash must be reportable); the
-`fresh` decision, not the update, is the gate for consumers. Consumers MUST treat `fresh == false`
-as "do not withdraw, swap or quote".
-
----
-
-## 11. FxPool (oracle-anchored fixed-price market maker)
-
-**State:** `{base, quote, reserveBase, reserveQuote, totalShares, params: {baseSpreadBps, skewSpreadBps, maxTradeBps, minLiquidity}, paused, admins, threshold, govNonce}`.
-**Captured:** base/quote ERTP issuers, purses, brands; LP mint, LP issuer, LP burn deposit facet;
-OracleHub.
-
-**Params (v0.1):** `baseSpreadBps=20`, `skewSpreadBps=80`, `maxTradeBps=500`, `minLiquidity=1e8`.
-
-| Arm | Args | Auth | Semantics |
-|---|---|---|---|
-| `quote` | `assetIn, amountIn` | none | fresh, not paused; returns `(true, amountOut, feeBps, rate, maxIn)` or `(false, reason)` |
-| `quoteAdd` | `baseAmount` | none | `(true, baseAmount, quoteAmount)` matching the current ratio (first deposit: the oracle ratio) |
-| `addLiquidity` | `basePayment, quotePayment, minShares` | payments | verifies both; fresh; not paused; first deposit within 1% of the oracle ratio and mints `MINIMUM_LIQUIDITY` to the burn facet; shares = value − 1e8; later shares = depositValue × totalShares / poolValue; deposits both; mints LP to `ret`; `(true, shares, lpPayment)` |
-| `removeLiquidity` | `lpPayment, minBase, minQuote` | LP payment | shares ≤ totalShares; `baseOut = shares*reserveBase/totalShares`, `quoteOut = shares*reserveQuote/totalShares`; slippage checks; burns LP; withdraws both; `(true, basePay, quotePay, shares)` |
-| `swap` | `assetIn, payment, minOut` | payment | verifies input; fresh; not paused; max trade; computes output at the oracle rate minus fee; output < output reserve; `minOut`; deposits input; withdraws output; `(true, amountOut, payOut, feeBps)` |
-| `reserves` | — | none | `(true, reserveBase, reserveQuote, totalShares, rate, fresh, paused)` |
-| `lpAsset` | — | none | `(true, lpBrand, lpIssuer)` |
-| `params`, `pair` | — | none | views |
-| `admin` | `nonce, action, args, sigs` | 2-of-3 | `setParams [baseSpread, skewSpread, maxTrade]`; `setPaused [0|1]` |
-
-### 11.1 Pricing and fees
+Issuer params are `rcash:stablecoin-params:v2`, 11 values:
 
 ```
-R       = P_base * 1e8 / P_quote                       // quote base-units per base base-unit ×1e8
-value(x)= floor(x_base * R / 1e8) + x_quote           // pool value in quote units
-w       = floor(floor(reserveBase * R / 1e8) * 10000 / value)   // base weight, bps
-fee     = baseSpreadBps + floor(|w - 5000| * skewSpreadBps / 5000)   // capped by params
-base→quote: gross = floor(dx * R / 1e8); out = floor(gross * (10000 - fee) / 10000)
-quote→base: gross = floor(dx * 1e8 / R); out = floor(gross * (10000 - fee) / 10000)
-maxIn(in) = floor(reserveIn * maxTradeBps / 10000)
+currency, mcrBps, bonusBps, closeFactorBps, ratePerBlock, debtCeiling,
+minDebt, maxDebt, maxOracleAge, savingsShareBps, psmFeeBps
 ```
-The fee is taken in the output asset and remains in the reserves; LPs earn it. The skew component
-penalises trades that move the pool further from balance; a rebalancing trade pays the base spread.
 
-### 11.2 LP shares
+`Bounds.checkIssuer`: `mcrBps 10000..50000`, `bonusBps 0..5000`, `closeFactorBps 1..10000`,
+`ratePerBlock 0..50000`, `debtCeiling 1e10..1e15`, `minDebt 1e4..1e9`,
+`maxDebt minDebt..ceiling`, `maxOracleAge 1..1000`, `savingsShareBps 0..10000`,
+`psmFeeBps 0..1000`.
+
+The deploy returns `[stablecoinUri, custodyUri, paramsUri, vaultUri, liquidationUri,
+savingsUri, psmUri, bufferUri, attestation]`. `CurrencyRegistry.register` takes all eight
+URIs plus the params hash and sponsor, verifies the signature over
+`rcash:currency-register:v3|code|sc|custody|params|vault|liq|savings|psm|buffer|paramsHash|sponsor`,
+verifies the live `attest`, and writes the entry and the `StablecoinDirectory` in one
+commit.
+
+### 7.2 Vault lifecycle
+
+A vault is `{auth, collateral, debt, lastHeight}`. `open` returns the one-shot auth.
+`deposit` accrues, adds collateral, and updates totals. `mint` accrues, checks health
+(`floor(collateral * rate / 1e8) * 10000 >= debt * mcrBps`), min/max debt, ceiling and the
+buffer halt, then mints. `withdraw` accrues, checks health on the reduced collateral, and
+withdraws. `repay` accrues and settles (below). Interest accrues as
+`ceil(debt * ratePerBlock * (now - lastHeight) / 1e12)`.
+
+`Stablecoin.mint` refuses `"recapitalise"` when `sin > surplus`, `"max supply"` above
+`maxSupply`, and `"bad mint authority"` for an unknown cap. `burn` refuses
+`"bad burn authority"` and caps at the supplied maximum.
+
+### 7.3 Repay and yield waterfall
+
+With `delta = accrued - vault.debt`, `interestDue = delta`,
+`interestPaid = min(amount, interestDue)` and `principalPaid = amount - interestPaid`:
+
+- refuse `amount > accrued` with `"amount"`, returning the payment;
+- `Stablecoin.settle(payment, principalPaid, interestPaid, settlementAuth)` burns
+  `principalPaid` and deposits `interestPaid` into the `SurplusBuffer`;
+- totals: `totalDebt += delta - amount`, `totalAccruedInterest += delta - interestPaid`;
+- then `SurplusBuffer.cover(0, bufferCoverAuth)` and
+  `SurplusBuffer.paySavings(bufferPayAuth)`, in that order, in the same deploy.
+
+A payment of 0 principal and positive interest leaves supply unchanged and reduces unpaid
+interest. `totalAccruedInterest` is net unsettled interest, not a lifetime total.
+
+### 7.4 Views and pause
+
+`vault(ownerId)` accrues before computing and returns `{auth-projected collateral, debt:
+accrued, accruedInterest, health, rate, fresh}` without the auth. `totals` returns
+`{totalDebt, totalAccruedInterest, totalCollateral, badDebt, sin, psmDebt, paused, rev}`.
+`params` returns the live params and both the genesis and current hash. `pause` is the
+governed currency pause; it gates `mint`, `withdraw` and PSM `buyStable` only.
+
+| ID | Level | Requirement | Owner | Status |
+|---|---|---|---|---|
+| SPEC-ISS-01 | MUST | One system per currency; listing binds all eight URIs in the v3 preimage. | 31_stablecoin, CurrencyRegistry | implemented |
+| SPEC-ISS-02 | MUST | Params are the signed v2 11-value set; bounds and hash are enforced at creation. | Bounds, 31_stablecoin | implemented |
+| SPEC-ISS-03 | MUST | `savingsShareBps` and `psmFeeBps` are seeded from the signed params. | 31_stablecoin | implemented |
+| SPEC-ISS-04 | MUST | Health is required on mint and collateral withdrawal; stale or zero rate refuses `"stale feed"`/`"no rate"`. | VaultBook | implemented |
+| SPEC-ISS-05 | MUST | Min/max debt, debt ceiling and max supply are enforced before minting. | VaultBook, Stablecoin | implemented |
+| SPEC-ISS-06 | MUST | Interest accrues per block and is ceiled; a repay splits principal and interest via `settle`. | VaultBook, Stablecoin | implemented |
+| SPEC-ISS-07 | MUST | Repay overpayment returns the payment; supply falls only by principal. | VaultBook | implemented |
+| SPEC-ISS-08 | MUST | Interest reaches the buffer and the savings waterfall in the same deploy. | VaultBook, SurplusBuffer | implemented |
+| SPEC-ISS-09 | MUST | The mint halt is live: `sin > surplus` refuses `"recapitalise"` and is rechecked before the ERTP mint. | Stablecoin | implemented |
+| SPEC-ISS-10 | MUST | Pause gates mint, withdraw and PSM buy only; repay, liquidate, deposit, savings and redemption continue. | VaultBook, PSM | implemented |
+| SPEC-ISS-11 | MUST | The vault view accrues and returns health, rate and freshness; no stale-health answer. | VaultBook | implemented |
+| SPEC-ISS-12 | MUST | Risk parameters are live from `paramsState`; a governed change applies to subsequent arms. | VaultBook, PSM, RiskParameters | implemented |
+| SPEC-ISS-13 | MUST | Genesis `paramsHash` is the registry identity; `currentHash` changes on a governed update. | RiskParameters, registry | implemented |
+| SPEC-ISS-14 | MUST | `open` and `deposit` remain available while paused. | VaultBook | implemented |
+| SPEC-ISS-15 | MUST | A vault owned by another deployer cannot be operated: `"not owner"`/`"bad vault auth"`. | VaultBook | implemented |
+| SPEC-ISS-16 | MUST | Attestation identifies template and currency and reveals no capability. | Stablecoin, VaultBook, Custody | implemented |
+
+## 8. Liquidation and bad debt
+
+A vault is liquidatable only when unhealthy. `maxRepay = ceil(accrued *
+closeFactorBps / 10000)`; a larger payment refuses `"close factor"`. Seizure is
+`floor(amount * (10000 + bonusBps) * 1e8 / (rate * 10000))`. A healthy vault refuses
+`"healthy"`; a stale feed refuses `"stale feed"`.
+
+If the seizure exceeds the vault's collateral, the liquidator must repay at least the
+collateral's value (`amount * 1e8 >= collateral * rate`), otherwise the arm refuses
+`"underwater repayment"`; the whole collateral is seized and the vault is written off.
+If the collateral is below `minCollateral`, it refuses `"slippage"`.
+
+Write-off accounting, with `b = accrued - amount`:
+
+- `badDebt += b` (cumulative memo);
+- `SurplusBuffer.cover(b, bufferCoverAuth)` in the same deploy: `sin += b`,
+  `cancelled = min(surplus, sin)`, burn `cancelled`, `sin -= cancelled`,
+  `surplus -= cancelled`;
+- `totalDebt -= vault.debt`, `totalAccruedInterest += delta`,
+  `totalCollateral -= seized`, supply falls by the liquidator's burn;
+- the vault is reset to `{collateral: 0, debt: 0}`.
+
+**Bad debt is not a token or an auction.** It is the accounting residual a liquidation
+could not recover. The buffer absorbs it; the residual `sin` blocks new minting until
+interest recapitalises the buffer. There is no MKR analogue, no debt auction and no
+recapitalisation token.
+
+| ID | Level | Requirement | Owner | Status |
+|---|---|---|---|---|
+| SPEC-LIQ-01 | MUST | Only an unhealthy vault is liquidatable, through the liquidation capability only. | VaultBook, LiquidationEngine | implemented |
+| SPEC-LIQ-02 | MUST | Close factor is `ceil(accrued * closeFactorBps / 10000)`; excess refuses `"close factor"`. | VaultBook | implemented |
+| SPEC-LIQ-03 | MUST | Seizure uses the bonus formula with floor; slippage below `minCollateral` refuses `"slippage"`. | VaultBook, CollateralMath | implemented |
+| SPEC-LIQ-04 | MUST | Underwater repayment requires covering the collateral's value; otherwise `"underwater repayment"`. | VaultBook | implemented |
+| SPEC-LIQ-05 | MUST | A write-off books `badDebt` (cumulative) and `sin` (outstanding) and clears the vault. | VaultBook, SurplusBuffer | implemented |
+| SPEC-LIQ-06 | MUST | The write-off calls `cover` in the same deploy and revalidates the vault cell; a mismatch fails the deploy. | VaultBook | implemented |
+| SPEC-LIQ-07 | MUST | `cover` burns `min(surplus, sin)` and leaves the residual `sin`. | SurplusBuffer | implemented |
+| SPEC-LIQ-08 | MUST | New minting refuses `"recapitalise"` while `sin > surplus`. | Stablecoin | implemented |
+| SPEC-LIQ-09 | MUST | A stale feed refuses liquidation; repay remains available. | VaultBook | implemented |
+| SPEC-LIQ-10 | MUST | The liquidator receives the seized REV; a refusal returns the stablecoin payment. | VaultBook | implemented |
+| SPEC-LIQ-11 | MUST | `totals` exposes debt, accrued interest, collateral, `badDebt` and `sin`. | VaultBook | implemented |
+| SPEC-LIQ-12 | MUST | No recapitalisation token, debt auction or MKR analogue exists. | whole app | implemented |
+
+## 9. Surplus buffer
+
+State `{surplus, sin, savingsShareBps, rev}` plus a stablecoin purse.
+
+- `deposit(payment, bufferDepositAuth)`: measures, deposits into the purse, `surplus +=
+  amount`. Only `Stablecoin.settle` holds the cap.
+- `cover(additional, bufferCoverAuth)`: accepts `additional >= 0`; `sin += additional`;
+  `cancelled = min(surplus, sin)`; if `cancelled > 0`, withdraw and burn it; `sin -=
+  cancelled`, `surplus -= cancelled`. `additional = 0` reconciles existing `sin` against
+  new surplus.
+- `paySavings(bufferPayAuth)`: `move = floor(surplus * savingsShareBps / 10000)`; if
+  `move > 0` and `SavingsPool.totalShares > 0`, withdraw and `notify`; skip when the pool
+  has no shares so interest is not stranded.
+- `info` returns `{surplus, sin, savingsShareBps, rev}`.
+
+Order on every interest settlement: `deposit` → `cover(0)` → `paySavings`. Solvency
+before yield.
+
+`setShare` is replaced by `scheduleShare(bps, nonce, sigs)` and `applyShare(nonce)` through
+the governor timelock; `bps` is 0..10000.
+
+| ID | Level | Requirement | Owner | Status |
+|---|---|---|---|---|
+| SPEC-BUF-01 | MUST | Interest is deposited only through the settlement capability. | SurplusBuffer, Stablecoin | implemented |
+| SPEC-BUF-02 | MUST | `cover` absorbs `min(surplus, sin)` and burns it; residual `sin` remains. | SurplusBuffer | implemented |
+| SPEC-BUF-03 | MUST | `cover(0)` reconciles outstanding `sin` against new surplus. | SurplusBuffer | implemented |
+| SPEC-BUF-04 | MUST | `paySavings` moves the configured share and skips an empty pool. | SurplusBuffer, SavingsPool | implemented |
+| SPEC-BUF-05 | MUST | The waterfall is deposit → cover(0) → paySavings in one deploy. | VaultBook | implemented |
+| SPEC-BUF-06 | MUST | Savings share changes are timelocked via the governor. | SurplusBuffer, Governor | implemented |
+| SPEC-BUF-07 | MUST | `info` exposes surplus, sin and the share. | SurplusBuffer | implemented |
+| SPEC-BUF-08 | MUST | No stablecoin remains counted as surplus after it is burned. | SurplusBuffer | implemented |
+| SPEC-BUF-09 | MUST | Only a 2-of-3 governor can schedule or apply a share change; early execute refuses `"early"`. | Governor | implemented |
+| SPEC-BUF-10 | MUST | The effective share is `floor(surplus * bps / 10000)`; no rounding in the protocol's favour. | SurplusBuffer | implemented |
+
+## 10. Savings
+
+State `{totalShares, totalAssets, shares: {ownerId: shares}, rev}` plus a stablecoin purse.
+`ownerId` is derived from the caller's `deployerId`; a caller cannot name another owner.
+
+- `deposit(dId, payment)`: measure; if `totalShares == 0`, `shares = amount`, else
+  `shares = floor(amount * totalShares / totalAssets)`. A zero-share result refuses
+  `"shares"` and returns the payment. Deposit into the purse; `totalShares += shares`,
+  `totalAssets += amount`, `shares[ownerId] += shares`.
+- `withdraw(dId, shares)`: require `0 < shares <= shares[ownerId]`; `amount =
+  floor(totalAssets * shares / totalShares)`; withdraw and return it; decrement all.
+- `notify(payment, savingsNotifyAuth)`: deposit; `totalAssets += amount`; no shares.
+- `info` returns `{totalShares, totalAssets, shareValueE8, rev}` where `shareValueE8 =
+  floor(totalAssets * 1e8 / totalShares)` (0 when empty). `position(ownerId)` returns the
+  owner's shares and current value.
+
+There is no lock, minimum or promised rate. A share is a claim on the pool's stablecoin
+purse, not on REV collateral. The automatic yield path is §7.3/§9.
+
+| ID | Level | Requirement | Owner | Status |
+|---|---|---|---|---|
+| SPEC-SAV-01 | MUST | The owner is derived from `deployerId`; no arm accepts an arbitrary owner. | SavingsPool | implemented |
+| SPEC-SAV-02 | MUST | First deposit is 1:1; later shares floor at `amount * totalShares / totalAssets`. | SavingsPool | implemented |
+| SPEC-SAV-03 | MUST | A zero-share deposit refuses `"shares"` and returns the payment. | SavingsPool | implemented |
+| SPEC-SAV-04 | MUST | Withdraw is pro-rata, floored, and bounded by the owner's shares. | SavingsPool | implemented |
+| SPEC-SAV-05 | MUST | `notify` adds assets without minting shares and is capability-only. | SavingsPool | implemented |
+| SPEC-SAV-06 | MUST | Interest is distributed automatically on repay; no keeper is required. | VaultBook, SurplusBuffer | implemented |
+| SPEC-SAV-07 | MUST | The empty pool never receives a notify; interest stays in the buffer. | SurplusBuffer | implemented |
+| SPEC-SAV-08 | MUST | `info` exposes share value; `position` exposes the owner's holding. | SavingsPool | implemented |
+| SPEC-SAV-09 | MUST | No lock, minimum or promised rate exists. | SavingsPool | implemented |
+| SPEC-SAV-10 | MUST | A donation cannot inflate the next depositor's cost because there is no public donation arm and the share math uses total assets. | SavingsPool | implemented |
+
+## 11. Peg stability module
+
+State `{stableDebt, feeBps, ceiling, rev}` plus a REV purse and a stablecoin purse.
+
+- `fundRev(payment)`: permissionless REV donation to the PSM reserve; returns the amount.
+- `buyStable(payment, stableFacet, minStable)`: measure REV;
+  `gross = floor(revIn * rate / 1e8)`, `fee = ceil(gross * feeBps / 10000)`,
+  `stableOut = gross - fee`. Refuse `"min stable"` below `minStable`, `"ceiling"` above
+  `stableDebt + stableOut`, `"stale feed"`. Deposit the full REV; mint `stableOut` to the
+  facet; `stableDebt += stableOut`.
+- `sellStable(payment, revFacet, minRev)`: measure stable;
+  `grossRev = floor(stableIn * 1e8 / rate)`, `feeRev = ceil(grossRev * feeBps / 10000)`,
+  `revOut = grossRev - feeRev`. Refuse `"min rev"` below `minRev`, `"buffer"` above the
+  REV purse, `"stale feed"`. Burn `stableIn`; withdraw and deposit `revOut`; `stableDebt
+  -= stableIn`.
+- Fees remain in the PSM REV purse. They are not minted to the buffer and not paid to
+  savers.
+- `stableDebt` is **signed**. Sell may drive it negative; that is par redemption of
+  vault-issued stablecoin and is required for the peg. The only lower sanity bound is
+  `-maxSupply`. The ceiling bounds the positive side.
+- `buyStable` refuses while the currency is paused; `sellStable` remains available.
+- `info` returns `{stableDebt, feeBps, ceiling, revBalance, rev}`; `debt` returns
+  `stableDebt`.
+
+The peg is held by arbitrage: below par, buy the stablecoin on the AMM and redeem at par
+through the PSM; above par, mint at par through the PSM and sell on the AMM. The REV
+buffer is finite; an empty buffer refuses redemption rather than promising fractional
+cover.
+
+| ID | Level | Requirement | Owner | Status |
+|---|---|---|---|---|
+| SPEC-PSM-01 | MUST | `fundRev` accepts REV permissionlessly and reports the amount. | PSM | implemented |
+| SPEC-PSM-02 | MUST | Buy gross floors, fee ceils, output is the difference, and the full REV is deposited. | PSM | implemented |
+| SPEC-PSM-03 | MUST | Sell gross floors, fee ceils, output is the difference, and the stablecoin is burned. | PSM | implemented |
+| SPEC-PSM-04 | MUST | `stableDebt` stays signed and may go negative; vault-issued stablecoin redeems at par. | PSM | implemented |
+| SPEC-PSM-05 | MUST | The ceiling bounds positive debt; `ceiling >= stableDebt` is required for a policy change. | PSM | implemented |
+| SPEC-PSM-06 | MUST | An empty REV purse refuses sell with `"buffer"` and returns the payment. | PSM | implemented |
+| SPEC-PSM-07 | MUST | Min-output bounds refuse `"min stable"`/`"min rev"` and return the payment. | PSM | implemented |
+| SPEC-PSM-08 | MUST | Fees stay in the PSM REV purse and are excluded from surplus and savings. | PSM | implemented |
+| SPEC-PSM-09 | MUST | Buy is paused with the currency; sell remains available for redemption. | PSM, VaultBook | implemented |
+| SPEC-PSM-10 | MUST | Fee and ceiling changes are timelocked and validated. | PSM, Governor | implemented |
+| SPEC-PSM-11 | MUST | `info` exposes debt, fee, ceiling and REV balance. | PSM | implemented |
+| SPEC-PSM-12 | MUST | A sell of vault-issued stablecoin produces negative `stableDebt` and preserves S3. | PSM | implemented |
+
+## 12. AMM markets
+
+### 12.1 Terms
+
+The canonical schema is `rcash:market-terms:v4`, 25 values in this order:
 
 ```
-first:     value = value(baseAmount, quoteAmount); shares = value - MINIMUM_LIQUIDITY (1e8)
-later:     shares = floor(depositValue * totalShares / poolValue)
-remove:    baseOut = floor(shares * reserveBase / totalShares)
-           quoteOut = floor(shares * reserveQuote / totalShares)
+marketId, slug, base, quote, version, sponsorPubKey, sponsorOwnerId,
+baseFeedPolicyHash, quoteFeedPolicyHash, baseSpreadBps, skewSpreadBps,
+maxTradeBps, minLiquidity, firstDepositToleranceBps, depthFloorQuote,
+minTicketQuote, seedBase, seedQuote, seedInitialShares,
+lockBeneficiaryPubKey, lockMinBlocks, lockUntilHeight,
+bookDefaultExpiryBlocks, bookMaxExpiryBlocks, maxPairAgeBlocks
 ```
-The first deposit MUST be within 1% of the oracle ratio; later deposits are priced by the current
-pool value and MAY be at a ratio different from the oracle (the LP accepts the inventory mix). The
-`MINIMUM_LIQUIDITY` is minted to a purse whose full capability is discarded; only its deposit facet
-is retained.
 
-### 11.3 Pool invariants
+Encoding is length-prefixed: `schema|len(v):v|…` over UTF-8 decimal strings, hashed with
+BLAKE2b-256. Rholang, Rust and Python MUST produce byte-identical strings. The sponsor
+signs `rcash:market-create:v1|marketId|termsHash|sponsor`.
 
-- P1: `reserveBase` and `reserveQuote` are the pool's internal accounting; each deposit/withdraw is
-  matched by a purse movement of the same amount.
-- P2: `totalShares` equals the LP minted minus the LP burned; `removeLiquidity` never exceeds
-  `totalShares`.
-- P3: A swap output is `< reserveOut`; the input is `> 0`; the output is at least `minOut`; the input
-  is at most `maxIn`.
-- P4: With a fresh rate, the quoted output tracks the oracle rate within the spread/skew; the value
-  of the reserves (at the oracle) changes only by fees.
-- P5: Rounding favours the pool: outputs floor, required inputs ceil where applicable, LP shares
-  floor.
+Every field is enforced:
 
----
-
-## 12. TransferBook
-
-**State:** `{transfers: Map<id, {sender, source, dest, amount, claimHash, expiry, status}>, nextId: Int}`.
-**Captured:** FxPool, AccountFactory, base/quote issuers and brands, escrow purses for NGN and KES,
-`hash`, `bd`.
-
-`status ∈ {open, claimed, refunded}`.
-
-| Arm | Args | Auth | Semantics |
-|---|---|---|---|
-| `quote` | `sourceAsset, destAsset, amountIn` | none | only NGN→KES or KES→NGN; forwards the pool quote |
-| `send` | `sourceAsset, destAsset, payment, minDest, claimHash, expiry, senderOwnerId, proof` | sender proof via AccountFactory | measures the source payment; pool swap; deposits the destination payment into the escrow purse; records an `open` transfer with `nextId`; `(true, id)` |
-| `claim` | `transferId, secret` | claim secret | hashes `secret` with blake2b256; requires `open`, `now <= expiry`, hash match; withdraws `amount` from the escrow; marks `claimed`; `(true, amount, payment)` |
-| `refund` | `transferId, senderOwnerId, proof` | sender proof via AccountFactory | requires `open`, `now > expiry`, stored sender == senderOwnerId; withdraws; marks `refunded`; `(true, amount, payment)` |
-| `info` | `transferId` | none | `(true, transfer)` or `(false, "no transfer")` |
-| `nextId` | — | none | `(true, Int)` |
-
-**Escrow rule.** For each destination asset, the sum of the `amount` of all `open` transfers MUST be
-≤ the balance of the book's escrow purse for that asset. The book holds the escrow purses itself and
-withdraws exact amounts; it never stores a raw payment in its state.
-
-**Claim/refund exclusivity.** A transfer ID is created once; status transitions are only
-`open→claimed` or `open→refunded`; the book consumes its state while withdrawing (a native purse),
-so two claims cannot both withdraw. The claim secret is bearer authority: anyone holding it may
-claim to their own destination, and the book cannot distinguish the intended recipient. The sender
-MUST share the secret only with the intended claimant or ramp.
-
-**Expiry.** Expiry is a block height chosen by the sender. There is no automatic expiry; the sender
-(or anyone acting for the sender with the proof) calls `refund` after expiry. An unclaimed transfer
-remains `open` and claimable until the expiry is passed.
-
-**No direct-delivery mode in v0.1.** Every transfer is claim-based. A recipient with a wallet can
-auto-claim; a recipient without a wallet is served by a ramp that holds the secret.
-
----
-
-## 13. Economic specification and parameters
-
-### 13.2 Pool and transfer parameters
-
-| Parameter | v0.1 |
+| Field | Enforcement |
 |---|---|
-| FPMM base spread | 20 bps |
-| FPMM skew spread | up to 80 bps |
-| FPMM max trade | 500 bps of the input reserve |
-| FPMM minimum liquidity | 1e8 LP units burned |
-| Transfer fee | none in v0.1; the pool spread is the fee |
-| Claim expiry | sender-chosen block height |
+| marketId, slug | non-empty; slug unique in the index; pair key |
+| base, quote | non-empty, distinct; both feeds listed and active |
+| version | `>= 1`; strictly increases after a delisted version |
+| sponsorPubKey | signature; equals `lockBeneficiaryPubKey` |
+| sponsorOwnerId | derived from `sponsorPubKey` |
+| feed policy hashes | live `OracleRegistry` entries and active feeds |
+| spreads, max trade, tolerance | bounded; used by `FxPool` |
+| minLiquidity | first deposit floor |
+| depthFloorQuote | activation |
+| minTicketQuote | swap gate |
+| seedBase, seedQuote, seedInitialShares | activation lower bounds |
+| lockMinBlocks, lockUntilHeight | lock funding and activation |
+| book expiry fields | within global book params |
+| maxPairAgeBlocks | `1..1000`; passed to the oracle |
 
-### 13.3 Fee flow
+### 12.2 Lifecycle
 
-The corridor spread (base + skew) is the only protocol-level fee and accrues to the pool's reserves
-(hence to LPs). There is no protocol transfer fee, no ramp fee on-chain, and no treasury fee in
-v0.1. A ramp's fiat payout fee is off-chain and outside this specification.
+`MarketFactory.createMarket(terms, values, sponsor, sig)` verifies the signature, the
+terms and the feeds; `PoolTemplate.create` builds the pool and lock; `MarketDirectory.bind`
+and `seal`; `MarketIndex.stage` creates a `draft`. `MarketIndex.activate` requires the
+sealed slot, a funded lock with `untilHeight >= lockUntilHeight`, and a pool attestation
+with `seeded`, matching `termsHash`, `rb >= seedBase`,
+`rq >= max(seedQuote, depthFloorQuote)` and `totalShares >= seedInitialShares`. Status is
+`draft → active → paused/active → delisted`, governed and immediate.
 
----
+### 12.3 Pool
 
-## 14. Platform conformance and verification
+`FxPool` holds base and quote purses and an LP ERTP kit. Reserves and shares change only
+with ERTP deposit/withdraw in one cell. Fee is `baseSpread + |weight - 5000| * skew /
+5000`; output is `floor(oracleGross * (10000 - fee) / 10000)`. `maxTradeBps` is compared
+to the input reserve; `minTicketQuote` applies to the input value. The first deposit is
+`floor(depositValue) - 1e8` shares and MUST be at least `minLiquidity`; the 1e8 is never
+minted (documented loss).
 
-### 14.1 Platform constraints (normative for v0.1)
+`quote` and `swap` require an active market and a fresh oracle; `swap` passes
+`TradabilityGate.admit` before any deposit. `addLiquidity` requires an active market and a
+fresh oracle and enforces the seed bounds. Every pre-deposit refusal returns the caller's
+input payment(s); after a deposit the arm fails the deploy instead. `removeLiquidity` and `LiquidityLock.release` are the LP exit and
+MUST remain available when the market is paused or delisted. Removing all liquidity sets
+`seeded = false`; a later deposit reseeds.
 
-| Constraint | Consequence |
+`LiquidityLock.fund(dId, lpPayment, beneficiaryId, untilHeight)` records the funder and
+beneficiary, requires `untilHeight >= now + lockMinBlocks`, and returns the payment on
+refusal. `release` requires the beneficiary and the height. `cancel` is governor-gated and
+requires the funder or beneficiary. A one-shot lock; a released or cancelled lock refuses
+`"closed"`.
+
+`ListingViews` exposes `currency`, `marketFor`, `market`, `isActive`, `terms`,
+`currencies` and `markets`; clients discover currencies and markets through it.
+
+| ID | Level | Requirement | Owner | Status |
+|---|---|---|---|---|
+| SPEC-MKT-01 | MUST | Terms are the v4 25-value schema in the stated order. | Bounds, MarketTerms | implemented |
+| SPEC-MKT-02 | MUST | Rholang, Rust and Python encoders are byte-identical and vectors are regenerated. | core/tools/tests | implemented |
+| SPEC-MKT-03 | MUST | The sponsor signature binds marketId, termsHash and sponsor. | MarketFactory | implemented |
+| SPEC-MKT-04 | MUST | Every terms field is enforced by the stated owner. | Bounds, Factory, Index, Pool | implemented |
+| SPEC-MKT-05 | MUST | Slugs are unique; versions strictly increase after delisting. | MarketIndex | implemented |
+| SPEC-MKT-06 | MUST | The sponsor owner is derived from the sponsor key and the lock beneficiary equals the sponsor. | MarketFactory | implemented |
+| SPEC-MKT-07 | MUST | Activation checks the sealed slot, funded lock, seed base/quote and initial shares. | MarketIndex | implemented |
+| SPEC-MKT-08 | MUST | Status transitions are only those in §12.2; others refuse `"transition"`. | MarketIndex | implemented |
+| SPEC-MKT-09 | MUST | Paused/delisted markets refuse quote, swap and add; exit remains available. | FxPool | implemented |
+| SPEC-MKT-10 | MUST | `ListingViews` enumerates currencies and markets for clients. | ListingViews | implemented |
+| SPEC-MKT-11 | MUST | A market with a mismatched terms hash refuses activation and swap. | MarketIndex, FxPool | implemented |
+| SPEC-MKT-12 | MUST | The factory refuses an inactive or missing feed and a mismatched policy hash. | MarketFactory | implemented |
+| SPEC-MKT-13 | MUST | The AMM fee, max trade, min ticket and first-deposit tolerance match the terms. | FxPool | implemented |
+| SPEC-MKT-14 | MUST | A full removal sets `seeded = false`; a later deposit reseeds. | FxPool | implemented |
+| SPEC-POOL-01 | MUST | Reserves equal native custody; shares equal LP minted minus burned. | FxPool | implemented |
+| SPEC-POOL-02 | MUST | First deposit mints `depositValue - 1e8` and requires `>= minLiquidity`. | FxPool | implemented |
+| SPEC-POOL-03 | MUST | Quote rounds down; the pool never pays more than the oracle formula. | AmmMath, FxPool | implemented |
+| SPEC-POOL-04 | MUST | `maxTradeBps` is measured against the input reserve. | FxPool | implemented |
+| SPEC-POOL-05 | MUST | The tradability gate is called by swap and add, not duplicated. | FxPool | implemented |
+| SPEC-POOL-06 | MUST | LP add is atomic: both payments in, shares out, or refund both. | FxPool | implemented |
+| SPEC-POOL-07 | MUST | LP removal pays both assets and never strands a balance. | FxPool | implemented |
+| SPEC-POOL-08 | MUST | A funded lock refuses a second fund and returns the payment. | LiquidityLock | implemented |
+| SPEC-POOL-09 | MUST | Release requires the beneficiary and the height; cancel requires the funder or beneficiary. | LiquidityLock | implemented |
+| SPEC-POOL-10 | MUST | A released/cancelled lock refuses `"closed"`. | LiquidityLock | implemented |
+
+## 13. Governance, timelock and pause
+
+### 13.1 Admin authority
+
+`Root` holds `installer`, `admins`, `threshold: 2`, `frozen`, `entries`. `Governor` holds
+the admin set, threshold, per-domain nonces, `timelock: 100` blocks and `pending`.
+
+`authorize(domain, nonce, action, argsHash, sigs)` verifies 2-of-3 over
+`rcash:admin:v1|domain|nonce|action|argsHash`, enforces the per-domain nonce and consumes
+it. `schedule(domain, nonce, action, argsHash, args, sigs)` stores
+`pending[domain|nonce] = {action, argsHash, args, readyAt: height + timelock}`.
+`execute(domain, nonce)` refuses `"unknown"` or `"early"`, rechecks the args hash and
+returns `(true, action, argsHash, args)`. `pending(domain, nonce)` is a view.
+
+Timelocked actions: risk params (`setRiskParams`), savings share (`setSavingsShare`), PSM
+policy (`setPsmPolicy`), market status transitions, lock cancel. Immediate: currency pause
+(emergency), oracle pause/trial restart, admin/threshold/timelock changes (governor domain).
+
+### 13.2 Pause matrix
+
+| Action | Currency paused | Market paused/delisted | Feed stale |
+|---|---|---|---|
+| Account deposit/withdraw/balance | allowed | allowed | allowed |
+| Transfer send/claim/refund | allowed | allowed | allowed |
+| Vault open/deposit | allowed | allowed | allowed |
+| Vault mint | refused `"paused"` | allowed | refused `"stale feed"` |
+| Vault withdraw | refused `"paused"` | allowed | refused `"stale feed"` |
+| Vault repay | allowed | allowed | allowed |
+| Vault liquidate | allowed | allowed | refused `"stale feed"` |
+| PSM buy | refused `"paused"` | allowed | refused `"stale feed"` |
+| PSM sell | allowed | allowed | refused `"stale feed"` |
+| Savings deposit/withdraw | allowed | allowed | allowed |
+| Pool quote/swap/add | allowed | refused `"not active"` | refused `"stale feed"` |
+| Pool remove / lock release | allowed | allowed (exit) | allowed |
+
+| ID | Level | Requirement | Owner | Status |
+|---|---|---|---|---|
+| SPEC-GOV-01 | MUST | Admin actions require 2-of-3 over the exact domain preimage and a monotone nonce. | Governor, AdminGuard | implemented |
+| SPEC-GOV-02 | MUST | Timelocked actions are scheduled, executed after 100 blocks, and recheck the args hash. | Governor | implemented |
+| SPEC-GOV-03 | MUST | Early execute refuses `"early"`; unknown refuses `"unknown"`; replay refuses `"replay"`. | Governor | implemented |
+| SPEC-GOV-04 | MUST | Risk params, savings share and PSM policy are timelocked; pause and market status are immediate. | Governor, contracts | implemented |
+| SPEC-GOV-05 | MUST | The pause matrix in §13.2 is the complete matrix; any other refusal is a defect. | all | implemented |
+| SPEC-GOV-06 | MUST | `pending` exposes scheduled actions for clients. | Governor | implemented |
+| SPEC-GOV-07 | MUST | A governed params change applies to subsequent arms and does not rewrite the genesis hash. | RiskParameters | implemented |
+| SPEC-GOV-08 | MUST | Root freeze is terminal; a frozen root refuses further registration. | Root | implemented |
+| SPEC-GOV-09 | MUST | Currency pause is reported in the registry entry for clients and enforced by the issuer. | CurrencyRegistry, VaultBook | implemented |
+| SPEC-GOV-10 | MUST | Market status is the sole pool pause authority; no dead `poolState.paused` field exists. | FxPool, MarketIndex | implemented |
+
+## 14. Registries and wiring
+
+`Root` is the only singleton directory. Per-instance URIs live in
+`CurrencyRegistry`/`StablecoinDirectory`, `OracleRegistry`, `MarketDirectory` and the
+`ListingViews` projection. Install order is `Root → AdminGuard → Clock/Verifier/Codec →
+Bounds → Governor → AmmMath → CollateralMath → OracleMath → ClaimCode → OracleRegistry →
+OracleHub → CurrencyRegistry → AssetResolver → TransferBook → PoolTemplate → Market* →
+AccountFactory`. Each step registers in Root; the installer verifies the keys at the
+carrying block before the next step.
+
+The currency entry stores `{stablecoinUri, custodyUri, paramsUri, vaultUri,
+liquidationUri, savingsUri, psmUri, bufferUri, paramsHash, sponsor, status}`.
+
+| ID | Level | Requirement | Owner | Status |
+|---|---|---|---|---|
+| SPEC-REG-01 | MUST | Root registration is installer-signed; rotation/freeze are 2-of-3 and versioned. | Root | implemented |
+| SPEC-REG-02 | MUST | Exactly one system per currency; duplicate listing refuses `"currency exists"`/`"duplicate"`. | CurrencyRegistry | implemented |
+| SPEC-REG-03 | MUST | Currency registration binds all eight URIs plus params hash and sponsor in the v3 preimage. | CurrencyRegistry | implemented |
+| SPEC-REG-04 | MUST | The directory is written only after the live attestation matches. | CurrencyRegistry | implemented |
+| SPEC-REG-05 | MUST | Asset resolution is per-call; no registry capability is cached in a bundle. | AssetResolver | implemented |
+| SPEC-REG-06 | MUST | Install order matches §14 and each step's Root keys resolve before the next. | installers | implemented |
+| SPEC-REG-07 | MUST | `ListingViews` resolves components at arm entry and never caches. | ListingViews | implemented |
+| SPEC-REG-08 | MUST | The manifest lists every component URI and no capability or key. | rcash-core, ops | implemented |
+| SPEC-REG-09 | MUST | A stale registry status is corrected by a governed pause, not by the issuer reading the registry. | CurrencyRegistry, VaultBook | implemented |
+| SPEC-REG-10 | MUST | The contract catalogue matches the built terms and arm lists. | components.json | implemented |
+
+## 15. Clients (Rust SDK, CLI, WASM)
+
+The Rust SDK is the single client logic source; the CLI and WASM are thin surfaces.
+Amounts are parsed as decimal strings to 8 decimals; heights are integers; no float
+arithmetic. Trusted inputs are hex bytes, lengths and base units.
+
+- Reads: currencies, markets, terms, reserves, slots, locks, supply, transfers, balances,
+  vault/health/totals/params, savings info/position, PSM info, buffer info, risk params,
+  governor pending, account transfers.
+- Writes: vault open/deposit/mint/repay/withdraw/liquidate; savings deposit/withdraw; PSM
+  buy/sell; send (memo/opId/stipend), claim, refund; market create/activate/status; pool
+  add/remove/swap/release; currency pause; governor schedule/execute; buffer/PSM/risk
+  schedule/apply.
+- Freshness-gated reads require the signing client; a locked wallet returns `"unlock to
+  quote"` rather than a zero price.
+- Writes report success only at a finalized block that does not list the deploy in
+  `rejectedDeploys`. Expiry anchors to the finalized height, never the non-final tip.
+- Native writes use the write-ahead op cache (`deploy_term_cached`) and retries reuse the
+  same signed body. WASM uses the on-chain `opId` plus the IndexedDB journal.
+- Slippage minima are explicit parameters. The CLI defaults to 50 bps from the quote and
+  refuses a zero minimum for swap, add and remove.
+- Errors map to the refusal taxonomy; 429/503/admission/duplicate/term-too-large exit with
+  the documented code and never masquerade as a protocol refusal.
+
+| ID | Level | Requirement | Owner | Status |
+|---|---|---|---|---|
+| SPEC-CLI-01 | MUST | SDK, CLI and WASM expose every user-facing arm in §15. | SDK/CLI/WASM | implemented |
+| SPEC-CLI-02 | MUST | Amounts are exact base units; no floats; parsing refuses >8 decimals. | rcash-core | implemented |
+| SPEC-CLI-03 | MUST | Freshness-gated reads use the signing client; locked wallets refuse clearly. | SDK/WASM | implemented |
+| SPEC-CLI-04 | MUST | Success requires finality and absence from `rejectedDeploys`. | SDK | implemented |
+| SPEC-CLI-05 | MUST | Retries are idempotent: native op cache or on-chain opId. | SDK | implemented |
+| SPEC-CLI-06 | MUST | Expiry anchors to the finalized height. | SDK | implemented |
+| SPEC-CLI-07 | MUST | Swap/add/remove defaults are non-zero (50 bps) and explicit. | CLI/web | implemented |
+| SPEC-CLI-08 | MUST | The CLI exposes vault, savings, PSM, buffer, markets and governance commands. | CLI | implemented |
+| SPEC-CLI-09 | MUST | WASM exports the same methods with camelCase JSON and exact string amounts. | WASM | implemented |
+| SPEC-CLI-10 | MUST | `make demo` runs a real send → claim journey. | CLI | implemented |
+| SPEC-CLI-11 | MUST | Error classes are distinguishable and documented. | SDK | implemented |
+| SPEC-CLI-12 | MUST | V4Currency carries custody, params, liquidation, savings, PSM and sponsor URIs. | SDK/WASM/web | implemented |
+
+## 16. Web UI
+
+The web client is non-custodial: the private key lives only in WASM; the browser stores an
+encrypted keystore and public state. Secrets never enter localStorage.
+
+Routes: Accounts, Receive, Convert, Pay, Claim, Vault, Earn, Redeem, Markets, Market
+detail, Market create, Liquidity, History, Governance (read-only), Settings. Batch and
+Ramps remain disabled and are named as exclusions.
+
+| Screen | Required behaviour |
 |---|---|
-| Deploy term ≤ 65,536 bytes | bootstrap is minified; large deploys are split |
-| Parser nesting depth ≤ 128 | shallow factories; separate pool/book deploys |
-| Bundle free-variable check | pool/book are held in Components, not bundled |
-| BigInt intermediates do not normalize to Int | `.toInt()` at fixed-point boundaries; fail closed |
-| Silent unmatched receive | every arm replies; responder rule |
-| Deploy atomicity and native rollback | invariant; verified in phase 0 |
-| Name/value quoting and duplicate binders | strict; see `PLATFORM.md` |
-| Block height, not timestamp | staleness and interest |
+| Accounts | REV + per-asset balances; faucet; fund REV; currency list from the chain; copy key/address; no hard-coded asset list. |
+| Receive | Public key/address; open a claim link; no secret display beyond the fragment. |
+| Pay | Asset picker; amount; recipient pubkey; expiry from finalized height; memo; opId generated and journaled before send; stipend with non-refundable warning; claim link; refund of expired sends. |
+| Claim | Status, expiry countdown, stipend, memo; claim disabled unless open and unexpired; REV-for-phlo warning. |
+| Vault | Per-currency collateral, debt, accrued interest, health, liquidation price; deposit, mint, repay, withdraw; totals; keeper liquidation. |
+| Earn | Savings share value, position, deposit/withdraw, yield to date. |
+| Redeem | PSM info, buy/sell, fee, ceiling, signed debt; explains par redemption and the finite buffer. |
+| Markets | List; create with the 25-field form and validation; activate; swap; add/remove liquidity; seed + lock countdown; reserves. |
+| Liquidity | Existing market slot, lock countdown, add/release, non-zero minima. |
+| History | Journal + on-chain transfer status; pending reconciliation on boot. |
+| Governance | Read-only admin set, pending actions and timelock state. |
+| Settings | Node, manifest, keystore export, lock. |
 
-### 14.2 Conformance tests
+The IndexedDB journal records every write before submission, with transfer URI, asset,
+amount, expiry, opId, recipient and status. Pending entries are reconciled on boot.
 
-| Spec area | Evidence | Result |
+| ID | Level | Requirement | Owner | Status |
+|---|---|---|---|---|
+| SPEC-WEB-01 | MUST | Every user-facing arm in §15 has a screen or an explicit CLI-only note. | web | implemented |
+| SPEC-WEB-02 | MUST | The private key never leaves WASM; the keystore is encrypted; no secret in localStorage. | store/wasm | implemented |
+| SPEC-WEB-03 | MUST | Amounts use exact BigInt formatting; no float arithmetic. | format.ts | implemented |
+| SPEC-WEB-04 | MUST | Slippage minima are derived from the quote, default 50 bps, editable, never zero. | Convert/Liquidity/Markets | implemented |
+| SPEC-WEB-05 | MUST | Send journals before submit and reconciles pending entries. | Pay/db.ts | implemented |
+| SPEC-WEB-06 | MUST | opId is generated per send and reused on retry. | Pay | implemented |
+| SPEC-WEB-07 | MUST | Memo and stipend are exposed with the non-refundable warning. | Pay | implemented |
+| SPEC-WEB-08 | MUST | Expiry uses the finalized height. | Pay | implemented |
+| SPEC-WEB-09 | MUST | Claim shows status, expiry and stipend; refund is available for expired sends. | Claim/History | implemented |
+| SPEC-WEB-10 | MUST | Vault, Earn, Redeem and Markets screens exist with the behaviours above. | new routes | implemented |
+| SPEC-WEB-11 | MUST | Currencies are discovered from the chain, not `DEFAULT_ASSETS`. | Accounts | implemented |
+| SPEC-WEB-12 | MUST | A locked wallet shows "unlock to quote" for freshness-gated reads. | Convert/Liquidity | implemented |
+| SPEC-WEB-13 | MUST | Batch and Ramps are disabled with an accurate reason. | Disabled | implemented |
+| SPEC-WEB-14 | MUST | The journal never stores a claim secret or a private key. | db.ts | implemented |
+
+## 17. Operations
+
+- A devnet is a fixed-node rholo image with one validator for unit campaigns and four for
+  merge arms. The node commit and image digest are recorded with every campaign.
+- Keys are generated once. `make keys` is idempotent: it reuses an existing keystore and
+  only `--fresh` regenerates. The deployer is validator 0 and is funded at genesis.
+- The faucet drips 0.3 REV, is rate-limited and idempotent below the drip. A fresh chain
+  funds every non-deployer key before the first suite.
+- `make install FRESH=1` deploys the 17-step kernel and writes the manifest only after
+  every step resolves. `make bootstrap` deploys the demo currencies, feeds and market and
+  writes `deployments/devnet-v4.systems.json`.
+- `deployments/devnet-v4.json` is the component manifest (23 fields, no nulls).
+  `testnet-v4.json` is annotated as incomplete until the public testnet completes.
+- A failed deploy is never retried blind; the client classifies refusal, duplicate and
+  finality.
+- 1 GiB hosts and public-testnet completion are not conformance targets.
+
+| ID | Level | Requirement | Owner | Status |
+|---|---|---|---|---|
+| SPEC-OPS-01 | MUST | Fresh devnet, install and bootstrap are reproducible from documented commands. | Makefile/harness | implemented |
+| SPEC-OPS-02 | MUST | Keys are idempotent; regeneration requires `--fresh`. | keygen | implemented |
+| SPEC-OPS-03 | MUST | The installer verifies every step before the next and writes no partial manifest. | installers | implemented |
+| SPEC-OPS-04 | MUST | Manifests contain no nulls on a completed install and no capabilities. | ops | implemented |
+| SPEC-OPS-05 | MUST | Campaigns record source SHA, image digest, prefix, memory and timestamps. | ops | planned |
+| SPEC-OPS-06 | MUST | The faucet and deployer budgets are documented and respected. | ops | implemented |
+| SPEC-OPS-07 | MUST | Public-testnet and merge-gossip arms are reported BLOCKED, never green. | ops | planned |
+| SPEC-OPS-08 | MUST | Docs, Makefile and manifests describe the shipped behaviour. | docs | implemented |
+| SPEC-OPS-09 | MUST | `unit-all` is the ordered campaign list. | Makefile | implemented |
+| SPEC-OPS-10 | MUST | The demo journey runs end to end on the bootstrapped devnet. | CLI | implemented |
+
+## 18. Invariants and conformance
+
+### 18.1 Normative invariants
+
+`docs/spec/20-INVARIANTS.md` is the sole normative invariant text: I1–I22 and S1–S12, with
+S3 revised to:
+
+```
+totalDebt + sin + psmDebt = supply + totalAccruedInterest
+```
+
+`totalAccruedInterest` is net unsettled interest. `sin` is outstanding bad debt net of
+surplus. `psmDebt` is signed. `badDebt` is a cumulative memo outside the identity.
+
+### 18.2 Compliance
+
+| ID | Level | Requirement | Owner | Status |
+|---|---|---|---|---|
+| SPEC-INV-01 | MUST | Every requirement maps to at least one invariant or is a pure client/ops requirement. | spec | implemented |
+| SPEC-INV-02 | MUST | S1–S12 and I1–I22 hold; S3 uses the revised identity. | contracts | implemented |
+| SPEC-INV-03 | MUST | The final report traces each requirement to its evidence and states PASS/FAIL/BLOCKED/SKIPPED. | ops | planned |
+
+### 18.3 Refusal strings
+
+```
+not owner                 no account              unknown asset
+unknown market            no market               market not active
+paused                    paused feed             stale feed
+trial                     quorum                  spread
+band                      below depth             below min ticket
+max trade                 slippage                too many shares
+not enough shares         first deposit           reserve mismatch
+seed mismatch             shares mismatch         unfunded lock
+lock mismatch             lock too short          terms drift
+pair mismatch             pair has active market  not draft
+not sealed                not beneficiary         too early
+not open                  expired                 not expired
+bad secret                height not monotonic    closed
+not sender                not pending              unknown asset
+bad signature             bad sponsor signature   currency not authorized
+currency exists           params hash mismatch    duplicate
+unknown component         frozen                  replay
+below threshold           expiry                  expiry too long
+amount too small          amount                  amount mismatch
+memo                      opId                    stipend
+pending                   shares                  payment
+buffer                    min rev                 min stable
+ceiling                   recapitalise            max supply
+max debt                  min debt                close factor
+healthy                   underwater repayment    bad vault auth
+policy                    early                   unknown
+bps                       params                  transition
+slug                      feed inactive           sponsor mismatch
+```
+
+A new refusal string is a spec change and requires an entry here.
+
+## 19. Exclusions
+
+| ID | Excluded | Reason |
 |---|---|---|
-| §3 platform/atomicity/authority | `spikes/` probes + `docs/PLATFORM.md` | 12/12 |
-| §6–8 Directory/Accounts | `harness/scenarios/phase1.py` | 7/7 |
-| §9 Oracle | `oracle.py` | 19/19 |
-| §11 FxPool | `pool.py` | 14/14 |
-| §12 TransferBook | `transfer.py` | 7/7 |
-| End-to-end | `make demo` | exit 0 |
+| SPEC-EXC-01 | Batch payouts | Not in the protocol; separate deploys are not atomic. |
+| SPEC-EXC-02 | Ramp registry / fiat ramps | No custody or fiat integration. |
+| SPEC-EXC-03 | CPMM / router / multi-hop | Direct pairs only in this version. |
+| SPEC-EXC-04 | Cards, platform API | Out of product scope. |
+| SPEC-EXC-05 | MetaMask signing | Spike not run; no decision. |
+| SPEC-EXC-06 | OTC / RFQ / limit orders | Not implemented. |
+| SPEC-EXC-07 | Public-testnet completion | Upstream 1 GiB / node issue; blocked. |
+| SPEC-EXC-08 | Merge-gossip arms | Upstream devnet limitation; blocked. |
+| SPEC-EXC-09 | 1 GiB pressure testing | Out of scope by decision. |
+| SPEC-EXC-10 | Recapitalisation token / debt auction / MKR analogue | Separate workstream. |
+| SPEC-EXC-11 | Sponsored (meta-transaction) claims | Stipend is a reimbursement, not phlo pre-payment. |
+| SPEC-EXC-12 | Maker rebates | Deferred. |
+| SPEC-EXC-13 | Encrypted memo | Plaintext bounded memo only. |
+| SPEC-EXC-14 | Governance writes in the web UI | CLI/ops only; the web is read-only for governance. |
+| SPEC-EXC-15 | Direct-delivery transfers | Claim-link transfers only. |
 
-### 14.3 What is not machine-proven
+## 20. Traceability
 
-The v0.1 invariants are exercised by scenario tests and property-style checks; they are **not**
-mechanically proved. The rholo node carries its own Lean/Coq laws for the interpreter and
-consensus; R-Cash does not yet have a machine-checked model. A future formalization should encode
-§10.3, §11.3 and §12's escrow/exclusivity invariants as reachability properties over the reducer.
-
-### 14.4 Measurement discipline
-
-Claims labelled "measured" are from the devnet and the pinned node commit; budgets (phlo limits) are
-not measurements. The phase-0 report records raw probe evidence; the scenario runners print
-per-assertion PASS/FAIL and the harness waits for finality.
-
----
-
-## 15. Planned components (non-normative)
-
-The following are **not** part of v0.1 and MUST NOT be assumed by a v0.1 client:
-
-- **CPMM backup venue** and a Router that quotes both the FPMM and CPMM and executes the better
-  direct venue.
-- **Batch payouts** (`TransferBook.sendBatch`): one swap for a total, per-recipient claims/deposits,
-  atomic all-or-nothing, surplus returned to the sender.
-- **PaymentRequests**: create/pay/cancel single-asset invoices.
-- **RampRegistry**: registered on/off-ramp partners per corridor; a mock ramp that redeems claims
-  and logs a fiat payout.
-- **Direct-delivery transfers** (recipient deposit facet at send time).
-- **Multi-hop routing**, **OTC limit orders/RFQ**, protocol fees/treasury, stability pool/bad-debt
-  backstop, GHS/UGX/ZAR corridors.
-- User CLI/SDK, web UI, cards, platform API, public-testnet deployment, external audit.
-
----
-
-## 16. Glossary
-
-| Term | Definition |
-|---|---|
-| Corridor | A directed pair of local currencies with a pool, oracle pair and ramps |
-| DeployerId | The deploy signer's unforgeable capability; also a REV-spending capability |
-| ERTP | Electronic Rights Transfer Protocol: brand, mint, issuer, purse, payment |
-| FPMM | Fixed-price market maker; quotes at an oracle anchor with spread and inventory skew |
-| LP | Liquidity provider; holds LP tokens and earns the spread |
-| ownerId | Public REV address derived from the owner's public key |
-| REV | The chain's native token; 1 REV = 1e8 drops |
-| RSpace | The tuple-space store; contract state is held in channels |
+| Area | Contract | SDK / CLI / WASM | Web | Campaign suites |
+|---|---|---|---|---|
+| ID | `09_identity.rho` | `v4_balance`, account reads | Accounts, Receive | unit-accounts |
+| PAY | `40_transfer.rho`, `09_identity.rho` | `v4_send_transfer`, claim/refund, transfers | Pay, Claim, History | unit-transfer, unit-transfer-memo |
+| ORA | `31_feed.rho`, `12/13` | oracle reads | Markets (status) | unit-feed, unit-hub |
+| ISS | `31_stablecoin.rho`, `32_currency_registry.rho` | `v4_vault_*`, currency | Vault | unit-stablecoin, unit-interest |
+| LIQ | `31_stablecoin.rho` | `v4_liquidate`, vault views | Vault (keeper) | unit-liquidation, unit-buffer |
+| BUF | `31_stablecoin.rho` | buffer info, schedule/apply | Earn (info) | unit-buffer, unit-timelock |
+| SAV | `31_stablecoin.rho` | savings methods | Earn | unit-savings, unit-interest |
+| PSM | `31_stablecoin.rho` | PSM methods | Redeem | unit-psm |
+| MKT/POOL | `50_market.rho`, `51_pool.rho` | market/pool methods | Markets, Liquidity | unit-market, unit-pool |
+| GOV | `04_governor.rho`, contracts | governance commands | Governance (read) | unit-timelock, unit-v3 |
+| REG | `00_root.rho`, `32`, `14` | manifest/currency reads | Settings | unit-v3 |
+| CLI | crates | all | wasm | cargo test, wasm smoke |
+| WEB | web | wasm | all routes | vitest, Playwright |
+| OPS | harness, Makefile | CLI | — | install, bootstrap, demo |

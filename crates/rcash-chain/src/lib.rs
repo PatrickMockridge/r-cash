@@ -22,5 +22,10 @@ pub use deploy::{DeployData, DeployOptions, MAX_DEPLOY_TERM_BYTES};
 pub use error::ChainError;
 pub use sign::{KeyPair, SignedDeploy};
 
+/// Sign a protocol payload and return the DER signature as lowercase hex.
+pub fn sign_payload_hex(key: &KeyPair, payload: &[u8]) -> Result<String, ChainError> {
+    Ok(rchain_shared::base16::encode(&key.sign_payload(payload)?))
+}
+
 /// The pinned node crate revision.
 pub const NODE_COMMIT: &str = "e2d073dcd02f1e560ccb84749937138a1e184b0b";

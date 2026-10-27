@@ -83,6 +83,12 @@ prov(cap) ::= Fresh(C)     created by C with `new`
 `prov(cap) ∈ {Fresh, Installer, Issuer}`. A `Caller` capability may be an input payment or
 a reply channel, never an authoritative dependency.
 
+**C1a (sink facets).** A caller-supplied facet is a *sink* when the only arm the component
+calls on it is a receive-only deposit (`depositFacet`, a recipient/refund facet, a PSM
+payout facet). Calling a sink after value movement is not a caller callback in the C2
+sense: the facet cannot hold over the cell, cannot re-enter the component and cannot act as
+authority. The component MUST NOT call any other arm on a caller-supplied name.
+
 **C2 (no caller callbacks).** No component may send to a caller-supplied name while
 holding a consumed cell or after an irreversible write. Callback-shaped parameters
 (`depositFacet`, a caller-provided book or pool) are replaced by returned values.

@@ -1,0 +1,39 @@
+// Send one transfer with an opId without funding the account (replay path).
+// Returns [id, uri] or the refusal.
+// Placeholders: __ROOT_URI__, __SENDER_PUB__, __RECIPIENT_PUB__, __AMOUNT__,
+//               __HASH__, __EXPIRY__, __MEMO__, __OP_ID__, __STIPEND__.
+new
+  rl(`rho:registry:lookup`),
+  rootCh, afCh, ac, sCh, rCh, rfCh, saCh,
+  deployId(`rho:rchain:deployId`),
+  deployerId(`rho:rchain:deployerId`)
+in {
+  rl!(`__ROOT_URI__`, *rootCh) |
+  for (Root <- rootCh) {
+    Root!("resolve", "component:account-factory", 1, *afCh) |
+    for (@(true, afUri, _) <- afCh) {
+      rl!(afUri, *ac) |
+      for (AccountFactory <- ac) {
+        AccountFactory!("getOrCreate", "__SENDER_PUB__".hexToBytes(), *sCh) |
+        for (@(true, sender, _) <- sCh) {
+          AccountFactory!("getOrCreate", "__RECIPIENT_PUB__".hexToBytes(), *rCh) |
+          for (@(true, recipient, _) <- rCh) {
+            @recipient!("depositFacet", "REV", *rfCh) |
+            for (@rf <- rfCh) {
+              match rf {
+                (true, recipientFacet) => {
+                  @sender!("sendTransfer", *deployerId, "REV", recipientFacet,
+                           "__RECIPIENT_PUB__".hexToBytes(), __AMOUNT__,
+                           "__HASH__".hexToBytes(), __EXPIRY__, "__MEMO__",
+                           "__OP_ID__", __STIPEND__, *saCh) |
+                  for (@a <- saCh) { deployId!(a) }
+                }
+                _ => deployId!(rf)
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

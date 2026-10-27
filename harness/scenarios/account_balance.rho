@@ -1,22 +1,21 @@
-// Phase-1 scenario: report the owner's Account REV balance.
-// Placeholders: __FACTORY_URI__
+// The owner's REV account balance. Returns [balance].
+// Placeholders: __ROOT_URI__, __PUBKEY__, __ASSET__.
 new
-  deployerId(`rho:rchain:deployerId`),
-  deployerIdOps(`rho:rchain:deployerId:ops`),
-  rl(`rho:registry:lookup`),
-  factoryCh,
-  accountCh,
-  pkCh,
-  balCh,
+  rl(`rho:registry:lookup`), rootCh, afCh, ac, oCh, balCh,
   deployId(`rho:rchain:deployId`)
 in {
-  rl!(`__FACTORY_URI__`, *factoryCh) |
-  deployerIdOps!("pubKeyBytes", *deployerId, *pkCh) |
-  for (factory <- factoryCh; @pk <- pkCh) {
-    factory!("getOrCreate", pk, *accountCh) |
-    for (@(true, account, ownerId) <- accountCh) {
-      @account!("balance", *deployerId, "REV", *balCh) |
-      for (@b <- balCh) { deployId!((ownerId, b)) }
+  rl!(`__ROOT_URI__`, *rootCh) |
+  for (Root <- rootCh) {
+    Root!("resolve", "component:account-factory", 1, *afCh) |
+    for (@(true, afUri, _) <- afCh) {
+      rl!(afUri, *ac) |
+      for (AccountFactory <- ac) {
+        AccountFactory!("getOrCreate", "__PUBKEY__".hexToBytes(), *oCh) |
+        for (@(true, account, ownerId) <- oCh) {
+          @account!("balance", ownerId, "__ASSET__", *balCh) |
+          for (@b <- balCh) { deployId!([b]) }
+        }
+      }
     }
   }
 }

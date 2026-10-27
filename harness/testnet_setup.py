@@ -173,10 +173,10 @@ def deploy_stablecoin(state: dict, sponsor: dict) -> list:
     params = ('{"mcrBps": 20000, "bonusBps": 800, "closeFactorBps": 5000, '
               '"ratePerBlock": 3171, "debtCeiling": 10000000000000, '
               '"minDebt": 1000000, "maxDebt": 10000000000000, '
-              '"maxOracleAge": 50}')
+              '"maxOracleAge": 50, "savingsShareBps": 5000, "psmFeeBps": 10}')
     values = [CURRENCY, "20000", "800", "5000", "3171", "10000000000000",
-              "1000000", "10000000000000", "50"]
-    params_hash = blake2b256(canonical("rcash:stablecoin-params:v1", values))
+              "1000000", "10000000000000", "50", "5000", "10"]
+    params_hash = blake2b256(canonical("rcash:stablecoin-params:v2", values))
     payload = f"rcash:stablecoin-create:v1|{CURRENCY}|{params_hash}|{sponsor['public']}"
     sig = sign_payload.sign_payload(sponsor["secret"], payload.encode())["signature"]
     term = net.render("31_stablecoin", {
