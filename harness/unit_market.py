@@ -323,6 +323,7 @@ def main() -> int:
     check("market delisted", set_status("delisted", status_nonce + 2), (True, "delisted"))
 
     fields2 = [(key, "REV/V4T:v2" if key == "marketId"
+                else "rev-v4t-v2" if key == "slug"
                 else 2 if key == "version" else value) for key, value in fields]
     values2 = [str(v) for _, v in fields2]
     hash2 = canonical("rcash:market-terms:v4", values2)

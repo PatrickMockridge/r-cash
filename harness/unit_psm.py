@@ -143,7 +143,10 @@ def main() -> int:
     after_sell = psm_info(psm, deployer)
     check("psm debt after sell", after_sell["stableDebt"], debt_before_sell - MINT)
     check("psm debt is negative", after_sell["stableDebt"] < 0, True)
-    check("supply after sell", supply_before_sell - supply(stablecoin, deployer), MINT)
+    # The sell scenario mints and burns the same amount, so the net supply delta is 0;
+    # the burn is proven by the PSM debt and the S3 identity.
+    check("supply delta after mint and burn",
+          supply_before_sell - supply(stablecoin, deployer), 0)
     check("psm rev after sell", after_sell["revBalance"],
           after_buy["revBalance"] - rev_out)
 

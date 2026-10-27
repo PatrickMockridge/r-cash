@@ -137,17 +137,21 @@ def main() -> int:
     check("savings share updated in params", after["params"]["savingsShareBps"], 6000)
     check("psm fee updated in params", after["params"]["psmFeeBps"], 20)
 
-    one(call(buffer_uri, "SurplusBuffer",
-             f'SurplusBuffer!("applyShare", {nonce_share}, *r) | '
-             "for (@x <- r) { deployId!(x) }"), deployer)
+    applied_share = one(call(buffer_uri, "SurplusBuffer",
+                             f'SurplusBuffer!("applyShare", {nonce_share}, *r) | '
+                             "for (@x <- r) { deployId!(x) }"), deployer)
+    print("apply share", applied_share)
+    check("share applied", applied_share[0], True)
     buf = one(call(buffer_uri, "SurplusBuffer",
                    'SurplusBuffer!("info", *r) | for (@x <- r) { deployId!(x) }'),
               deployer)[1]
     check("buffer share updated", buf["savingsShareBps"], 7000)
 
-    one(call(psm_uri, "PegStabilityModule",
-             f'PegStabilityModule!("applyPolicy", {nonce_policy}, *r) | '
-             "for (@x <- r) { deployId!(x) }"), deployer)
+    applied_policy = one(call(psm_uri, "PegStabilityModule",
+                              f'PegStabilityModule!("applyPolicy", {nonce_policy}, *r) | '
+                              "for (@x <- r) { deployId!(x) }"), deployer)
+    print("apply policy", applied_policy)
+    check("policy applied", applied_policy[0], True)
     psm_after = one(call(psm_uri, "PegStabilityModule",
                          'PegStabilityModule!("info", *r) | for (@x <- r) { deployId!(x) }'),
                     deployer)[1]

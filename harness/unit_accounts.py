@@ -52,7 +52,7 @@ def main() -> int:
     if not listed[0]:
         raise AssertionError("V4T is not listed; run make unit-stablecoin first")
 
-    owner = keys["key14"]
+    owner = keys["business"]
     faucet_top_up(owner["address"])
     owner_term = render_scenario("account_purse.rho", {
         "__ROOT_URI__": root,
@@ -74,7 +74,7 @@ def main() -> int:
         "__OWNER_PUB__": owner["public"],
     })
     check("foreign deployer refused",
-          one(foreign_term, keys["key15"]["secret"]), "balance-refused")
+          one(foreign_term, keys["ramp"]["secret"]), "balance-refused")
 
     print("unit_accounts: all checks passed")
     return 0
