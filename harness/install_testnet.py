@@ -362,6 +362,10 @@ class Installer:
         )
 
         manifest = build_manifest(self.state)
+        # The unit harnesses read the resolved URIs from the state file, as
+        # install_v3 writes them. Keep both outputs in the same shape.
+        self.state.update(manifest)
+        self.save()
         out = self.manifest_path
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(json.dumps(manifest, indent=2) + "\n")

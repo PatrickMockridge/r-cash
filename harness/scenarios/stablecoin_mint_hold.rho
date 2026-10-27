@@ -39,7 +39,7 @@ in {
                                     @account!("deposit", *deployerId, "V4T", stablePayment, *acctCh) |
                                     for (@ad <- acctCh) {
                                       match ad {
-                                        (true, _) => deployId!([debt])
+                                        (true, _) => deployId!([account, ownerId, debt])
                                         _ => deployId!(ad)
                                       }
                                     }

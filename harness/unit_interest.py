@@ -100,7 +100,7 @@ def main() -> int:
             "__MINT__": str(MINT),
         },
     )
-    debt = one(mint, owner["secret"])[0]
+    debt = one(mint, owner["secret"])[2]
     assert debt == MINT, debt
 
     start = node.height()
