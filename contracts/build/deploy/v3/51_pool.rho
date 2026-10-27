@@ -170,10 +170,10 @@ in {
                   } |
                   for (@ok2 <- okCh) {
                     if (ok2 == false) {
-                      poolState!(s) | ret2!((false, "first deposit balance", basePayment, quotePayment))
+                      poolState!(s) | ret2!((false, "first deposit balance", *basePayment, *quotePayment))
                     } else {
                       if (depositValue < terms.get("minLiquidity")) {
-                        poolState!(s) | ret2!((false, "min liquidity", basePayment, quotePayment))
+                        poolState!(s) | ret2!((false, "min liquidity", *basePayment, *quotePayment))
                       } else {
                         AmmMath!("shares", depositValue, 0, 0, true, *sharesCh)
                       }
@@ -184,7 +184,7 @@ in {
             } |
             for (@sharesOut <- sharesCh) {
               if (sharesOut <= 0 || sharesOut < minShares) {
-                poolState!(s) | ret2!((false, "shares", basePayment, quotePayment))
+                poolState!(s) | ret2!((false, "shares", *basePayment, *quotePayment))
               } else {
                 new bdCh, qdCh, lpCh in {
                   @basePurse!("deposit", *basePayment, *bdCh) |
@@ -299,11 +299,11 @@ in {
             match rr {
               (rate, fresh) => {
                 if (active == false) {
-                  poolState!(s) | ret2!((false, "not active", inputPayment))
+                  poolState!(s) | ret2!((false, "not active", *inputPayment))
                 }
                 else {
                   if (fresh == false || rate <= 0) {
-                    poolState!(s) | ret2!((false, "stale feed", inputPayment))
+                    poolState!(s) | ret2!((false, "stale feed", *inputPayment))
                   } else {
                     new mCh in { poolAmmMath!(*mCh) | for (AmmMath <- mCh) { new amtCh, wCh, fCh, o2Ch, poolValCh in {
                       if (dir == "b2q") {
@@ -329,7 +329,7 @@ in {
                                       } else { inValueCh!(amount) } |
                                       for (@inValue <- inValueCh) {
                                         if (out <= 0 || out < minOut) {
-                                          poolState!(s) | ret2!((false, "output", inputPayment))
+                                          poolState!(s) | ret2!((false, "output", *inputPayment))
                                         } else {
                                           new admitCh in {
                                             poolTradeAdmit!(terms, inValue, poolValue, *admitCh) |
@@ -378,7 +378,7 @@ in {
                               }
                             }
                           }
-                          _ => { poolState!(s) | ret2!((false, "not this asset", inputPayment)) }
+                          _ => { poolState!(s) | ret2!((false, "not this asset", *inputPayment)) }
                         }
                       }
                     } } }
@@ -400,11 +400,11 @@ in {
             match rr {
               (rate, fresh) => {
                 if (active == false) {
-                  poolState!(s) | ret2!((false, "not active", basePayment, quotePayment))
+                  poolState!(s) | ret2!((false, "not active", *basePayment, *quotePayment))
                 }
                 else {
                   if (fresh == false || rate <= 0) {
-                    poolState!(s) | ret2!((false, "stale feed", basePayment, quotePayment))
+                    poolState!(s) | ret2!((false, "stale feed", *basePayment, *quotePayment))
                   } else {
                     new bAmtCh, qAmtCh in {
                       @baseIssuer!("getAmountOf", *basePayment, *bAmtCh) |
@@ -418,10 +418,10 @@ in {
                                                 baseAmt, quoteAmt, rate,
                                                 minShares, *ret2)
                               }
-                              _ => { poolState!(s) | ret2!((false, "not quote", basePayment, quotePayment)) }
+                              _ => { poolState!(s) | ret2!((false, "not quote", *basePayment, *quotePayment)) }
                             }
                           }
-                          _ => { poolState!(s) | ret2!((false, "not base", basePayment, quotePayment)) }
+                          _ => { poolState!(s) | ret2!((false, "not base", *basePayment, *quotePayment)) }
                         }
                       }
                     }
@@ -443,14 +443,14 @@ in {
               (true, shares) => {
                 if (shares <= 0 || s.get("totalShares") <= 0
                     || shares > s.get("totalShares")) {
-                  poolState!(s) | ret2!((false, "shares", lpPayment))
+                  poolState!(s) | ret2!((false, "shares", *lpPayment))
                 } else {
                   new bOut, qOut in {
                     bOut!(((s.get("rb") * shares) / s.get("totalShares")).toInt()) |
                     qOut!(((s.get("rq") * shares) / s.get("totalShares")).toInt()) |
                     for (@baseOut <- bOut; @quoteOut <- qOut) {
                       if (baseOut < minBase || quoteOut < minQuote) {
-                        poolState!(s) | ret2!((false, "minimum", lpPayment))
+                        poolState!(s) | ret2!((false, "minimum", *lpPayment))
                       } else {
                         new burnCh, bwCh, qwCh in {
                           @lpBurnFacet!("deposit", *lpPayment, *burnCh) |
@@ -488,7 +488,7 @@ in {
                   }
                 }
               }
-              _ => { poolState!(s) | ret2!((false, "not an LP payment", lpPayment)) }
+              _ => { poolState!(s) | ret2!((false, "not an LP payment", *lpPayment)) }
             }
           }
         }

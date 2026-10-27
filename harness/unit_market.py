@@ -27,7 +27,7 @@ import sign_payload  # noqa: E402
 from feed_refresh import feed_uri, set_price  # noqa: E402
 from minify_rho import minify  # noqa: E402
 from unit_feed import canonical  # noqa: E402
-from unit_v3 import call, check, one  # noqa: E402
+from unit_v3 import call, check, faucet_top_up, one  # noqa: E402
 
 KEYS = ROOT / ".devnet" / "keys.json"
 STATE = ROOT / ".devnet" / "v3-install.json"
@@ -77,6 +77,7 @@ def main() -> int:
     factory = state["market_factory_uri"]
     index = state["market_index_uri"]
     sponsor = keys["sponsor"]
+    faucet_top_up(keys["key18"]["address"])
     lock_until = node.height() + 20
 
     listed = one(call(currency_registry, "CurrencyRegistry",

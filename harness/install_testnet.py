@@ -364,8 +364,13 @@ class Installer:
 
         manifest = build_manifest(self.state)
         # The unit harnesses read the resolved URIs from the state file, as
-        # install_v3 writes them. Keep both outputs in the same shape.
+        # install_v3 writes them. Keep both outputs in the same shape, including
+        # the legacy per-step keys the older suites still use.
         self.state.update(manifest)
+        for step in ("05_amm_math", "06_collateral_math", "07_oracle_math", "08_claim_code"):
+            found = self.state.get("steps", {}).get(step, {}).get("uris") or []
+            if found:
+                self.state[f"{step}_uri"] = found[0]
         self.save()
         out = self.manifest_path
         out.parent.mkdir(parents=True, exist_ok=True)

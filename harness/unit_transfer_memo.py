@@ -26,12 +26,12 @@ sys.path.insert(0, str(ROOT / "harness"))
 
 import deploy as node  # noqa: E402
 from minify_rho import minify  # noqa: E402
-from unit_v3 import call, check, one  # noqa: E402
+from unit_v3 import call, check, faucet_top_up, one  # noqa: E402
 
 KEYS = ROOT / ".devnet" / "keys.json"
 STATE = ROOT / ".devnet" / "v3-install.json"
 SCENARIOS = ROOT / "harness" / "scenarios"
-FUND = 20_000_000
+FUND = 15_000_000
 AMOUNT = 5_000_000
 STIPEND = 1_000_000
 SECRET = b"memo-transfer-secret"
@@ -68,18 +68,7 @@ def main() -> int:
     recipient = keys["key21"]
 
     for name in ("key20", "key21"):
-        request = urllib.request.Request(
-            "http://localhost:40403/api/v1/faucet",
-            data=json.dumps({"address": keys[name]["address"]}).encode(),
-            headers={"content-type": "application/json"},
-            method="POST",
-        )
-        try:
-            with urllib.request.urlopen(request, timeout=10):
-                pass
-        except urllib.error.HTTPError:
-            pass
-        time.sleep(1.1)
+        faucet_top_up(keys[name]["address"])
 
     expiry = node.height() + 100
     recipient_native_before = native_balance(recipient["public"], keys["deployer"]["secret"])

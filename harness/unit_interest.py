@@ -25,7 +25,7 @@ sys.path.insert(0, str(ROOT / "harness"))
 import deploy as node  # noqa: E402
 from feed_refresh import feed_uri, set_price  # noqa: E402
 from minify_rho import minify  # noqa: E402
-from unit_v3 import call, one  # noqa: E402
+from unit_v3 import call, faucet_top_up, one  # noqa: E402
 import unit_v3 as uv  # noqa: E402
 uv.PHLO = 2_000_000
 
@@ -75,19 +75,7 @@ def main() -> int:
     name = os.environ.get("INTEREST_KEY", "key16")
     owner = keys[name]
     owner["name"] = name
-    for _ in range(6):
-        request = urllib.request.Request(
-            "http://localhost:40403/api/v1/faucet",
-            data=json.dumps({"address": owner["address"]}).encode(),
-            headers={"content-type": "application/json"},
-            method="POST",
-        )
-        try:
-            with urllib.request.urlopen(request, timeout=10):
-                pass
-        except urllib.error.HTTPError:
-            pass
-        time.sleep(1)
+    faucet_top_up(owner["address"])
 
     mint = render(
         "stablecoin_mint_hold",

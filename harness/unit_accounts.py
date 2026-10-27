@@ -53,6 +53,7 @@ def main() -> int:
         raise AssertionError("V4T is not listed; run make unit-stablecoin first")
 
     owner = keys["key14"]
+    faucet_top_up(owner["address"])
     owner_term = render_scenario("account_purse.rho", {
         "__ROOT_URI__": root,
         "__PUBKEY__": owner["public"],

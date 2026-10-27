@@ -61,6 +61,29 @@ def decode(value):
     return value
 
 
+def faucet_top_up(address: str) -> None:
+    """Drip 0.3 REV when the finalized balance is below one drip.
+
+    The faucet is idempotent below 30,000,000 drops; a suite that funds 15-20m
+    from a key needs the precharge reservation on top, so top up before it runs.
+    """
+    import time
+    import urllib.error
+    import urllib.request
+
+    request = urllib.request.Request(
+        "http://localhost:40403/api/v1/faucet",
+        data=json.dumps({"address": address}).encode(),
+        headers={"content-type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=10):
+            time.sleep(2.5)
+    except urllib.error.HTTPError:
+        pass
+
+
 def deploy_call(term: str, secret: str) -> list:
     # A deploy submitted immediately after the installer can see a stale balance:
     # the previous deploy's phlo refund lands one finalization late. Retry that

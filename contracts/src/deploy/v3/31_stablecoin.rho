@@ -198,7 +198,7 @@ in {
 
   // PSM sell commit: burn the stablecoin, pay the net REV, then update the
   // signed debt. The fee stays in the REV purse because only revOut leaves.
-  contract psmSellCommit(@amount, @revOut, @feeRev, @st, payment, revFacet, ret2) = {
+  contract psmSellCommit(@amount, @revOut, @feeRev, @st, @psmRevPurse, @revBrand, payment, revFacet, ret2) = {
     new bCh, wCh, depCh in {
       Stablecoin!("burn", *payment, amount, *psmBurnAuth, *bCh) |
       for (@b <- bCh) {
@@ -238,7 +238,7 @@ in {
 
   // PSM buy commit: deposit the full REV, mint only the net stablecoin, then
   // update the signed debt. The fee is retained as extra REV backing.
-  contract psmBuyCommit(@stableOut, @fee, @st, payment, stableFacet, ret2) = {
+  contract psmBuyCommit(@stableOut, @fee, @st, @psmRevPurse, payment, stableFacet, ret2) = {
     new dCh, mCh, depCh in {
       @psmRevPurse!("deposit", *payment, *dCh) |
       for (@d <- dCh) {
@@ -277,8 +277,8 @@ in {
   } |
 
   // Canonical params values in the v2 order, from a params map.
-  contract paramsValues(@p, ret2) = {
-    ret2!([currency,
+  contract paramsValues(@cur, @p, ret2) = {
+    ret2!([cur,
            p.get("mcrBps").toString(),
            p.get("bonusBps").toString(),
            p.get("closeFactorBps").toString(),
@@ -337,7 +337,7 @@ in {
   // clear the vault and totals. A rev mismatch after cover fails the deploy so
   // the cover burn and the vault write roll back together.
   contract vaultWriteOff(@s2, @v2, @ownerId, @now2, @accrued, @amount, @seized,
-                         paymentOut, ret2) = {
+                         @paymentOut, ret2) = {
     new coverCh, nsCh in {
       SurplusBuffer!("cover", accrued - amount, *bufferCoverAuth, *coverCh) |
       for (@cv <- coverCh) {
@@ -516,7 +516,7 @@ in {
   // deploy so the vault update rolls back.
   contract vaultMintCommit(@s, @v, @ownerId, @now2, @accrued, @amount, ret2) = {
     new payCh, nsCh in {
-      for (@s2 <- vaultState; @b2 <- bufferState) {
+      for (@s2 <- vaultState; @b2 <<- bufferState) {
         match s2.get("vaults").get(ownerId) {
           Nil => { ret2!(1 / 0) }
           v2 => {
@@ -611,7 +611,7 @@ in {
           if (s.get("totalPrincipal") + amount > s.get("maxSupply")) {
             ret2!((false, "max supply"))
           } else {
-            for (@s2 <- issuerState; @b2 <- bufferState) {
+            for (@s2 <- issuerState; @b2 <<- bufferState) {
               if (s2.get("totalPrincipal") != s.get("totalPrincipal")) {
                 issuerState!(s2) | ret2!((false, "changed"))
               } else {
@@ -838,7 +838,7 @@ in {
         for (@bz <- bzCh) {
           match bz {
             (true, Nil) => {
-              paramsValues!(newParams, *pvCh) |
+              paramsValues!(currency, newParams, *pvCh) |
               for (@values <- pvCh) {
                 vaultCodec!(*codecCh) |
                 for (Codec <- codecCh) {
@@ -876,7 +876,7 @@ in {
             (true, action, argsHash, args) => {
               if (action != "setRiskParams") { ret2!((false, "action")) }
               else {
-                paramsValues!(args, *pvCh) |
+                paramsValues!(currency, args, *pvCh) |
                 for (@values <- pvCh) {
                   vaultCodec!(*codecCh) |
                   for (Codec <- codecCh) {
@@ -975,7 +975,7 @@ in {
   } |
 
   contract VaultBook(@"deposit", @ownerId, @auth, payment, ret2) = {
-    for (@s <<- vaultState; @ps <- paramsState) {
+    for (@s <<- vaultState; @ps <<- paramsState) {
       match s.get("vaults").get(ownerId) {
         Nil => { ret2!((false, "no vault")) }
         v => {
@@ -1039,7 +1039,7 @@ in {
   contract VaultBook(@"mint", @ownerId, @auth, @amount, ret2) = {
     if (amount <= 0) { ret2!((false, "amount")) }
     else {
-      for (@s <<- vaultState; @ps <- paramsState) {
+      for (@s <<- vaultState; @ps <<- paramsState) {
         if (s.get("paused")) { ret2!((false, "paused")) }
         else {
           match s.get("vaults").get(ownerId) {
@@ -1103,7 +1103,7 @@ in {
   contract VaultBook(@"withdraw", @ownerId, @auth, @amount, ret2) = {
     if (amount <= 0) { ret2!((false, "amount")) }
     else {
-      for (@s <<- vaultState; @ps <- paramsState) {
+      for (@s <<- vaultState; @ps <<- paramsState) {
         match s.get("vaults").get(ownerId) {
           Nil => { ret2!((false, "no vault")) }
           v => {
@@ -1185,14 +1185,14 @@ in {
   } |
 
   contract VaultBook(@"repay", @ownerId, @auth, payment, ret2) = {
-    for (@s <<- vaultState; @ps <- paramsState) {
+    for (@s <<- vaultState; @ps <<- paramsState) {
       match s.get("vaults").get(ownerId) {
         Nil => { ret2!((false, "no vault")) }
         v => {
           if (v.get("auth") != auth) { ret2!((false, "bad vault auth")) }
           else {
             new amtCh, nowCh2, accCh, mathCh in {
-              Stablecoin!("amountOf", payment, *amtCh) |
+              Stablecoin!("amountOf", *payment, *amtCh) |
               for (@a <- amtCh) {
                 match a {
                   (true, amount) => {
@@ -1256,7 +1256,7 @@ in {
             (true, amount) => {
               if (amount <= 0) { ret2!((false, "amount", *payment)) }
               else {
-                for (@s <<- vaultState; @ps <- paramsState) {
+                for (@s <<- vaultState; @ps <<- paramsState) {
                   match s.get("vaults").get(ownerId) {
                     Nil => { ret2!((false, "no vault", *payment)) }
                     v => {
@@ -1339,7 +1339,7 @@ in {
   } |
 
   contract VaultBook(@"vault", @ownerId, ret2) = {
-    for (@s <<- vaultState; @ps <- paramsState) {
+    for (@s <<- vaultState; @ps <<- paramsState) {
       match s.get("vaults").get(ownerId) {
         Nil => { ret2!((false, "no vault")) }
         v => {
@@ -1385,7 +1385,7 @@ in {
   } |
 
   contract VaultBook(@"totals", ret2) = {
-    for (@s <<- vaultState; @p <- psmState; @b <- bufferState) {
+    for (@s <<- vaultState; @p <<- psmState; @b <<- bufferState) {
       ret2!((true, {
         "totalDebt": s.get("totalDebt"),
         "totalAccruedInterest": s.get("totalAccruedInterest"),
@@ -1640,7 +1640,7 @@ in {
             if (move <= 0) { bufferState!(s) | ret2!((true, 0, s.get("surplus"))) }
             else {
               new ssCh in {
-                for (@ss <- savingsState) {
+                for (@ss <<- savingsState) {
                   if (ss.get("totalShares") <= 0) {
                     bufferState!(s) | ret2!((true, 0, s.get("surplus")))
                   } else {
@@ -1803,7 +1803,7 @@ in {
       for (@a <- amtCh) {
         match a {
           (true, amount) => {
-            for (@ps <<- paramsState; @st <- psmState) {
+            for (@ps <<- paramsState; @st <<- psmState) {
               vaultPrice!(currency, ps.get("params").get("maxOracleAge"), *rateCh) |
               for (@rr <- rateCh) {
                 match rr {
@@ -1828,7 +1828,7 @@ in {
                                         ret2!((false, "buffer", *payment))
                                       } else {
                                         psmSellCommit!(amount, revOut, feeRev, st,
-                                                       *payment, revFacet, *ret2)
+                                                       psmRevPurse, revBrand, *payment, *revFacet, *ret2)
                                       }
                                     }
                                   }
@@ -1857,7 +1857,7 @@ in {
       for (@a <- amtCh) {
         match a {
           (true, amount) => {
-            for (@ps <<- paramsState; @st <- psmState; @vs <- vaultState) {
+            for (@ps <<- paramsState; @st <<- psmState; @vs <<- vaultState) {
               if (vs.get("paused")) {
                 ret2!((false, "paused", *payment))
               } else {
@@ -1880,8 +1880,8 @@ in {
                                   if (st.get("stableDebt") + stableOut > st.get("ceiling")) {
                                     ret2!((false, "ceiling", *payment))
                                   } else {
-                                    psmBuyCommit!(stableOut, fee, st, *payment,
-                                                  stableFacet, *ret2)
+                                    psmBuyCommit!(stableOut, fee, st, psmRevPurse, *payment,
+                                                  *stableFacet, *ret2)
                                   }
                                 }
                               }

@@ -26,7 +26,7 @@ sys.path.insert(0, str(ROOT / "harness"))
 import deploy as node  # noqa: E402
 from feed_refresh import feed_uri, set_price  # noqa: E402
 from minify_rho import minify  # noqa: E402
-from unit_v3 import call, check, one  # noqa: E402
+from unit_v3 import call, check, faucet_top_up, one  # noqa: E402
 
 KEYS = ROOT / ".devnet" / "keys.json"
 STATE = ROOT / ".devnet" / "v3-install.json"
@@ -81,18 +81,7 @@ def main() -> int:
     vault, psm, stablecoin = entry["vaultUri"], entry["psmUri"], entry["stablecoinUri"]
 
     actor = keys["key14"]
-    request = urllib.request.Request(
-        "http://localhost:40403/api/v1/faucet",
-        data=json.dumps({"address": actor["address"]}).encode(),
-        headers={"content-type": "application/json"},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=10):
-            pass
-    except urllib.error.HTTPError:
-        pass
-    time.sleep(1.1)
+    faucet_top_up(actor["address"])
 
     start = psm_info(psm, deployer)
     check("psm fee from params", start["feeBps"], FEE_BPS)
@@ -106,8 +95,8 @@ def main() -> int:
 
     sell_empty = render("stablecoin_psm_sell_only", {
         "__ROOT_URI__": root, "__VAULT_URI__": vault, "__PSM_URI__": psm,
-        "__PUBKEY__": actor["public"], "__FUND__": "20000000",
-        "__COLLATERAL__": "10000000", "__MINT__": str(MINT), "__MIN_REV__": "0",
+        "__PUBKEY__": actor["public"], "__FUND__": "15000000",
+        "__COLLATERAL__": "8000000", "__MINT__": str(MINT), "__MIN_REV__": "0",
     })
     refused = one(sell_empty, actor["secret"])
     check("empty buffer redemption refused", refused[0], False)
@@ -141,8 +130,8 @@ def main() -> int:
     debt_before_sell = after_buy["stableDebt"]
     sell = render("stablecoin_psm_sell_only", {
         "__ROOT_URI__": root, "__VAULT_URI__": vault, "__PSM_URI__": psm,
-        "__PUBKEY__": actor["public"], "__FUND__": "20000000",
-        "__COLLATERAL__": "10000000", "__MINT__": str(MINT), "__MIN_REV__": "0",
+        "__PUBKEY__": actor["public"], "__FUND__": "15000000",
+        "__COLLATERAL__": "8000000", "__MINT__": str(MINT), "__MIN_REV__": "0",
     })
     rev_out, fee_rev = one(sell, actor["secret"])
     gross_rev = MINT * 100_000_000 // RATE

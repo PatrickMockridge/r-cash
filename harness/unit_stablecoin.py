@@ -24,7 +24,7 @@ from install_v3 import render  # noqa: E402
 from feed_refresh import feed_uri, set_price  # noqa: E402
 from unit_feed import blake2b256, canonical  # noqa: E402
 from minify_rho import minify  # noqa: E402
-from unit_v3 import call, check, decode, one  # noqa: E402
+from unit_v3 import call, check, decode, faucet_top_up, one  # noqa: E402
 
 KEYS = ROOT / ".devnet" / "keys.json"
 STATE = ROOT / ".devnet" / "v3-install.json"
@@ -54,6 +54,8 @@ def main() -> int:
         state["stablecoin_directory_uri"] = steps["currency_registry"]["uris"][0]
     root = state["root_uri"]
     secret = keys["deployer"]["secret"]
+    for name in ("key12", "key13", "key14"):
+        faucet_top_up(keys[name]["address"])
     sponsor = keys["sponsor"]["public"]
     currency = "V4T"
     params = ('{"mcrBps": 20000, "bonusBps": 800, "closeFactorBps": 5000, '
@@ -211,8 +213,8 @@ def main() -> int:
         "__VAULT_URI__": vault_uri,
         "__SAVINGS_URI__": savings_uri,
         "__PUBKEY__": keys["key13"]["public"],
-        "__FUND__": "20000000",
-        "__COLLATERAL__": "10000000",
+        "__FUND__": "15000000",
+        "__COLLATERAL__": "8000000",
         "__MINT__": "100000000",
     }.items():
         savings_text = savings_text.replace(key, value)
@@ -230,10 +232,10 @@ def main() -> int:
         "__VAULT_URI__": vault_uri,
         "__PSM_URI__": psm_uri,
         "__PUBKEY__": keys["key14"]["public"],
-        "__FUND__": "20000000",
-        "__COLLATERAL__": "10000000",
+        "__FUND__": "15000000",
+        "__COLLATERAL__": "8000000",
         "__MINT__": "100000000",
-        "__PSM_REV__": "10000000",
+        "__PSM_REV__": "5000000",
     }.items():
         psm_text = psm_text.replace(key, value)
     psm_result = one(minify(psm_text), keys["key14"]["secret"])
@@ -246,8 +248,8 @@ def main() -> int:
         "__ROOT_URI__": root,
         "__VAULT_URI__": vault_uri,
         "__PUBKEY__": sender_pub,
-        "__FUND__": "20000000",
-        "__COLLATERAL__": "10000000",
+        "__FUND__": "15000000",
+        "__COLLATERAL__": "8000000",
         "__MINT__": "100000000",
     }.items():
         ops_text = ops_text.replace(key, value)

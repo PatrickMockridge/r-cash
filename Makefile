@@ -60,9 +60,13 @@ install-v3: build
 	$(PY) harness/install_v3.py
 
 # The chain-aware installer used for fresh campaigns (signed-read verification).
+# The defaults point at the public-testnet key/state paths, so the devnet run must
+# pass every path explicitly.
 install: build
 	$(PY) harness/install_testnet.py --node http://localhost:40403 \
-	  --state .devnet/v3-install.json --manifest deployments/devnet-v4.json --fresh
+	  --keys .devnet/keys.json --admin-keys .devnet/keys.json \
+	  --ops .devnet/ops --state .devnet/v3-install.json \
+	  --manifest deployments/devnet-v4.json --fresh
 
 # Bootstrap the demo system and market through the acceptance suites; systems are
 # discovered by clients through ListingViews, so no separate systems manifest is

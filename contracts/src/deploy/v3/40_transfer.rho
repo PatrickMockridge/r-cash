@@ -7,7 +7,7 @@
 new
   TransferBook, bookParamsState,
   TransferContract,
-  transferNow, bookAmount,
+  transferNow, bookAmount, bookSendCheck,
   rl(`rho:registry:lookup`),
   rs(`rho:registry:insertArbitrary`),
   revAddress(`rho:rev:address`),

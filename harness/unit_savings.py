@@ -27,7 +27,7 @@ sys.path.insert(0, str(ROOT / "harness"))
 import deploy as node  # noqa: E402
 from feed_refresh import feed_uri, set_price  # noqa: E402
 from minify_rho import minify  # noqa: E402
-from unit_v3 import call, check, one  # noqa: E402
+from unit_v3 import call, check, faucet_top_up, one  # noqa: E402
 
 KEYS = ROOT / ".devnet" / "keys.json"
 STATE = ROOT / ".devnet" / "v3-install.json"
@@ -77,27 +77,16 @@ def main() -> int:
 
     saver = keys["key13"]
     borrower = keys["key16"]
-    for name in ("key13", "key16"):
-        request = urllib.request.Request(
-            "http://localhost:40403/api/v1/faucet",
-            data=json.dumps({"address": keys[name]["address"]}).encode(),
-            headers={"content-type": "application/json"},
-            method="POST",
-        )
-        try:
-            with urllib.request.urlopen(request, timeout=10):
-                pass
-        except urllib.error.HTTPError:
-            pass
-        time.sleep(1.1)
+    for key in (saver, borrower):
+        faucet_top_up(key["address"])
 
     hold = render("stablecoin_savings_hold", {
         "__ROOT_URI__": root,
         "__VAULT_URI__": vault,
         "__SAVINGS_URI__": savings,
         "__PUBKEY__": saver["public"],
-        "__FUND__": "20000000",
-        "__COLLATERAL__": "10000000",
+        "__FUND__": "15000000",
+        "__COLLATERAL__": "8000000",
         "__MINT__": str(MINT),
     })
     owner_id, shares = one(hold, saver["secret"])
@@ -110,8 +99,8 @@ def main() -> int:
         "__ROOT_URI__": root,
         "__VAULT_URI__": vault,
         "__PUBKEY__": borrower["public"],
-        "__FUND__": "20000000",
-        "__COLLATERAL__": "10000000",
+        "__FUND__": "15000000",
+        "__COLLATERAL__": "8000000",
         "__MINT__": str(MINT),
     })
     debt = one(mint, borrower["secret"])[2]

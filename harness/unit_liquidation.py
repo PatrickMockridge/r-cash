@@ -29,7 +29,7 @@ from install_v3 import render  # noqa: E402
 from unit_feed import blake2b256, canonical  # noqa: E402
 from minify_rho import minify  # noqa: E402
 from unit_stablecoin import deploy_system  # noqa: E402
-from unit_v3 import call, check, one  # noqa: E402
+from unit_v3 import call, check, faucet_top_up, one  # noqa: E402
 
 KEYS = ROOT / ".devnet" / "keys.json"
 STATE = ROOT / ".devnet" / "v3-install.json"
@@ -116,6 +116,8 @@ def main() -> int:
     root = state["root_uri"]
     registry = state["oracle_registry_uri"]
     secret = keys["deployer"]["secret"]
+    for name in ("key13", "key20"):
+        faucet_top_up(keys[name]["address"])
     sponsor = keys["sponsor"]["public"]
     params = ('{"mcrBps": 20000, "bonusBps": 800, "closeFactorBps": 5000, '
               '"ratePerBlock": 3171, "debtCeiling": 10000000000000, '
@@ -166,18 +168,6 @@ def main() -> int:
     # A second, healthy vault stays open through the write-off so the mint halt and
     # the buffer waterfall can be exercised without creating more debt.
     recap = keys["key20"]
-    request = urllib.request.Request(
-        "http://localhost:40403/api/v1/faucet",
-        data=json.dumps({"address": recap["address"]}).encode(),
-        headers={"content-type": "application/json"},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=10):
-            pass
-    except urllib.error.HTTPError:
-        pass
-    time.sleep(1.1)
     recap_mint = render_scenario("stablecoin_mint_hold.rho", {
         "__ROOT_URI__": root,
         "__VAULT_URI__": vault_uri,
