@@ -100,14 +100,14 @@ in {
 
   contract boundsTerms(@terms, @values, ret) = {
     new keysCh in {
-      keysCh!(["marketId", "base", "quote", "version",
+      keysCh!(["marketId", "slug", "base", "quote", "version",
                "sponsorPubKey", "sponsorOwnerId",
                "baseFeedPolicyHash", "quoteFeedPolicyHash", "baseSpreadBps",
                "skewSpreadBps", "maxTradeBps", "minLiquidity",
                "firstDepositToleranceBps", "depthFloorQuote", "minTicketQuote",
                "seedBase", "seedQuote", "seedInitialShares",
                "lockBeneficiaryPubKey", "lockMinBlocks", "lockUntilHeight",
-               "maxPairAgeBlocks"]) |
+               "bookDefaultExpiryBlocks", "bookMaxExpiryBlocks", "maxPairAgeBlocks"]) |
       for (@keys <- keysCh) {
         if (values.length() != keys.length()) { ret!((false, "terms fields")) }
         else {

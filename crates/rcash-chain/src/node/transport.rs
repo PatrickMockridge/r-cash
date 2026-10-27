@@ -120,8 +120,6 @@ impl Transport for WasmTransport {
         let retry_after = response
             .headers()
             .get("retry-after")
-            .ok()
-            .flatten()
             .and_then(|value| value.trim().parse().ok());
         let body = response
             .text()
