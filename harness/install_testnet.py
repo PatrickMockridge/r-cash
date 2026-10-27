@@ -111,6 +111,7 @@ class Installer:
         ops_path: Path = OPS,
         admin_keys_path: Path = DEVNET_KEYS,
         manifest_path: Path | None = None,
+        min_lock_blocks: str = "302400",
     ):
         if any(hint in node_url for hint in LIVE_HINTS) and not allow_live:
             raise SystemExit(
@@ -123,6 +124,7 @@ class Installer:
         self.state_path = state_path
         self.ops_path = ops_path
         self.manifest_path = manifest_path or (ROOT / "deployments" / "testnet-v4.json")
+        self.min_lock_blocks = min_lock_blocks
         self.keys = json.loads(keys_path.read_text())
         self.deployer = self.keys["deployer"]
         self.devnet = json.loads(admin_keys_path.read_text())
@@ -353,7 +355,7 @@ class Installer:
         self.step(
             "50_market", "testnet:market",
             {"__ROOT_URI__": self.root_uri, "__ASSET_RESOLVER_URI__": resolver[0],
-             "__MIN_LOCK_BLOCKS__": "302400"},
+             "__MIN_LOCK_BLOCKS__": self.min_lock_blocks},
             STEP_KEYS["market"], tip,
         )
         self.step(
@@ -451,11 +453,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--ops", type=Path, default=OPS)
     ap.add_argument("--admin-keys", type=Path, default=DEVNET_KEYS)
     ap.add_argument("--manifest", type=Path, default=None)
+    ap.add_argument("--min-lock-blocks", default="302400")
     args = ap.parse_args(argv)
     try:
         return Installer(
             args.node, args.allow_live, args.keys, args.state, args.ops,
-            args.admin_keys, args.manifest,
+            args.admin_keys, args.manifest, args.min_lock_blocks,
         ).run(args.fresh)
     except Refused as error:
         print(f"REFUSED node detail={error}", file=sys.stderr)

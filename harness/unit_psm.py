@@ -89,7 +89,7 @@ def main() -> int:
     # A tiny buffer cannot cover a redemption: refuse and return the payment.
     fund1 = render("stablecoin_psm_fund", {"__ROOT_URI__": root, "__PSM_URI__": psm,
                                            "__PSM_REV__": "1000000"})
-    check("fund small buffer", one(fund1, actor["secret"])[0], 1_000_000)
+    check("fund small buffer", one(fund1, actor["secret"]), (True, 1_000_000))
     small = psm_info(psm, deployer)
     check("small buffer balance", small["revBalance"], 1_000_000)
 

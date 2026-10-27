@@ -1,4 +1,5 @@
 // Withdraw the held stablecoin and repay the vault in a later block.
+// Asset placeholder: __ASSET__.
 // Returns [debt].
 // Placeholders: __ROOT_URI__, __VAULT_URI__, __PUBKEY__, __AMOUNT__.
 new
@@ -18,7 +19,7 @@ in {
           for (@z <- zCh) {
             match z {
               (true, auth) => {
-                @account!("withdraw", *deployerId, "V4T", __AMOUNT__, *wdCh) |
+                @account!("withdraw", *deployerId, "__ASSET__", __AMOUNT__, *wdCh) |
                 for (@w <- wdCh) {
                   match w {
                     (true, payment) => {

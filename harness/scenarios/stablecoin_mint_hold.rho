@@ -1,9 +1,12 @@
 // Open a vault, deposit REV, mint the stablecoin and leave it in the account.
-// Returns [debt].
+// Asset placeholder: __ASSET__.
+// Returns [holderUri, ownerId, debt].
 // Placeholders: __ROOT_URI__, __VAULT_URI__, __PUBKEY__, __FUND__,
 //               __COLLATERAL__, __MINT__.
 new
-  rl(`rho:registry:lookup`), rootCh, afCh, ac, vc, oCh, zCh, depCh, mintCh, acctCh,
+  Holder, holderUriCh,
+  rl(`rho:registry:lookup`), rs(`rho:registry:insertArbitrary`),
+  rootCh, afCh, ac, vc, oCh, zCh, depCh, mintCh, acctCh,
   ertpCh, revIssuerCh, purseCh, fundCh, wdCh,
   deployId(`rho:rchain:deployId`),
   deployerId(`rho:rchain:deployerId`)
@@ -16,6 +19,9 @@ in {
       for (AccountFactory <- ac) {
         AccountFactory!("getOrCreate", "__PUBKEY__".hexToBytes(), *oCh) |
         for (@(true, account, ownerId) <- oCh) {
+          contract Holder(@"take", @amount, ret) = {
+            @account!("withdraw", *deployerId, "__ASSET__", amount, *ret)
+          } |
           @account!("vaultOpen", *deployerId, `__VAULT_URI__`, *zCh) |
           for (@z <- zCh) {
             match z {
@@ -36,10 +42,15 @@ in {
                               for (@m <- mintCh) {
                                 match m {
                                   (true, stablePayment, debt) => {
-                                    @account!("deposit", *deployerId, "V4T", stablePayment, *acctCh) |
+                                    @account!("deposit", *deployerId, "__ASSET__", stablePayment, *acctCh) |
                                     for (@ad <- acctCh) {
                                       match ad {
-                                        (true, _) => deployId!([account, ownerId, debt])
+                                        (true, _) => {
+                                          rs!(bundle+{*Holder}, *holderUriCh) |
+                                          for (@uri <- holderUriCh) {
+                                            deployId!([uri, ownerId, debt])
+                                          }
+                                        }
                                         _ => deployId!(ad)
                                       }
                                     }

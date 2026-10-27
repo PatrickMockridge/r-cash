@@ -66,7 +66,7 @@ install: build
 	$(PY) harness/install_testnet.py --node http://localhost:40403 \
 	  --keys .devnet/keys.json --admin-keys .devnet/keys.json \
 	  --ops .devnet/ops --state .devnet/v3-install.json \
-	  --manifest deployments/devnet-v4.json --fresh
+	  --manifest deployments/devnet-v4.json --min-lock-blocks 10 --fresh
 
 # Bootstrap the demo system and market through the acceptance suites; systems are
 # discovered by clients through ListingViews, so no separate systems manifest is

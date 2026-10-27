@@ -79,7 +79,7 @@ def faucet_top_up(address: str) -> None:
     )
     try:
         with urllib.request.urlopen(request, timeout=10):
-            time.sleep(2.5)
+            time.sleep(6.0)
     except urllib.error.HTTPError:
         pass
 
@@ -141,6 +141,7 @@ def main() -> int:
     keys = json.loads(KEYS.read_text())
     secret = keys["deployer"]["secret"]
     root = state["root_uri"]
+    faucet_top_up(keys["reporter1"]["address"])
 
     check(
         "Root.resolve clock",

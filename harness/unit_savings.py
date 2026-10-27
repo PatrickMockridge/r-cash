@@ -76,7 +76,7 @@ def main() -> int:
     buffer = entry["bufferUri"]
 
     saver = keys["key13"]
-    borrower = keys["key16"]
+    borrower = keys["key17"]
     for key in (saver, borrower):
         faucet_top_up(key["address"])
 
@@ -88,6 +88,7 @@ def main() -> int:
         "__FUND__": "15000000",
         "__COLLATERAL__": "8000000",
         "__MINT__": str(MINT),
+        "__ASSET__": "V4T",
     })
     owner_id, shares = one(hold, saver["secret"])
     check("savings first deposit shares", shares, MINT)
@@ -102,6 +103,7 @@ def main() -> int:
         "__FUND__": "15000000",
         "__COLLATERAL__": "8000000",
         "__MINT__": str(MINT),
+        "__ASSET__": "V4T",
     })
     debt = one(mint, borrower["secret"])[2]
     check("borrower debt", debt, MINT)
@@ -118,6 +120,7 @@ def main() -> int:
         "__VAULT_URI__": vault,
         "__PUBKEY__": borrower["public"],
         "__AMOUNT__": str(REPAY),
+        "__ASSET__": "V4T",
     })
     summary = one(repay, borrower["secret"])[0]
     check("repay interest paid", summary["interestPaid"] > 0, True)

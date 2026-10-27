@@ -126,13 +126,13 @@ def main() -> int:
                        f'RiskParameters!("applyParams", {nonce_risk}, *r) | '
                        "for (@x <- r) { deployId!(x) }"), deployer)
     check("risk applied", applied[0], True)
-    check("risk current hash", applied[1]["currentHash"], expected_hash)
+    check("risk current hash", applied[1]["currentHash"].hex(), expected_hash)
 
     after = one(call(params_uri, "RiskParameters",
                      'RiskParameters!("info", *r) | for (@x <- r) { deployId!(x) }'),
                 deployer)[1]
     check("genesis hash preserved", after["paramsHash"], genesis_hash)
-    check("current hash moved", after["currentHash"], expected_hash)
+    check("current hash moved", after["currentHash"].hex(), expected_hash)
     check("mcr updated", after["params"]["mcrBps"], 21000)
     check("savings share updated in params", after["params"]["savingsShareBps"], 6000)
     check("psm fee updated in params", after["params"]["psmFeeBps"], 20)

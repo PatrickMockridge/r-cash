@@ -86,6 +86,7 @@ def main() -> int:
             "__FUND__": "20000000",
             "__COLLATERAL__": "10000000",
             "__MINT__": str(MINT),
+            "__ASSET__": "V4T",
         },
     )
     debt = one(mint, owner["secret"])[2]
@@ -102,6 +103,7 @@ def main() -> int:
             "__VAULT_URI__": vault,
             "__PUBKEY__": owner["public"],
             "__AMOUNT__": str(REPAY),
+            "__ASSET__": "V4T",
         },
     )
     repaid = one(repay, owner["secret"])[0]

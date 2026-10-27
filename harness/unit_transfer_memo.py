@@ -50,14 +50,14 @@ def digest(secret: bytes) -> str:
 
 def native_balance(pub: str, secret: str) -> int:
     term = render("native_rev_balance", {"__PUBKEY__": pub})
-    return one(term, secret)
+    return one(term, secret)[0]
 
 
 def account_balance(pub: str, root: str, secret: str) -> int:
     term = render("account_balance", {
         "__ROOT_URI__": root, "__PUBKEY__": pub, "__ASSET__": "REV",
     })
-    return one(term, secret)[1]
+    return one(term, secret)[0][1]
 
 
 def main() -> int:

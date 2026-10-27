@@ -103,7 +103,7 @@ def main() -> int:
     early_refuse = render_scenario("transfer_refuse.rho", {
         "__ROOT_URI__": root,
         "__OWN_PUB__": foreign["public"],
-        "__TRANSFER_URI__": uri_a,
+        "__TRANSFER_URI__": uri_b,
         "__WRONG_SECRET__": WRONG_SECRET.hex(),
     })
     wrong_secret, foreign_early = one(early_refuse, foreign["secret"])

@@ -52,9 +52,12 @@ def render_scenario(name: str, values: dict) -> str:
 
 
 def vault_view(keys: dict, vault_uri: str, owner_id: str) -> dict:
-    return one(call(vault_uri, "VaultBook",
-                    f'VaultBook!("vault", "{owner_id}", *r) | '
-                    "for (@x <- r) { deployId!(x) }"), keys["deployer"]["secret"])[1]
+    reply = one(call(vault_uri, "VaultBook",
+                     f'VaultBook!("vault", "{owner_id}", *r) | '
+                     "for (@x <- r) { deployId!(x) }"), keys["deployer"]["secret"])
+    if not (isinstance(reply, tuple) and reply and reply[0] is True):
+        print("vault_view refusal", reply, "owner", owner_id)
+    return reply[1]
 
 
 def totals(keys: dict, vault_uri: str) -> dict:
@@ -149,6 +152,32 @@ def main() -> int:
     set_price(keys, quote_feed, CURRENCY, QUOTE_PRICE)
     set_price(keys, rev_feed, "REV", REV_HIGH)
 
+    # The account resolves an asset through CurrencyRegistry, so the isolated
+    # system must be listed before its stablecoin can be held in an account.
+    registry_uri = state["currency_registry_uri"]
+    listing = (f"rcash:currency-register:v3|{CURRENCY}|{sc_uri}|{custody_uri}|"
+               f"{params_uri}|{vault_uri}|{liq_uri}|{savings_uri}|{psm_uri}|"
+               f"{buffer_uri}|{params_hash}|{sponsor}")
+    listing_sig = sign_payload.sign_payload(keys["sponsor"]["secret"],
+                                            listing.encode())["signature"]
+    register_body = (
+        f'CurrencyRegistry!("register", "{CURRENCY}", "{sc_uri}", "{custody_uri}", '
+        f'"{params_uri}", "{vault_uri}", "{liq_uri}", "{savings_uri}", "{psm_uri}", '
+        f'"{buffer_uri}", "{params_hash}", "{sponsor}", '
+        f'"{listing_sig}".hexToBytes(), *r) |\n'
+        "  for (@x <- r) {\n"
+        "    match x {\n"
+        '      (true, entry) => deployId!([true, entry])\n'
+        "      (false, why) => deployId!([false, why])\n"
+        "      _ => deployId!(x)\n"
+        "    }\n"
+        "  }"
+    )
+    listed = one(call(registry_uri, "CurrencyRegistry", register_body), secret)
+    if listed[0] is not True:
+        print(f"{CURRENCY} register refused (reused chain):", listed)
+    check(f"{CURRENCY} listed", listed[0] is True or "exist" in str(listed[1]).lower(), True)
+
     owner_key = keys["key13"]["public"]
     mint_term = render_scenario("stablecoin_mint_hold.rho", {
         "__ROOT_URI__": root,
@@ -158,8 +187,9 @@ def main() -> int:
         "__FUND__": "20000000",
         "__COLLATERAL__": str(COLLATERAL),
         "__MINT__": str(MINT),
+        "__ASSET__": CURRENCY,
     })
-    holder, owner_id = one(mint_term, keys["key13"]["secret"])
+    holder, owner_id, _ = one(mint_term, keys["key13"]["secret"])
     view = vault_view(keys, vault_uri, owner_id)
     check("minted debt", view["debt"] >= MINT, True)
     check("collateral", view["collateral"], COLLATERAL)
@@ -175,6 +205,7 @@ def main() -> int:
         "__FUND__": "20000000",
         "__COLLATERAL__": "10000000",
         "__MINT__": "1000000",
+        "__ASSET__": CURRENCY,
     })
     _, recap_owner, _ = one(recap_mint, recap["secret"])
 
@@ -220,6 +251,7 @@ def main() -> int:
         "__VAULT_URI__": vault_uri,
         "__PUBKEY__": recap["public"],
         "__MINT__": "1000000",
+        "__ASSET__": CURRENCY,
     }), recap["secret"])
     check("mint halted on uncovered bad debt", halt[0], (False, "recapitalise"))
 
@@ -231,6 +263,7 @@ def main() -> int:
         "__VAULT_URI__": vault_uri,
         "__PUBKEY__": recap["public"],
         "__AMOUNT__": "20000",
+        "__ASSET__": CURRENCY,
     }), recap["secret"])[0]
     check("interest-only repay has no principal", repaid["principalPaid"], 0)
     check("interest-only repay pays interest", repaid["interestPaid"], 20000)
