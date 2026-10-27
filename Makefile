@@ -4,7 +4,7 @@ PY := $(VENV)/bin/python
 RHOLO_DIR ?= $(or $(RCHAIN_RUST_DIR),../rholo)
 export RHOLO_DIR
 
-.PHONY: venv image devnet down status keys build probes deploy logs clean demo client-test web-build check-languages test-wasm measure measure-check check-arch check-captures spec-check tla-check install-v3 unit-v3 unit-feed unit-hub unit-stablecoin unit-liquidation unit-accounts unit-transfer unit-market unit-all
+.PHONY: venv image devnet down status keys build probes deploy logs clean demo client-test web-build check-languages test-wasm measure measure-check check-arch check-captures spec-check tla-check install-v3 unit-v3 unit-feed unit-hub unit-stablecoin unit-liquidation unit-interest unit-accounts unit-transfer unit-market unit-all
 
 venv:
 	python3 -m venv $(VENV)
@@ -74,6 +74,9 @@ unit-stablecoin:
 unit-liquidation:
 	$(VENV)/bin/python harness/unit_liquidation.py
 
+unit-interest:
+	$(PY) harness/unit_interest.py
+
 unit-accounts:
 	$(VENV)/bin/python harness/unit_accounts.py
 
@@ -83,7 +86,7 @@ unit-transfer:
 unit-market:
 	$(VENV)/bin/python harness/unit_market.py
 
-unit-all: unit-v3 unit-feed unit-hub unit-stablecoin unit-liquidation unit-accounts unit-transfer unit-market
+unit-all: unit-v3 unit-feed unit-hub unit-stablecoin unit-liquidation unit-interest unit-accounts unit-transfer unit-market
 
 probes: build
 	$(PY) harness/rcash.py probes

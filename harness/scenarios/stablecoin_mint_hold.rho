@@ -1,21 +1,15 @@
-// Mint stablecoin against REV and park it in a holder purse for a later deploy.
-// The holder is registered so a liquidation deploy can take a payment from it.
-// Placeholders: __ROOT_URI__, __SC_URI__, __VAULT_URI__, __PUBKEY__,
-//               __FUND__, __COLLATERAL__, __MINT__.
+// Open a vault, deposit REV, mint the stablecoin and leave it in the account.
+// Returns [debt].
+// Placeholders: __ROOT_URI__, __VAULT_URI__, __PUBKEY__, __FUND__,
+//               __COLLATERAL__, __MINT__.
 new
-  rl(`rho:registry:lookup`),
-  rs(`rho:registry:insertArbitrary`),
-  rootCh, scCh, vc, afCh, ac, oCh, zCh,
-  ertpCh, revIssuerCh, purseCh, fundCh, wdCh, depCh,
-  mintCh, brandCh, issuerCh, scPurseCh, scDepCh,
+  rl(`rho:registry:lookup`), rootCh, afCh, ac, vc, oCh, zCh, depCh, mintCh, acctCh,
+  ertpCh, revIssuerCh, purseCh, fundCh, wdCh,
   deployId(`rho:rchain:deployId`),
   deployerId(`rho:rchain:deployerId`)
 in {
-  rl!(`__ROOT_URI__`, *rootCh) |
-  rl!(`__SC_URI__`, *scCh) |
-  rl!(`__VAULT_URI__`, *vc) |
-  rl!(`rho:rchain:ertp`, *ertpCh) |
-  for (Root <- rootCh; Stablecoin <- scCh; VaultBook <- vc; @(_, ERTP) <- ertpCh) {
+  rl!(`__ROOT_URI__`, *rootCh) | rl!(`__VAULT_URI__`, *vc) | rl!(`rho:rchain:ertp`, *ertpCh) |
+  for (Root <- rootCh; VaultBook <- vc; @(_, ERTP) <- ertpCh) {
     Root!("resolve", "component:account-factory", 1, *afCh) |
     for (@(true, afUri, _) <- afCh) {
       rl!(afUri, *ac) |
@@ -42,37 +36,19 @@ in {
                               for (@m <- mintCh) {
                                 match m {
                                   (true, stablePayment, debt) => {
-                                    Stablecoin!("brand", *brandCh) |
-                                    Stablecoin!("issuer", *issuerCh) |
-                                    for (@(true, brand) <- brandCh;
-                                         @(true, issuer) <- issuerCh) {
-                                      @issuer!("makeEmptyPurse", *scPurseCh) |
-                                      for (@(true, scPurse) <- scPurseCh) {
-                                        @scPurse!("deposit", stablePayment, *scDepCh) |
-                                        for (@sd <- scDepCh) {
-                                          match sd {
-                                            (true, bal) => {
-                                              new Holder, uHolder in {
-                                                contract Holder(@"take", @amount, ret) = {
-                                                  @scPurse!("withdraw", (brand, amount), *ret)
-                                                } |
-                                                rs!(bundle+{*Holder}, *uHolder) |
-                                                for (@holderUri <- uHolder) {
-                                                  deployId!([holderUri, ownerId])
-                                                }
-                                              }
-                                            }
-                                            _ => { deployId!(sd) }
-                                          }
-                                        }
+                                    @account!("deposit", *deployerId, "V4T", stablePayment, *acctCh) |
+                                    for (@ad <- acctCh) {
+                                      match ad {
+                                        (true, _) => deployId!([debt])
+                                        _ => deployId!(ad)
                                       }
                                     }
                                   }
-                                  _ => { deployId!(m) }
+                                  _ => deployId!(m)
                                 }
                               }
                             }
-                            _ => { deployId!(d) }
+                            _ => deployId!(d)
                           }
                         }
                       }
@@ -80,7 +56,7 @@ in {
                   }
                 }
               }
-              _ => { deployId!(z) }
+              _ => deployId!(z)
             }
           }
         }

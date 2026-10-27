@@ -1,0 +1,44 @@
+// Withdraw the held stablecoin and repay the vault in a later block.
+// Returns [debt].
+// Placeholders: __ROOT_URI__, __VAULT_URI__, __PUBKEY__, __AMOUNT__.
+new
+  rl(`rho:registry:lookup`), rootCh, afCh, ac, vc, oCh, zCh, wdCh, repayCh,
+  deployId(`rho:rchain:deployId`),
+  deployerId(`rho:rchain:deployerId`)
+in {
+  rl!(`__ROOT_URI__`, *rootCh) | rl!(`__VAULT_URI__`, *vc) |
+  for (Root <- rootCh; VaultBook <- vc) {
+    Root!("resolve", "component:account-factory", 1, *afCh) |
+    for (@(true, afUri, _) <- afCh) {
+      rl!(afUri, *ac) |
+      for (AccountFactory <- ac) {
+        AccountFactory!("getOrCreate", "__PUBKEY__".hexToBytes(), *oCh) |
+        for (@(true, account, ownerId) <- oCh) {
+          @account!("vaultOpen", *deployerId, `__VAULT_URI__`, *zCh) |
+          for (@z <- zCh) {
+            match z {
+              (true, auth) => {
+                @account!("withdraw", *deployerId, "V4T", __AMOUNT__, *wdCh) |
+                for (@w <- wdCh) {
+                  match w {
+                    (true, payment) => {
+                      VaultBook!("repay", ownerId, auth, payment, *repayCh) |
+                      for (@r <- repayCh) {
+                        match r {
+                          (true, out) => deployId!([out])
+                          _ => deployId!(r)
+                        }
+                      }
+                    }
+                    _ => deployId!(w)
+                  }
+                }
+              }
+              _ => deployId!(z)
+            }
+          }
+        }
+      }
+    }
+  }
+}
