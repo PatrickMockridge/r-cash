@@ -10,7 +10,7 @@ means a devnet scenario, `TLA+` names the model in `spec/tla`.
 |---|---|---|---|---|
 | I1 | Quiescent linearity: one `Full` in every cell | every stateful component | every consumed path re-posts; P1/P6 | TLA+ `CellLinearity`, unit |
 | I2 | Currency code unique; stablecoin URI, params hash and sponsor match the live attestation; the directory is written only after that check | `CurrencyRegistry`, `StablecoinDirectory` | one registry consume at commit; the registry holds the directory's only write capability | unit, scenario |
-| I3 | One active market per pair; version strictly increases | `MarketIndex` | `stage`/`activate` consume one cell; `byPair` in the same cell | TLA+ `PoolConservation` peer, scenario |
+| I3 | One active-or-paused market per **unordered** pair; both orientation keys resolve to it; version strictly increases | `MarketIndex` | `stage`/`activate` consume one cell; `byPair` writes both orientations; the reverse stage is refused | TLA+ `PoolConservation` peer, scenario |
 | I4 | Legal market transitions: `draft → active → paused/active → delisted`; a delisted version may be replaced only by a higher version | `MarketIndex` | governor-gated `setStatus`; `stage` checks pair status and version | unit, scenario |
 | I5 | Terms integrity: `termsHash = H(schema, values)`; no mutation | `MarketTerms` | content-addressed `put` recomputes the hash | unit, vectors |
 | I6 | Market URI slots are factory-created, sponsor-authorized and sealed before activation | `MarketDirectory` | `bind`/`seal` in one cell; only `MarketFactory` | unit, scenario |
@@ -27,6 +27,13 @@ means a devnet scenario, `TLA+` names the model in `spec/tla`.
 | I20 | Capability provenance and bundleability | every component | `check_captures.py`; block-boundary persistence test | TLA+ `CapabilityProvenance`, scenario |
 | I21 | Only the owner's `deployerId` passes owner arms; proof never returned after creation; auth tokens are one-shot | `AccountGate`, `AccountFactory` | `AccountGate.verify`; `proofHash`; token cell consume | unit, scenario |
 | I22 | Deploy resource bounds | every deploy | `measure_contracts.py`, `check_arch.py`, devnet parse gate | CI |
+| I23 | An external asset is listed only with a sponsor signature, an adapter attestation, `kind: external` and `decimals: 8`; it has no R-Cash issuer system | `CurrencyRegistry`, `AssetResolver` | `registerExternal` verifies before the one cell commit; `AssetResolver` branches on kind | unit, scenario |
+| I24 | Mesh discovery: every supported pair is listed in the client config with `active`, `draft` or `unlisted`; only priority pairs are created and seeded at launch | `configs/mesh.json`, `ListingViews`, web | config validation in `tools/mesh.py`; `ListingViews.markets` plus the config matrix | unit, web |
+
+I16–I18 are intentionally retired: they were removed with the old lending
+section and have no normative statement. The current catalogue is I1–I15 and
+I19–I24. `check_traceability.py` requires every listed invariant to have this
+text and a check; a gap is an error.
 
 ## 2. Stablecoin issuer (v0.4)
 

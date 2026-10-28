@@ -103,6 +103,20 @@ theorem take_put_commit {s : Store} {h : List CellId} {c : CellId} {v : Nat}
   simp [run, hcell, hnot, Store.set]
   rw [List.erase_of_not_mem hnot]
 
+/-- I1: an empty trace is quiescent. -/
+theorem wf_quiescent (s : Store) : WF s [] [] :=
+  ⟨s, [], rfl, rfl⟩
+
+/-- Alias used by the cell flow specification. -/
+theorem take_without_put_rejected {s : Store} {h : List CellId} {c : CellId} {v : Nat}
+    (hcell : s.cells c = [v]) : ¬ WF s h [Op.take c] :=
+  take_without_put_not_wf hcell
+
+/-- Alias used by the cell flow specification. -/
+theorem nested_take_deadlock {s : Store} {h : List CellId} {c : CellId}
+    (hheld : c ∈ h) : run s h [Op.call c] = none :=
+  nested_call_rejected hheld
+
 /-- D2, contrapositive: if a trace takes and then stops, adding the matching
 put makes it well formed. -/
 theorem take_then_put_wf {s : Store} {c : CellId} {v : Nat}

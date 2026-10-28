@@ -1,8 +1,8 @@
 # Flow specification.
 # Arm keys, source lines, access modes and refusal sets are checked against
 # contracts/build/arm_inventory.json by tools/check_flows.py. Guards, effects,
-# invariants and status are the authored content; status is not a synonym for
-# tested. See README.md for the schema and protocol labels.
+# acceptance IDs, model/vector and invariants are the authored content; status is
+# not a synonym for tested. See README.md for the schema and protocol labels.
 
 schema: rcash.flows/v1
 subsystem: kernel
@@ -30,6 +30,8 @@ components:
     refusals: []
     invariants: []
     status: verified
+    acceptance:
+    - AC-SPEC-MOD-01.1
   states:
   - Live
   initial: Live
@@ -51,6 +53,8 @@ components:
     invariants:
     - I5
     status: verified
+    acceptance:
+    - AC-SPEC-MOD-01.1
   - arm: Codec@"hash"
     transition: kernel.Codec.hash
     lean: Rholphin.Model.Kernel.codec_hash
@@ -66,6 +70,8 @@ components:
     invariants:
     - I5
     status: verified
+    acceptance:
+    - AC-SPEC-MOD-01.1
   states:
   - Live
   initial: Live
@@ -85,6 +91,8 @@ components:
     refusals: []
     invariants: []
     status: verified
+    acceptance:
+    - AC-SPEC-MOD-01.1
   - arm: Verifier@"sigOk"
     transition: kernel.Verifier.sigOk
     lean: Rholphin.Model.Kernel.verifier_sigOk
@@ -98,6 +106,8 @@ components:
     refusals: []
     invariants: []
     status: verified
+    acceptance:
+    - AC-SPEC-MOD-01.1
   - arm: Verifier@"claimHash"
     transition: kernel.Verifier.claimHash
     lean: Rholphin.Model.Kernel.verifier_claimHash
@@ -112,6 +122,8 @@ components:
     invariants:
     - I14
     status: verified
+    acceptance:
+    - AC-SPEC-MOD-01.1
   states:
   - Live
   initial: Live
@@ -152,6 +164,8 @@ components:
     invariants:
     - S12
     status: verified
+    acceptance:
+    - AC-SPEC-MOD-01.1
   - arm: Bounds@"checkFeed"
     transition: kernel.Bounds.checkFeed
     lean: Rholphin.Model.Kernel.bounds_checkFeed
@@ -178,6 +192,8 @@ components:
     invariants:
     - I7
     status: verified
+    acceptance:
+    - AC-SPEC-MOD-01.1
   - arm: Bounds@"checkPool"
     transition: kernel.Bounds.checkPool
     lean: Rholphin.Model.Kernel.bounds_checkPool
@@ -206,6 +222,8 @@ components:
     invariants:
     - I12
     status: verified
+    acceptance:
+    - AC-SPEC-MOD-01.1
   - arm: Bounds@"checkBook"
     transition: kernel.Bounds.checkBook
     lean: Rholphin.Model.Kernel.bounds_checkBook
@@ -232,6 +250,8 @@ components:
     invariants:
     - I19
     status: verified
+    acceptance:
+    - AC-SPEC-MOD-01.1
   - arm: Bounds@"checkTransfer"
     transition: kernel.Bounds.checkTransfer
     lean: Rholphin.Model.Kernel.bounds_checkTransfer
@@ -252,6 +272,8 @@ components:
     invariants:
     - I14
     status: verified
+    acceptance:
+    - AC-SPEC-MOD-01.1
   - arm: Bounds@"checkTerms"
     transition: kernel.Bounds.checkTerms
     lean: Rholphin.Model.Kernel.bounds_checkTerms
@@ -280,6 +302,8 @@ components:
     - I6
     - I12
     status: verified
+    acceptance:
+    - AC-SPEC-MOD-01.1
   states:
   - Live
   initial: Live
@@ -300,6 +324,8 @@ components:
     invariants:
     - I10
     status: verified
+    acceptance:
+    - AC-SPEC-MOD-01.1
   - arm: AmmMath@"weight"
     transition: kernel.AmmMath.weight
     lean: Rholphin.Model.Kernel.ammMath_weight
@@ -314,6 +340,8 @@ components:
     invariants:
     - I12
     status: verified
+    acceptance:
+    - AC-SPEC-MOD-01.1
   - arm: AmmMath@"fee"
     transition: kernel.AmmMath.fee
     lean: Rholphin.Model.Kernel.ammMath_fee
@@ -328,6 +356,8 @@ components:
     invariants:
     - I12
     status: verified
+    acceptance:
+    - AC-SPEC-MOD-01.1
   - arm: AmmMath@"out"
     transition: kernel.AmmMath.out
     lean: Rholphin.Model.Kernel.ammMath_out
@@ -343,6 +373,8 @@ components:
     invariants:
     - I12
     status: verified
+    acceptance:
+    - AC-SPEC-MOD-01.1
   - arm: AmmMath@"shares"
     transition: kernel.AmmMath.shares
     lean: Rholphin.Model.Kernel.ammMath_shares
@@ -357,6 +389,8 @@ components:
     invariants:
     - I11
     status: verified
+    acceptance:
+    - AC-SPEC-MOD-01.1
   - arm: AmmMath@"inputValue"
     transition: kernel.AmmMath.inputValue
     lean: Rholphin.Model.Kernel.ammMath_inputValue
@@ -371,6 +405,8 @@ components:
     invariants:
     - I12
     status: verified
+    acceptance:
+    - AC-SPEC-MOD-01.1
   states:
   - Live
   initial: Live
@@ -391,6 +427,8 @@ components:
     invariants:
     - S3
     status: verified
+    acceptance:
+    - AC-SPEC-MOD-01.1
   - arm: CollateralMath@"health"
     transition: kernel.CollateralMath.health
     lean: Rholphin.Model.Kernel.collateralMath_health
@@ -405,6 +443,8 @@ components:
     invariants:
     - S4
     status: verified
+    acceptance:
+    - AC-SPEC-MOD-01.1
   - arm: CollateralMath@"payout"
     transition: kernel.CollateralMath.payout
     lean: Rholphin.Model.Kernel.collateralMath_payout
@@ -419,6 +459,8 @@ components:
     invariants:
     - S6
     status: verified
+    acceptance:
+    - AC-SPEC-MOD-01.1
   - arm: CollateralMath@"seize"
     transition: kernel.CollateralMath.seize
     lean: Rholphin.Model.Kernel.collateralMath_seize
@@ -433,6 +475,8 @@ components:
     invariants:
     - S6
     status: verified
+    acceptance:
+    - AC-SPEC-MOD-01.1
   states:
   - Live
   initial: Live
@@ -453,6 +497,8 @@ components:
     invariants:
     - I14
     status: verified
+    acceptance:
+    - AC-SPEC-MOD-01.1
   states:
   - Live
   initial: Live

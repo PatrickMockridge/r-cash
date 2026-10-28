@@ -18,7 +18,10 @@ written.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
+
+import yaml
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -26,6 +29,13 @@ from pathlib import Path
 import flowlib
 
 LEAN_ROOT = flowlib.ROOT / "spec" / "lean"
+MODEL_REGISTRY = flowlib.ROOT / "docs" / "spec" / "model.yaml"
+VECTORS = flowlib.ROOT / "tests" / "vectors" / "arith.json"
+MODEL_REQUIRED = {
+    'CurrencyRegistry@"registerExternal"', 'CurrencyRegistry@"setPaused"',
+    'MarketIndex@"pauseAsset"', 'MarketIndex@"stage"', 'MarketIndex@"marketFor"',
+    'ListingViews@"marketFor"',
+}
 
 
 @dataclass
@@ -202,6 +212,28 @@ def covered_source(patterns: list[str]) -> set[str]:
     return files
 
 
+def check_models(arm: dict, where: str, report: Report) -> None:
+    models = {}
+    if MODEL_REGISTRY.is_file():
+        models = yaml.safe_load(MODEL_REGISTRY.read_text()).get("transitions") or {}
+    name = arm.get("arm")
+    if name in MODEL_REQUIRED and not arm.get("model"):
+        report.error("model", f"{where}: requires a model transition")
+    if arm.get("model"):
+        if arm["model"] not in models:
+            report.error("model", f"{where}: model {arm['model']!r} is not registered")
+        else:
+            artifact = flowlib.ROOT / (models[arm["model"]].get("test") or "")
+            if models[arm["model"]].get("test") and not artifact.exists():
+                report.error("model", f"{where}: model test {artifact} is missing")
+    if arm.get("vector"):
+        vectors = {}
+        if VECTORS.is_file():
+            vectors = json.loads(VECTORS.read_text())
+        if arm["vector"] not in vectors:
+            report.error("vector", f"{where}: vector {arm['vector']!r} is missing")
+
+
 def check_documents(docs: list[dict], source: Source, report: Report,
                     strict: bool) -> None:
     catalogue = flowlib.refusal_catalogue()
@@ -245,7 +277,9 @@ def check_documents(docs: list[dict], source: Source, report: Report,
                 if src.get("line") != node["line"]:
                     report.error("source", f"{where}: line {src.get('line')} != {node['line']}")
 
-                # 9. honesty about mutation
+                check_models(arm, where, report)
+
+                # 10. honesty about mutation
                 own_mutates = bool(node["events"]) and any(
                     e["kind"] == "post" for e in node["events"])
                 expanded = source.expand(node)
@@ -460,6 +494,15 @@ def check_documents(docs: list[dict], source: Source, report: Report,
             report.error("lean", f"mutating transition {name} has no Lean declaration")
 
 
+def check_mesh_gate(report: Report) -> None:
+    import subprocess
+    proc = subprocess.run([sys.executable, str(flowlib.ROOT / "tools" / "check_mesh.py")],
+                          text=True, capture_output=True)
+    if proc.returncode != 0:
+        for line in (proc.stderr or proc.stdout).splitlines():
+            report.error("mesh", line)
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--report", action="store_true")
@@ -472,6 +515,7 @@ def main(argv: list[str] | None = None) -> int:
     if not docs:
         report.error("coverage", "no flow YAML documents")
     check_documents(docs, source, report, args.strict)
+    check_mesh_gate(report)
     report.show(args.strict)
     if args.check and report.counts()[0]:
         return 1

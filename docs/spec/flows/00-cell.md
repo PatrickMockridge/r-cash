@@ -11,10 +11,10 @@ Schema: `rcash.flows/v1`
 | `C-put` | put | s c = [] and c in held required; s c := [v]; c removed from held | D1, D2 | — |
 | `C-call` | nested call | the callee's cell set is disjoint from held; the callee leaves the store unchanged | D3 | — |
 | `C-wf` | well formed | a trace is WF when it finishes with held = [] | D2 | — |
-| `D1` | duplicate cell | posting a cell that was never taken (or was peeked) leaves two live cells | C-put | `Rholphin.Linear.Cell.peek_then_put_rejected` |
-| `D2` | lost cell | a graceful refusal after a take without a repost leaves held non-empty | C-wf | `Rholphin.Linear.Cell.take_without_put_rejected` |
-| `D3` | nested take | a nested call touches a cell the caller holds: the callee blocks | C-call | `Rholphin.Linear.Cell.nested_take_deadlock` |
-| `D4` | lost update | a peek followed by a later post is a duplicate, not an update | C-put | `Rholphin.Linear.Cell.peek_then_put_rejected` |
+| `D1` | duplicate cell | posting a cell that was never taken (or was peeked) leaves two live cells | C-put | `Rholphin.peek_then_put_rejected` |
+| `D2` | lost cell | a graceful refusal after a take without a repost leaves held non-empty | C-wf | `Rholphin.take_without_put_rejected` |
+| `D3` | nested take | a nested call touches a cell the caller holds: the callee blocks | C-call | `Rholphin.nested_take_deadlock` |
+| `D4` | lost update | a peek followed by a later post is a duplicate, not an update | C-put | `Rholphin.peek_then_put_rejected` |
 | `D5` | duplicate binder | an outer new binder shadowed before use is dead; the inventory reports it | C-call | — |
 | `D6` | sort confusion | a name used where a value is expected, or the reverse, has no transition | C-call | — |
 
@@ -36,4 +36,4 @@ Schema: `rcash.flows/v1`
 
 | invariant | statement | Lean |
 |---|---|---|
-| I1 | One Full in every state cell at every quiescent point. | `Rholphin.Linear.Cell.wf_quiescent` |
+| I1 | One Full in every state cell at every quiescent point. | `Rholphin.wf_quiescent` |

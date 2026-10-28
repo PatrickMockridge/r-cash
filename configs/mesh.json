@@ -1,0 +1,304 @@
+{
+  "schema": "rcash.mesh/v1",
+  "version": 1,
+  "defaultCurrency": "USD",
+  "majorCurrencies": [
+    "USD",
+    "EUR",
+    "CNY"
+  ],
+  "sponsorKey": "sponsor",
+  "reporters": [
+    "reporter1",
+    "reporter2",
+    "reporter3"
+  ],
+  "issuerDefaults": {
+    "mcrBps": 15000,
+    "bonusBps": 800,
+    "closeFactorBps": 5000,
+    "ratePerBlock": 3171,
+    "debtCeiling": 1000000000000,
+    "minDebt": 1000000,
+    "maxDebt": 1000000000000,
+    "maxOracleAge": 1000,
+    "savingsShareBps": 5000,
+    "psmFeeBps": 10
+  },
+  "feedDefaults": {
+    "quorum": 2,
+    "maxAgeBlocks": 1000,
+    "maxSpreadBps": 200,
+    "minPrice": 1,
+    "maxPrice": 1000000000000,
+    "trialBlocks": 1,
+    "trialMinSubmits": 3
+  },
+  "marketDefaults": {
+    "baseSpreadBps": 20,
+    "skewSpreadBps": 80,
+    "maxTradeBps": 2000,
+    "minLiquidity": 100000000,
+    "firstDepositToleranceBps": 1000,
+    "depthFloorQuote": 10000000,
+    "minTicketQuote": 1000000,
+    "seedInitialShares": 100000000,
+    "lockMinBlocks": 10,
+    "lockUntilBlocks": 100,
+    "bookDefaultExpiryBlocks": 720,
+    "bookMaxExpiryBlocks": 129600,
+    "maxPairAgeBlocks": 1000,
+    "seedQuoteTarget": 200000000
+  },
+  "currencies": [
+    {
+      "code": "USD",
+      "name": "US dollar",
+      "kind": "stablecoin",
+      "tier": "major",
+      "initialPriceE8": 100000000
+    },
+    {
+      "code": "EUR",
+      "name": "Euro",
+      "kind": "stablecoin",
+      "tier": "major",
+      "initialPriceE8": 108000000
+    },
+    {
+      "code": "CNY",
+      "name": "Chinese yuan",
+      "kind": "stablecoin",
+      "tier": "major",
+      "initialPriceE8": 13900000
+    },
+    {
+      "code": "NGN",
+      "name": "Nigerian naira",
+      "kind": "stablecoin",
+      "tier": "local",
+      "initialPriceE8": 65000
+    },
+    {
+      "code": "ZAR",
+      "name": "South African rand",
+      "kind": "stablecoin",
+      "tier": "local",
+      "initialPriceE8": 5500000
+    },
+    {
+      "code": "OMR",
+      "name": "Omani rial",
+      "kind": "stablecoin",
+      "tier": "local",
+      "initialPriceE8": 260000000
+    },
+    {
+      "code": "AED",
+      "name": "UAE dirham",
+      "kind": "stablecoin",
+      "tier": "local",
+      "initialPriceE8": 27230000
+    },
+    {
+      "code": "EGP",
+      "name": "Egyptian pound",
+      "kind": "stablecoin",
+      "tier": "local",
+      "initialPriceE8": 2050000
+    },
+    {
+      "code": "MAD",
+      "name": "Moroccan dirham",
+      "kind": "stablecoin",
+      "tier": "local",
+      "initialPriceE8": 10000000
+    },
+    {
+      "code": "ETB",
+      "name": "Ethiopian birr",
+      "kind": "stablecoin",
+      "tier": "local",
+      "initialPriceE8": 1750000
+    },
+    {
+      "code": "PKR",
+      "name": "Pakistani rupee",
+      "kind": "stablecoin",
+      "tier": "local",
+      "initialPriceE8": 360000
+    },
+    {
+      "code": "INR",
+      "name": "Indian rupee",
+      "kind": "stablecoin",
+      "tier": "local",
+      "initialPriceE8": 1200000
+    },
+    {
+      "code": "BWP",
+      "name": "Botswana pula",
+      "kind": "stablecoin",
+      "tier": "local",
+      "initialPriceE8": 7300000
+    },
+    {
+      "code": "BRL",
+      "name": "Brazilian real",
+      "kind": "stablecoin",
+      "tier": "local",
+      "initialPriceE8": 18000000
+    },
+    {
+      "code": "CLP",
+      "name": "Chilean peso",
+      "kind": "stablecoin",
+      "tier": "local",
+      "initialPriceE8": 105000
+    },
+    {
+      "code": "MXN",
+      "name": "Mexican peso",
+      "kind": "stablecoin",
+      "tier": "local",
+      "initialPriceE8": 5800000
+    }
+  ],
+  "externalAssets": [
+    {
+      "code": "USDC",
+      "name": "USD Coin",
+      "kind": "external",
+      "tier": "major",
+      "peg": "USD",
+      "initialPriceE8": 100000000,
+      "adapterUri": null,
+      "enabled": false
+    },
+    {
+      "code": "USDT",
+      "name": "Tether USD",
+      "kind": "external",
+      "tier": "major",
+      "peg": "USD",
+      "initialPriceE8": 100000000,
+      "adapterUri": null,
+      "enabled": false
+    },
+    {
+      "code": "DAI",
+      "name": "Dai",
+      "kind": "external",
+      "tier": "major",
+      "peg": "USD",
+      "initialPriceE8": 100000000,
+      "adapterUri": null,
+      "enabled": false
+    }
+  ],
+  "priorityPairs": [
+    {
+      "base": "EUR",
+      "quote": "USD"
+    },
+    {
+      "base": "CNY",
+      "quote": "USD"
+    },
+    {
+      "base": "NGN",
+      "quote": "USD"
+    },
+    {
+      "base": "ZAR",
+      "quote": "USD"
+    },
+    {
+      "base": "OMR",
+      "quote": "USD"
+    },
+    {
+      "base": "AED",
+      "quote": "USD"
+    },
+    {
+      "base": "EGP",
+      "quote": "USD"
+    },
+    {
+      "base": "MAD",
+      "quote": "USD"
+    },
+    {
+      "base": "ETB",
+      "quote": "USD"
+    },
+    {
+      "base": "PKR",
+      "quote": "USD"
+    },
+    {
+      "base": "INR",
+      "quote": "USD"
+    },
+    {
+      "base": "BWP",
+      "quote": "USD"
+    },
+    {
+      "base": "BRL",
+      "quote": "USD"
+    },
+    {
+      "base": "CLP",
+      "quote": "USD"
+    },
+    {
+      "base": "MXN",
+      "quote": "USD"
+    },
+    {
+      "base": "EUR",
+      "quote": "CNY"
+    },
+    {
+      "base": "NGN",
+      "quote": "ZAR"
+    },
+    {
+      "base": "ZAR",
+      "quote": "BWP"
+    },
+    {
+      "base": "AED",
+      "quote": "OMR"
+    },
+    {
+      "base": "EGP",
+      "quote": "MAD"
+    },
+    {
+      "base": "INR",
+      "quote": "PKR"
+    },
+    {
+      "base": "BRL",
+      "quote": "MXN"
+    },
+    {
+      "base": "BRL",
+      "quote": "CLP"
+    },
+    {
+      "base": "MXN",
+      "quote": "CLP"
+    }
+  ],
+  "notes": [
+    "initialPriceE8 is a devnet seed only; reporters set the live oracle price.",
+    "adapterUri is null until a bridge or custodian deploys the external-asset adapter.",
+    "seedQuote is computed by tools/mesh.py from the live oracle rate at creation.",
+    "Production risk parameters and seed sizes are reviewed before any non-devnet install."
+  ],
+  "marketSponsorKey": "deployer"
+}

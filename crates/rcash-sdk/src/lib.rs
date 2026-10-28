@@ -107,6 +107,20 @@ impl Client {
         })
     }
 
+    /// Build a client around a caller-supplied node client (fixture transport).
+    pub fn with_node(node: NodeClient, key: Option<KeyPair>) -> Self {
+        Self {
+            node,
+            key,
+            shard_id: "/root".to_string(),
+            phlo_price: 1,
+            phlo_limit: 1_000_000,
+            poll: PollPolicy::default(),
+            manifest: None,
+            v4_manifest: None,
+        }
+    }
+
     /// Attach the deployment manifest used by typed reads.
     pub fn with_manifest(mut self, manifest: Manifest) -> Self {
         self.manifest = Some(manifest);

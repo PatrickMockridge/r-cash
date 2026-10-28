@@ -1,8 +1,8 @@
 # Flow specification.
 # Arm keys, source lines, access modes and refusal sets are checked against
 # contracts/build/arm_inventory.json by tools/check_flows.py. Guards, effects,
-# invariants and status are the authored content; status is not a synonym for
-# tested. See README.md for the schema and protocol labels.
+# acceptance IDs, model/vector and invariants are the authored content; status is
+# not a synonym for tested. See README.md for the schema and protocol labels.
 
 schema: rcash.flows/v1
 subsystem: buffer
@@ -43,6 +43,9 @@ components:
     status: verified
     from: Empty
     to: Funded
+    acceptance:
+    - AC-SPEC-BUF-01.1
+    model: savings.deposit
   - arm: SavingsPool@"withdraw"
     transition: buffer.SavingsPool.withdraw
     lean: Rholphin.Model.BufferSavings.savingsPool_withdraw
@@ -70,6 +73,9 @@ components:
     status: verified
     from: Funded
     to: Empty
+    acceptance:
+    - AC-SPEC-BUF-01.1
+    model: savings.withdraw
   - arm: SavingsPool@"notify"
     transition: buffer.SavingsPool.notify
     lean: Rholphin.Model.BufferSavings.savingsPool_notify
@@ -94,6 +100,8 @@ components:
     - S10
     status: verified
     to: Funded
+    acceptance:
+    - AC-SPEC-BUF-01.1
   - arm: SavingsPool@"info"
     transition: buffer.SavingsPool.info
     lean: Rholphin.Model.BufferSavings.savingsPool_info
@@ -109,6 +117,8 @@ components:
     invariants:
     - S10
     status: verified
+    acceptance:
+    - AC-SPEC-BUF-01.1
   - arm: SavingsPool@"position"
     transition: buffer.SavingsPool.position
     lean: Rholphin.Model.BufferSavings.savingsPool_position
@@ -124,6 +134,8 @@ components:
     invariants:
     - S10
     status: verified
+    acceptance:
+    - AC-SPEC-BUF-01.1
   states:
   - Empty
   - Funded
@@ -155,6 +167,8 @@ components:
     - S3
     - S9
     status: verified
+    acceptance:
+    - AC-SPEC-BUF-01.1
   - arm: SurplusBuffer@"paySavings"
     transition: buffer.SurplusBuffer.paySavings
     lean: Rholphin.Model.BufferSavings.surplusBuffer_paySavings
@@ -178,6 +192,9 @@ components:
     - S9
     - S10
     status: verified
+    acceptance:
+    - AC-SPEC-BUF-01.1
+    model: buffer.cover
   - arm: SurplusBuffer@"cover"
     transition: buffer.SurplusBuffer.cover
     lean: Rholphin.Model.BufferSavings.surplusBuffer_cover
@@ -209,6 +226,10 @@ components:
     - S6
     - S9
     status: verified
+    acceptance:
+    - AC-SPEC-BUF-01.1
+    model: buffer.cover
+    vector: buffer.cover.cancelled
   - arm: SurplusBuffer@"info"
     transition: buffer.SurplusBuffer.info
     lean: Rholphin.Model.BufferSavings.surplusBuffer_info
@@ -224,6 +245,8 @@ components:
     invariants:
     - S3
     status: verified
+    acceptance:
+    - AC-SPEC-BUF-01.1
   - arm: SurplusBuffer@"scheduleShare"
     transition: buffer.SurplusBuffer.scheduleShare
     lean: Rholphin.Model.BufferSavings.surplusBuffer_scheduleShare
@@ -241,6 +264,8 @@ components:
     invariants:
     - S12
     status: verified
+    acceptance:
+    - AC-SPEC-BUF-01.1
   - arm: SurplusBuffer@"applyShare"
     transition: buffer.SurplusBuffer.applyShare
     lean: Rholphin.Model.BufferSavings.surplusBuffer_applyShare
@@ -265,6 +290,8 @@ components:
     invariants:
     - S12
     status: verified
+    acceptance:
+    - AC-SPEC-BUF-01.1
   states:
   - Idle
   - Active

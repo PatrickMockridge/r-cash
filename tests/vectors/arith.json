@@ -1,0 +1,406 @@
+{
+  "accrue.1e6.0.12.3171": {
+    "inputs": [
+      1000000,
+      0,
+      12,
+      3171
+    ],
+    "output": 1000001
+  },
+  "accrue.sameHeight": {
+    "inputs": [
+      1000,
+      10,
+      10,
+      3171
+    ],
+    "output": 1000
+  },
+  "accrue.zeroDebt": {
+    "inputs": [
+      0,
+      10,
+      20,
+      3171
+    ],
+    "output": 0
+  },
+  "accrue.zeroRate": {
+    "inputs": [
+      1000,
+      10,
+      20,
+      0
+    ],
+    "output": 1000
+  },
+  "amm.fee": {
+    "inputs": [
+      4000,
+      20,
+      80
+    ],
+    "output": 36
+  },
+  "amm.firstShares": {
+    "inputs": [
+      200000000
+    ],
+    "output": 100000000
+  },
+  "amm.laterShares": {
+    "inputs": [
+      100000000,
+      100000000,
+      200000000
+    ],
+    "output": 50000000
+  },
+  "amm.outB2Q": {
+    "inputs": [
+      1000000,
+      7500000000,
+      20
+    ],
+    "output": 74850000
+  },
+  "amm.outQ2B": {
+    "inputs": [
+      1000000,
+      7500000000,
+      20
+    ],
+    "output": 13306
+  },
+  "amm.value": {
+    "inputs": [
+      100000000,
+      200000000,
+      7500000000
+    ],
+    "output": 7700000000
+  },
+  "amm.weight": {
+    "inputs": [
+      100000000,
+      200000000,
+      7500000000
+    ],
+    "output": 9740
+  },
+  "buffer.cover.cancelled": {
+    "inputs": [
+      100,
+      50,
+      20
+    ],
+    "output": 70
+  },
+  "buffer.cover.sin": {
+    "inputs": [
+      100,
+      50,
+      20
+    ],
+    "output": 0
+  },
+  "buffer.cover.surplus": {
+    "inputs": [
+      100,
+      50,
+      20
+    ],
+    "output": 30
+  },
+  "ceilDiv.0.3": {
+    "inputs": [
+      0,
+      3
+    ],
+    "output": 0
+  },
+  "ceilDiv.10.3": {
+    "inputs": [
+      10,
+      3
+    ],
+    "output": 4
+  },
+  "ceilDiv.100000000.3": {
+    "inputs": [
+      100000000,
+      3
+    ],
+    "output": 33333334
+  },
+  "ceilDiv.5.1": {
+    "inputs": [
+      5,
+      1
+    ],
+    "output": 5
+  },
+  "closeMax": {
+    "inputs": [
+      1000000,
+      5000
+    ],
+    "output": 500000
+  },
+  "floorDiv.10.3": {
+    "inputs": [
+      10,
+      3
+    ],
+    "output": 3
+  },
+  "floorDiv.100000000.3": {
+    "inputs": [
+      100000000,
+      3
+    ],
+    "output": 33333333
+  },
+  "health.healthy": {
+    "inputs": [
+      8000000,
+      100000000,
+      7500000000,
+      20000
+    ],
+    "output": 1
+  },
+  "health.unhealthy": {
+    "inputs": [
+      1000000,
+      100000000,
+      7500000000,
+      20000
+    ],
+    "output": 0
+  },
+  "health.zeroDebt": {
+    "inputs": [
+      0,
+      0,
+      0,
+      20000
+    ],
+    "output": 1
+  },
+  "health.zeroRate": {
+    "inputs": [
+      1000000,
+      1,
+      0,
+      20000
+    ],
+    "output": 0
+  },
+  "ledger.cover0": {
+    "inputs": [
+      0
+    ],
+    "output": [
+      90000000,
+      90000000,
+      100000000,
+      0,
+      -10000000,
+      0,
+      0
+    ]
+  },
+  "ledger.liquidate": {
+    "inputs": [
+      0
+    ],
+    "output": [
+      99500000,
+      99500000,
+      99500030,
+      30,
+      0,
+      0,
+      0
+    ]
+  },
+  "ledger.mint": {
+    "inputs": [
+      0
+    ],
+    "output": [
+      101000000,
+      101000000,
+      101000030,
+      30,
+      0,
+      0,
+      0
+    ]
+  },
+  "ledger.psmBuy": {
+    "inputs": [
+      0
+    ],
+    "output": [
+      125000000,
+      125000000,
+      100000000,
+      0,
+      0,
+      25000000,
+      0
+    ]
+  },
+  "ledger.psmSell": {
+    "inputs": [
+      0
+    ],
+    "output": [
+      75000000,
+      75000000,
+      100000000,
+      0,
+      0,
+      -25000000,
+      0
+    ]
+  },
+  "ledger.repay": {
+    "inputs": [
+      0
+    ],
+    "output": [
+      99530000,
+      99530000,
+      99500030,
+      -29970,
+      0,
+      0,
+      0
+    ]
+  },
+  "ledger.writeOff": {
+    "inputs": [
+      0
+    ],
+    "output": [
+      98999970,
+      98999970,
+      99000000,
+      30,
+      0,
+      0,
+      0
+    ]
+  },
+  "market.pause.status": {
+    "inputs": [
+      1
+    ],
+    "output": 1
+  },
+  "market.stage.ok": {
+    "inputs": [
+      1
+    ],
+    "output": 1
+  },
+  "payout": {
+    "inputs": [
+      1000000,
+      800,
+      5000000
+    ],
+    "output": 21600000
+  },
+  "payout.zeroRate": {
+    "inputs": [
+      1000000,
+      800,
+      0
+    ],
+    "output": 0
+  },
+  "psm.buyGross": {
+    "inputs": [
+      1000000,
+      7500000000
+    ],
+    "output": 75000000
+  },
+  "psm.buyOut": {
+    "inputs": [
+      1000000,
+      7500000000,
+      10
+    ],
+    "output": 74925000
+  },
+  "psm.fee": {
+    "inputs": [
+      75000000,
+      10
+    ],
+    "output": 75000
+  },
+  "psm.sellGross": {
+    "inputs": [
+      100000000,
+      7500000000
+    ],
+    "output": 1333333
+  },
+  "psm.sellOut": {
+    "inputs": [
+      100000000,
+      7500000000,
+      10
+    ],
+    "output": 1331999
+  },
+  "psm.state.buy": {
+    "inputs": [
+      250
+    ],
+    "output": 250
+  },
+  "psm.state.sell": {
+    "inputs": [
+      250
+    ],
+    "output": -250
+  },
+  "registry.external.kind": {
+    "inputs": [
+      1
+    ],
+    "output": 1
+  },
+  "savings.shares.genesis": {
+    "inputs": [
+      100000000,
+      0,
+      0
+    ],
+    "output": 100000000
+  },
+  "savings.shares.proRata": {
+    "inputs": [
+      100000000,
+      100000000,
+      200000000
+    ],
+    "output": 50000000
+  },
+  "savings.value": {
+    "inputs": [
+      200000000,
+      100000000,
+      50000000
+    ],
+    "output": 100000000
+  }
+}

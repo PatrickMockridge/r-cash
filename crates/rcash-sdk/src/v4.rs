@@ -16,6 +16,7 @@ use crate::{terms, Client};
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct V4Currency {
     pub code: String,
+    pub kind: String,
     pub stablecoin_uri: String,
     pub custody_uri: String,
     pub params_uri: String,
@@ -27,6 +28,10 @@ pub struct V4Currency {
     pub params_hash: String,
     pub sponsor: String,
     pub status: String,
+    pub asset_uri: Option<String>,
+    pub decimals: i64,
+    pub chain: Option<String>,
+    pub custodian: Option<String>,
 }
 
 /// A market record from the index.
@@ -217,6 +222,16 @@ fn field_int(map: &BTreeMap<String, RhoValue>, key: &str) -> Result<i64, ChainEr
         .ok_or_else(|| decode(format!("field {key} is not an integer")))
 }
 
+fn field_str_opt(map: &BTreeMap<String, RhoValue>, key: &str) -> Option<String> {
+    map.get(key)
+        .and_then(|value| value.as_str())
+        .map(str::to_string)
+}
+
+fn field_int_opt(map: &BTreeMap<String, RhoValue>, key: &str) -> Option<i64> {
+    map.get(key).and_then(|value| value.as_int())
+}
+
 impl Client {
     fn require_v4(&self) -> Result<&V4Manifest, ChainError> {
         self.v4_manifest().ok_or_else(|| {
@@ -279,17 +294,22 @@ impl Client {
         let entry = map_at(&values, 0)?;
         Ok(V4Currency {
             code: code.to_string(),
-            stablecoin_uri: field_str(entry, "stablecoinUri")?,
-            custody_uri: field_str(entry, "custodyUri")?,
-            params_uri: field_str(entry, "paramsUri")?,
-            vault_uri: field_str(entry, "vaultUri")?,
-            liquidation_uri: field_str(entry, "liquidationUri")?,
-            savings_uri: field_str(entry, "savingsUri")?,
-            psm_uri: field_str(entry, "psmUri")?,
-            buffer_uri: field_str(entry, "bufferUri")?,
-            params_hash: field_str(entry, "paramsHash")?,
-            sponsor: field_str(entry, "sponsor")?,
-            status: field_str(entry, "status")?,
+            kind: field_str_opt(entry, "kind").unwrap_or_else(|| "stablecoin".into()),
+            stablecoin_uri: field_str_opt(entry, "stablecoinUri").unwrap_or_default(),
+            custody_uri: field_str_opt(entry, "custodyUri").unwrap_or_default(),
+            params_uri: field_str_opt(entry, "paramsUri").unwrap_or_default(),
+            vault_uri: field_str_opt(entry, "vaultUri").unwrap_or_default(),
+            liquidation_uri: field_str_opt(entry, "liquidationUri").unwrap_or_default(),
+            savings_uri: field_str_opt(entry, "savingsUri").unwrap_or_default(),
+            psm_uri: field_str_opt(entry, "psmUri").unwrap_or_default(),
+            buffer_uri: field_str_opt(entry, "bufferUri").unwrap_or_default(),
+            params_hash: field_str_opt(entry, "paramsHash").unwrap_or_default(),
+            sponsor: field_str_opt(entry, "sponsor").unwrap_or_default(),
+            status: field_str_opt(entry, "status").unwrap_or_default(),
+            asset_uri: field_str_opt(entry, "assetUri"),
+            decimals: field_int_opt(entry, "decimals").unwrap_or(8),
+            chain: field_str_opt(entry, "chain"),
+            custodian: field_str_opt(entry, "custodian"),
         })
     }
 
@@ -804,17 +824,22 @@ fn currency_from_entry(
 ) -> Result<V4Currency, ChainError> {
     Ok(V4Currency {
         code: code.to_string(),
-        stablecoin_uri: field_str(entry, "stablecoinUri")?,
-        custody_uri: field_str(entry, "custodyUri")?,
-        params_uri: field_str(entry, "paramsUri")?,
-        vault_uri: field_str(entry, "vaultUri")?,
-        liquidation_uri: field_str(entry, "liquidationUri")?,
-        savings_uri: field_str(entry, "savingsUri")?,
-        psm_uri: field_str(entry, "psmUri")?,
-        buffer_uri: field_str(entry, "bufferUri")?,
-        params_hash: field_str(entry, "paramsHash")?,
-        sponsor: field_str(entry, "sponsor")?,
-        status: field_str(entry, "status")?,
+        kind: field_str_opt(entry, "kind").unwrap_or_else(|| "stablecoin".into()),
+        stablecoin_uri: field_str_opt(entry, "stablecoinUri").unwrap_or_default(),
+        custody_uri: field_str_opt(entry, "custodyUri").unwrap_or_default(),
+        params_uri: field_str_opt(entry, "paramsUri").unwrap_or_default(),
+        vault_uri: field_str_opt(entry, "vaultUri").unwrap_or_default(),
+        liquidation_uri: field_str_opt(entry, "liquidationUri").unwrap_or_default(),
+        savings_uri: field_str_opt(entry, "savingsUri").unwrap_or_default(),
+        psm_uri: field_str_opt(entry, "psmUri").unwrap_or_default(),
+        buffer_uri: field_str_opt(entry, "bufferUri").unwrap_or_default(),
+        params_hash: field_str_opt(entry, "paramsHash").unwrap_or_default(),
+        sponsor: field_str_opt(entry, "sponsor").unwrap_or_default(),
+        status: field_str_opt(entry, "status").unwrap_or_default(),
+        asset_uri: field_str_opt(entry, "assetUri"),
+        decimals: field_int_opt(entry, "decimals").unwrap_or(8),
+        chain: field_str_opt(entry, "chain"),
+        custodian: field_str_opt(entry, "custodian"),
     })
 }
 
@@ -1577,5 +1602,14 @@ impl Client {
             base_age: field_int(entry, "baseAge")?,
             quote_age: field_int(entry, "quoteAge")?,
         })
+    }
+
+    /// The rate of `asset` in `display`, for preferred-currency display.
+    /// Returns the 1e8-scaled quote-per-base rate from the oracle hub.
+    pub async fn v4_price_in(&self, asset: &str, display: &str) -> Result<i64, ChainError> {
+        if asset == display {
+            return Ok(100_000_000);
+        }
+        Ok(self.v4_price(asset, display, 50).await?.rate)
     }
 }

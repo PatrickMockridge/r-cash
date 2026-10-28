@@ -1,8 +1,8 @@
 # Flow specification.
 # Arm keys, source lines, access modes and refusal sets are checked against
 # contracts/build/arm_inventory.json by tools/check_flows.py. Guards, effects,
-# invariants and status are the authored content; status is not a synonym for
-# tested. See README.md for the schema and protocol labels.
+# acceptance IDs, model/vector and invariants are the authored content; status is
+# not a synonym for tested. See README.md for the schema and protocol labels.
 
 schema: rcash.flows/v1
 subsystem: registry
@@ -39,6 +39,8 @@ components:
     invariants:
     - I20
     status: verified
+    acceptance:
+    - AC-SPEC-REG-01.1
   - arm: Root@"get"
     transition: registry.Root.get
     lean: Rholphin.Model.Registry.root_get
@@ -55,6 +57,8 @@ components:
     - {reason: unknown component, phase: pre, reposts: false, fail: false}
     invariants: []
     status: verified
+    acceptance:
+    - AC-SPEC-REG-01.1
   - arm: Root@"keys"
     transition: registry.Root.keys
     lean: Rholphin.Model.Registry.root_keys
@@ -69,6 +73,8 @@ components:
     refusals: []
     invariants: []
     status: verified
+    acceptance:
+    - AC-SPEC-REG-01.1
   - arm: Root@"register"
     transition: registry.Root.register
     lean: Rholphin.Model.Registry.root_register
@@ -93,6 +99,8 @@ components:
     invariants:
     - I20
     status: verified
+    acceptance:
+    - AC-SPEC-REG-01.1
   - arm: Root@"rotate"
     transition: registry.Root.rotate
     lean: Rholphin.Model.Registry.root_rotate
@@ -125,6 +133,8 @@ components:
     - I19
     - I20
     status: verified
+    acceptance:
+    - AC-SPEC-REG-01.1
   - arm: Root@"deprecate"
     transition: registry.Root.deprecate
     lean: Rholphin.Model.Registry.root_deprecate
@@ -152,6 +162,8 @@ components:
     - I19
     - I20
     status: verified
+    acceptance:
+    - AC-SPEC-REG-01.1
   - arm: Root@"freeze"
     transition: registry.Root.freeze
     lean: Rholphin.Model.Registry.root_freeze
@@ -177,6 +189,8 @@ components:
     - I19
     - I20
     status: verified
+    acceptance:
+    - AC-SPEC-REG-01.1
   - arm: Root@"admin"
     transition: registry.Root.admin
     lean: Rholphin.Model.Registry.root_admin
@@ -205,6 +219,8 @@ components:
     invariants:
     - I19
     status: verified
+    acceptance:
+    - AC-SPEC-REG-01.1
   states:
   - Live
   - Frozen
@@ -233,6 +249,8 @@ components:
     invariants:
     - I2
     status: verified
+    acceptance:
+    - AC-SPEC-REG-01.1
   - arm: StablecoinDirectory@"lookup"
     transition: registry.StablecoinDirectory.lookup
     lean: Rholphin.Model.Registry.stablecoinDirectory_lookup
@@ -250,6 +268,8 @@ components:
     invariants:
     - I2
     status: verified
+    acceptance:
+    - AC-SPEC-REG-01.1
   - arm: StablecoinDirectory@"entries"
     transition: registry.StablecoinDirectory.entries
     lean: Rholphin.Model.Registry.stablecoinDirectory_entries
@@ -265,6 +285,8 @@ components:
     invariants:
     - I2
     status: verified
+    acceptance:
+    - AC-SPEC-REG-01.1
   states:
   - Live
   initial: Live
@@ -275,7 +297,7 @@ components:
     transition: registry.CurrencyRegistry.register
     lean: Rholphin.Model.Registry.currencyRegistry_register
     kind: mutate
-    source: {file: contracts/src/deploy/v3/32_currency_registry.rho, line: 71}
+    source: {file: contracts/src/deploy/v3/32_currency_registry.rho, line: 88}
     guards:
     - {id: new, expr: 'currencies[code] = Nil', refusal: {reason: exists, phase: pre}}
     - {id: sponsor_sig, expr: 'Verifier.sigOk(H(rcash:currency-register:v3|...), sig, sponsor)', refusal: {reason: bad sponsor signature,
@@ -305,11 +327,13 @@ components:
     - I2
     - S8
     status: verified
+    acceptance:
+    - AC-SPEC-REG-01.1
   - arm: CurrencyRegistry@"currency"
     transition: registry.CurrencyRegistry.currency
     lean: Rholphin.Model.Registry.currencyRegistry_currency
     kind: read
-    source: {file: contracts/src/deploy/v3/32_currency_registry.rho, line: 177}
+    source: {file: contracts/src/deploy/v3/32_currency_registry.rho, line: 293}
     guards:
     - {id: exists, expr: 'currencies[code] != Nil', refusal: {reason: no currency, phase: pre}}
     effects:
@@ -322,11 +346,13 @@ components:
     invariants:
     - I2
     status: verified
+    acceptance:
+    - AC-SPEC-REG-01.1
   - arm: CurrencyRegistry@"currencies"
     transition: registry.CurrencyRegistry.currencies
     lean: Rholphin.Model.Registry.currencyRegistry_currencies
     kind: read
-    source: {file: contracts/src/deploy/v3/32_currency_registry.rho, line: 186}
+    source: {file: contracts/src/deploy/v3/32_currency_registry.rho, line: 302}
     guards: []
     effects:
     - {target: reply, formula: '(true, keys(currencies))'}
@@ -337,29 +363,81 @@ components:
     invariants:
     - I2
     status: verified
+    acceptance:
+    - AC-SPEC-REG-01.1
   - arm: CurrencyRegistry@"setPaused"
     transition: registry.CurrencyRegistry.setPaused
     lean: Rholphin.Model.Registry.currencyRegistry_setPaused
     kind: mutate
-    source: {file: contracts/src/deploy/v3/32_currency_registry.rho, line: 192}
+    source: {file: contracts/src/deploy/v3/32_currency_registry.rho, line: 308}
     guards:
     - {id: exists, expr: 'currencies[code] != Nil', refusal: {reason: no currency, phase: pre}}
-    - {id: pause, expr: 'VaultBook.pause(paused, nonce, sigs) ok', refusal: {reason: authorize, phase: pre}}
+    - {id: external_pause, expr: 'entry.kind != external implies VaultBook.pause(paused, nonce, sigs) ok', refusal: {reason: authorize,
+        phase: pre}}
+    - {id: governor_pause, expr: 'entry.kind = external implies Governor.authorize(currency:code, nonce, setPaused, paused.toString())',
+      refusal: {reason: below threshold, phase: pre}}
     - {id: recheck, expr: 'currencies[code] != Nil', refusal: {reason: no currency, phase: pre}}
     effects:
     - {target: 'currencies[code].status', formula: 'paused ? paused : active'}
     - {target: rev, formula: rev + 1}
     access:
     - {cell: currencyState, mode: peek, actor: arm, phase: pre}
-    - {cell: currencyState, mode: consume, actor: arm, phase: commit}
-    - {cell: currencyState, mode: post, actor: arm, phase: commit}
+    - {cell: currencyState, mode: consume, actor: 'helper:registrySetStatus', phase: commit}
+    - {cell: currencyState, mode: post, actor: 'helper:registrySetStatus', phase: commit}
     nested_calls:
     - {callee: registryStatus, protocol: P0, takes: [], puts: [], post_owner: helper}
+    - {callee: registryGovernor, protocol: P0, takes: [], puts: [], post_owner: helper}
+    - {callee: registrySetStatus, protocol: H2b, takes: [currencyState], puts: [currencyState], post_owner: helper}
     refusals:
     - {reason: no currency, phase: pre, reposts: false, fail: false}
     invariants:
     - S12
+    - I23
     status: verified
+    acceptance:
+    - AC-SPEC-GOV-09.1
+    model: registry.set_paused
+  - arm: CurrencyRegistry@"registerExternal"
+    transition: registry.CurrencyRegistry.registerExternal
+    lean: Rholphin.Model.Registry.currencyRegistry_registerExternal
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/32_currency_registry.rho, line: 198}
+    guards:
+    - {id: new, expr: 'currencies[code] = Nil', refusal: {reason: exists, phase: pre}}
+    - {id: sponsor_sig, expr: 'Verifier.sigOk(H(rcash:external-asset-register:v1|code|assetUri|sponsor), sig, sponsor)', refusal: {
+        reason: bad sponsor signature, phase: pre}}
+    - {id: asset, expr: attestation.asset = code, refusal: {reason: asset mismatch, phase: pre}}
+    - {id: kind, expr: attestation.kind = external, refusal: {reason: external kind, phase: pre}}
+    - {id: sponsor, expr: attestation.sponsor = sponsorHex, refusal: {reason: sponsor mismatch, phase: pre}}
+    - {id: decimals, expr: attestation.decimals = 8, refusal: {reason: external decimals, phase: pre}}
+    - {id: attestation, expr: adapter attestation returned, refusal: {reason: external attestation, phase: pre}}
+    - {id: recheck, expr: 'currencies[code] = Nil', refusal: {reason: exists, phase: pre}}
+    effects:
+    - {target: 'currencies[code]', formula: '{kind: external, assetUri: assetUri, decimals: 8, sponsor: sponsorHex, status: active}'}
+    - {target: 'directory.systems[code]', formula: 'currencies[code]'}
+    - {target: rev, formula: rev + 1}
+    access:
+    - {cell: currencyState, mode: peek, actor: arm, phase: pre}
+    - {cell: currencyState, mode: consume, actor: arm, phase: commit}
+    - {cell: currencyState, mode: post, actor: arm, phase: commit}
+    nested_calls:
+    - {callee: StablecoinDirectory@"register", protocol: P4, takes: [], puts: [], post_owner: helper, internal: true}
+    refusals:
+    - {reason: bad sponsor signature, phase: pre, reposts: false, fail: false}
+    - {reason: asset mismatch, phase: pre, reposts: false, fail: false}
+    - {reason: external kind, phase: pre, reposts: false, fail: false}
+    - {reason: sponsor mismatch, phase: pre, reposts: false, fail: false}
+    - {reason: external decimals, phase: pre, reposts: false, fail: false}
+    - {reason: external attestation, phase: pre, reposts: false, fail: false}
+    - {reason: exists, phase: pre, reposts: false, fail: false}
+    invariants:
+    - I2
+    - I23
+    status: verified
+    acceptance:
+    - AC-SPEC-REG-11.1
+    model: registry.register_external
+    vector: registry.external.kind
   states:
   - Live
   initial: Live
@@ -382,11 +460,13 @@ components:
     invariants:
     - I2
     status: verified
+    acceptance:
+    - AC-SPEC-REG-01.1
   - arm: AssetResolver@"kind"
     transition: registry.AssetResolver.kind
     lean: Rholphin.Model.Registry.assetResolver_kind
     kind: read
-    source: {file: contracts/src/deploy/v3/14_asset_resolver.rho, line: 62}
+    source: {file: contracts/src/deploy/v3/14_asset_resolver.rho, line: 79}
     guards:
     - {id: known, expr: '(assetId = REV) or currencies[assetId] != Nil', refusal: {reason: unknown asset, phase: pre}}
     effects:
@@ -398,6 +478,8 @@ components:
     invariants:
     - I2
     status: verified
+    acceptance:
+    - AC-SPEC-REG-01.1
   states:
   - Live
   initial: Live

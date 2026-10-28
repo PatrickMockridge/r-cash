@@ -51,10 +51,16 @@ def S3_psmSell := @Model.Issuer.psmSell_S3
 def S3_cover0 := @Model.Issuer.cover0_S3
 def S3_accrual := @Model.Issuer.accrualDelta_S3
 
-/-! ## S4 — health preservation -/
+/-! ## S4–S7 — transition obligations -/
 
 def S4_mint := @Model.Vault.mint_preserves_health
 def S4_withdraw := @Model.Vault.withdraw_preserves_health
+def S5_close_factor := @close_factor_bound
+def S6_writeOff_badDebt := @Model.Issuer.writeOff_badDebt
+def S7_settle_principal := @Model.Issuer.settle_principal
+def S7_settle_S1 := @Model.Issuer.settle_S1
+
+
 
 /-! ## S9 — the waterfall -/
 

@@ -1,8 +1,8 @@
 # Flow specification.
 # Arm keys, source lines, access modes and refusal sets are checked against
 # contracts/build/arm_inventory.json by tools/check_flows.py. Guards, effects,
-# invariants and status are the authored content; status is not a synonym for
-# tested. See README.md for the schema and protocol labels.
+# acceptance IDs, model/vector and invariants are the authored content; status is
+# not a synonym for tested. See README.md for the schema and protocol labels.
 
 schema: rcash.flows/v1
 subsystem: oracle
@@ -31,6 +31,8 @@ components:
     invariants:
     - I7
     status: verified
+    acceptance:
+    - AC-SPEC-ORA-01.1
   - arm: OracleMath@"fresh"
     transition: oracle.OracleMath.fresh
     lean: Rholphin.Model.Oracle.oracleMath_fresh
@@ -50,6 +52,8 @@ components:
     invariants:
     - I7
     status: verified
+    acceptance:
+    - AC-SPEC-ORA-01.1
   - arm: OracleMath@"rate"
     transition: oracle.OracleMath.rate
     lean: Rholphin.Model.Oracle.oracleMath_rate
@@ -64,6 +68,8 @@ components:
     invariants:
     - I9
     status: verified
+    acceptance:
+    - AC-SPEC-ORA-01.1
   states:
   - Live
   initial: Live
@@ -106,6 +112,8 @@ components:
     invariants:
     - I8
     status: verified
+    acceptance:
+    - AC-SPEC-ORA-01.1
   - arm: OracleRegistry@"feedEntry"
     transition: oracle.OracleRegistry.feedEntry
     lean: Rholphin.Model.Oracle.oracleRegistry_feedEntry
@@ -123,6 +131,8 @@ components:
     invariants:
     - I8
     status: verified
+    acceptance:
+    - AC-SPEC-ORA-01.1
   - arm: OracleRegistry@"info"
     transition: oracle.OracleRegistry.info
     lean: Rholphin.Model.Oracle.oracleRegistry_info
@@ -138,6 +148,8 @@ components:
     invariants:
     - I8
     status: verified
+    acceptance:
+    - AC-SPEC-ORA-01.1
   - arm: OracleRegistry@"admin"
     transition: oracle.OracleRegistry.admin
     lean: Rholphin.Model.Oracle.oracleRegistry_admin
@@ -163,6 +175,8 @@ components:
     - I8
     - S12
     status: verified
+    acceptance:
+    - AC-SPEC-ORA-01.1
   states:
   - Live
   initial: Live
@@ -183,6 +197,8 @@ components:
     refusals: []
     invariants: []
     status: verified
+    acceptance:
+    - AC-SPEC-ORA-01.1
   - arm: OracleHub@"feedStatus"
     transition: oracle.OracleHub.feedStatus
     lean: Rholphin.Model.Oracle.oracleHub_feedStatus
@@ -197,6 +213,8 @@ components:
     refusals: []
     invariants: []
     status: verified
+    acceptance:
+    - AC-SPEC-ORA-01.1
   - arm: OracleHub@"getPair"
     transition: oracle.OracleHub.getPair
     lean: Rholphin.Model.Oracle.oracleHub_getPair
@@ -217,6 +235,8 @@ components:
     invariants:
     - I9
     status: verified
+    acceptance:
+    - AC-SPEC-ORA-01.1
   - arm: OracleHub@"reporters"
     transition: oracle.OracleHub.reporters
     lean: Rholphin.Model.Oracle.oracleHub_reporters
@@ -232,6 +252,8 @@ components:
     invariants:
     - I8
     status: verified
+    acceptance:
+    - AC-SPEC-ORA-01.1
   states:
   - Live
   initial: Live
@@ -278,6 +300,8 @@ components:
     invariants:
     - I7
     status: verified
+    acceptance:
+    - AC-SPEC-ORA-01.1
   - arm: OracleFeed@"get"
     transition: oracle.OracleFeed.get
     lean: Rholphin.Model.Oracle.oracleFeed_get
@@ -295,6 +319,8 @@ components:
     invariants:
     - I7
     status: verified
+    acceptance:
+    - AC-SPEC-ORA-01.1
   - arm: OracleFeed@"activate"
     transition: oracle.OracleFeed.activate
     lean: Rholphin.Model.Oracle.oracleFeed_activate
@@ -332,6 +358,8 @@ components:
     status: verified
     from: Trial
     to: Active
+    acceptance:
+    - AC-SPEC-ORA-01.1
   - arm: OracleFeed@"info"
     transition: oracle.OracleFeed.info
     lean: Rholphin.Model.Oracle.oracleFeed_info
@@ -347,6 +375,8 @@ components:
     invariants:
     - I7
     status: verified
+    acceptance:
+    - AC-SPEC-ORA-01.1
   - arm: OracleFeed@"admin"
     transition: oracle.OracleFeed.admin
     lean: Rholphin.Model.Oracle.oracleFeed_admin
@@ -370,6 +400,8 @@ components:
     invariants:
     - S12
     status: verified
+    acceptance:
+    - AC-SPEC-ORA-01.1
   states:
   - Trial
   - Active

@@ -1,0 +1,88 @@
+# Mesh lifecycle. This is a product/client flow, not a contract arm table:
+# the arm-level authority remains 05-registry.yaml and 07-market.yaml.
+schema: rcash.flows/v1
+subsystem: mesh
+source_globs: []
+states: [Unlisted, FeedActive, SystemListed, ExternalListed, Draft, Seeded, Active, Paused, Delisted]
+initial: Unlisted
+transitions:
+  - id: mesh.currency.feed
+    from: Unlisted
+    to: FeedActive
+    trigger: "three reporters submit and the sponsor binds a feed"
+    requirement: SPEC-ORA-01
+  - id: mesh.currency.stablecoin
+    from: FeedActive
+    to: SystemListed
+    trigger: "31_stablecoin deployed and CurrencyRegistry.register accepts the attestation"
+    requirement: SPEC-REG-01
+  - id: mesh.currency.external
+    from: FeedActive
+    to: ExternalListed
+    trigger: "registerExternal accepts an 8-decimal adapter attestation"
+    requirement: SPEC-DEX-05
+  - id: mesh.market.draft
+    from: SystemListed
+    to: Draft
+    trigger: "MarketFactory.createMarket signs 25 terms and stages the pair"
+    requirement: SPEC-MKT-03
+  - id: mesh.market.seed
+    from: Draft
+    to: Seeded
+    trigger: "LP addLiquidity and LiquidityLock.fund meet the seed terms"
+    requirement: SPEC-DEX-08
+  - id: mesh.market.activate
+    from: Seeded
+    to: Active
+    trigger: "MarketIndex.activate checks the sealed slot, lock and depth"
+    requirement: SPEC-MKT-07
+  - id: mesh.market.pause
+    from: Active
+    to: Paused
+    trigger: "Governor setStatus or pauseAsset(code)"
+    requirement: SPEC-DEX-07
+  - id: mesh.market.resume
+    from: Paused
+    to: Active
+    trigger: "Governor setStatus(active)"
+    requirement: SPEC-MKT-08
+  - id: mesh.market.delist
+    from: Paused
+    to: Delisted
+    trigger: "Governor setStatus(delisted)"
+    requirement: SPEC-MKT-08
+  - id: mesh.currency.pause
+    from: SystemListed
+    to: Paused
+    trigger: "CurrencyRegistry.setPaused or the external governor path"
+    requirement: SPEC-GOV-09
+refusals:
+  - id: mesh.external.kind
+    reason: external kind
+    requirement: SPEC-DEX-05
+  - id: mesh.external.decimals
+    reason: external decimals
+    requirement: SPEC-DEX-05
+  - id: mesh.pair.active
+    reason: pair active
+    requirement: SPEC-DEX-01
+  - id: mesh.pair.version
+    reason: version
+    requirement: SPEC-DEX-01
+client_flows:
+  - id: mesh.client.default
+    given: "no stored preference"
+    when: "the client starts"
+    then: "USD is the display, account and new-market quote; the user may store another default"
+    requirement: SPEC-DEX-03
+  - id: mesh.client.matrix
+    given: "the tracked mesh config and on-chain markets"
+    when: "Markets renders"
+    then: "every supported pair shows active/draft/paused/unlisted and an indicative rate"
+    requirement: SPEC-DEX-09
+  - id: mesh.client.external
+    given: "a kind external entry"
+    when: "stablecoin-only screens enumerate currencies"
+    then: "the external asset is excluded; trade/account screens label it external"
+    requirement: SPEC-DEX-06
+defects: []

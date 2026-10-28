@@ -133,6 +133,53 @@ def rules_table(doc: dict) -> list[str]:
     return lines
 
 
+def lifecycle_table(doc: dict) -> list[str]:
+    lines: list[str] = []
+    if doc.get("states") and doc.get("transitions"):
+        lines += ["## Lifecycle", "", "```mermaid", "stateDiagram-v2",
+                  f"  [*] --> {doc.get('initial', doc['states'][0])}"]
+        for transition in doc["transitions"]:
+            label = transition.get("id", "transition")
+            trigger = transition.get("trigger")
+            if trigger:
+                label += f": {trigger}"
+            lines.append(f"  {transition['from']} --> {transition['to']}: {label}")
+        lines += ["```", ""]
+        lines += ["| transition | from | to | trigger | requirement |",
+                  "|---|---|---|---|---|"]
+        for transition in doc["transitions"]:
+            lines.append("| " + " | ".join([
+                f"`{esc(transition.get('id'))}`",
+                esc(transition.get("from")),
+                esc(transition.get("to")),
+                esc(transition.get("trigger")),
+                f"`{esc(transition.get('requirement'))}`",
+            ]) + " |")
+        lines.append("")
+    if doc.get("refusals"):
+        lines += ["| refusal | reason | requirement |", "|---|---|---|"]
+        for refusal in doc["refusals"]:
+            lines.append("| " + " | ".join([
+                f"`{esc(refusal.get('id'))}`",
+                f"`{esc(refusal.get('reason'))}`",
+                f"`{esc(refusal.get('requirement'))}`",
+            ]) + " |")
+        lines.append("")
+    if doc.get("client_flows"):
+        lines += ["| client flow | given | when | then | requirement |",
+                  "|---|---|---|---|---|"]
+        for flow in doc["client_flows"]:
+            lines.append("| " + " | ".join([
+                f"`{esc(flow.get('id'))}`",
+                esc(flow.get("given")),
+                esc(flow.get("when")),
+                esc(flow.get("then")),
+                f"`{esc(flow.get('requirement'))}`",
+            ]) + " |")
+        lines.append("")
+    return lines
+
+
 def render_document(doc: dict) -> str:
     title = doc.get("subsystem", doc["_path"].stem)
     lines = [
@@ -145,6 +192,7 @@ def render_document(doc: dict) -> str:
     if doc.get("source_globs"):
         lines.append("Source: " + ", ".join(f"`{s}`" for s in doc["source_globs"]))
     lines.append("")
+    lines += lifecycle_table(doc)
     lines += rules_table(doc)
     invariants = doc.get("invariants", {})
     if invariants:

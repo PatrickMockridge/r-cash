@@ -33,7 +33,7 @@
       "contracts/build/deploy/v3/50_market.rho": {
         "bytes": 24576,
         "depth": 96,
-        "contracts": 32
+        "contracts": 34
       },
       "contracts/build/deploy/v3/51_pool.rho": {
         "bytes": 24576,
@@ -302,6 +302,7 @@
       "state_cell": "currencyState",
       "arms": [
         "register",
+        "registerExternal",
         "currency",
         "currencies",
         "setPaused"
@@ -517,7 +518,8 @@
         "market",
         "marketFor",
         "setStatus",
-        "markets"
+        "markets",
+        "pauseAsset"
       ],
       "dependencies": [
         "Root",

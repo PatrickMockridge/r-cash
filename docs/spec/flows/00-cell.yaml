@@ -8,7 +8,7 @@ source_globs: []
 invariants:
   I1:
     statement: "One Full in every state cell at every quiescent point."
-    lean: Rholphin.Linear.Cell.wf_quiescent
+    lean: Rholphin.wf_quiescent
 components: []
 rules:
   - id: C-peek
@@ -35,22 +35,22 @@ rules:
     name: duplicate cell
     rule: "posting a cell that was never taken (or was peeked) leaves two live cells"
     rejects: [C-put]
-    lean: Rholphin.Linear.Cell.peek_then_put_rejected
+    lean: Rholphin.peek_then_put_rejected
   - id: D2
     name: lost cell
     rule: "a graceful refusal after a take without a repost leaves held non-empty"
     rejects: [C-wf]
-    lean: Rholphin.Linear.Cell.take_without_put_rejected
+    lean: Rholphin.take_without_put_rejected
   - id: D3
     name: nested take
     rule: "a nested call touches a cell the caller holds: the callee blocks"
     rejects: [C-call]
-    lean: Rholphin.Linear.Cell.nested_take_deadlock
+    lean: Rholphin.nested_take_deadlock
   - id: D4
     name: lost update
     rule: "a peek followed by a later post is a duplicate, not an update"
     rejects: [C-put]
-    lean: Rholphin.Linear.Cell.peek_then_put_rejected
+    lean: Rholphin.peek_then_put_rejected
   - id: D5
     name: duplicate binder
     rule: "an outer new binder shadowed before use is dead; the inventory reports it"

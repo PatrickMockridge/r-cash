@@ -1,8 +1,8 @@
 # Flow specification.
 # Arm keys, source lines, access modes and refusal sets are checked against
 # contracts/build/arm_inventory.json by tools/check_flows.py. Guards, effects,
-# invariants and status are the authored content; status is not a synonym for
-# tested. See README.md for the schema and protocol labels.
+# acceptance IDs, model/vector and invariants are the authored content; status is
+# not a synonym for tested. See README.md for the schema and protocol labels.
 
 schema: rcash.flows/v1
 subsystem: psm
@@ -36,6 +36,8 @@ components:
     invariants: []
     status: verified
     to: Active
+    acceptance:
+    - AC-SPEC-PSM-01.1
   - arm: PegStabilityModule@"sellStable"
     transition: psm.PegStabilityModule.sellStable
     lean: Rholphin.Model.Psm.pegStabilityModule_sellStable
@@ -56,11 +58,11 @@ components:
     - {target: psmRev, formula: psmRev - (gross - fee)}
     - {target: caller, formula: REV payment (gross - fee)}
     access:
+    - {cell: issuerState, mode: peek, actor: arm, phase: pre}
     - {cell: paramsState, mode: peek, actor: arm, phase: pre}
     - {cell: psmState, mode: peek, actor: arm, phase: pre}
     - {cell: psmState, mode: consume, actor: 'helper:psmSellCommit', phase: commit}
     - {cell: psmState, mode: post, actor: 'helper:psmSellCommit', phase: commit}
-    - {cell: issuerState, mode: peek, actor: arm, phase: pre}
     nested_calls:
     - {callee: feeCeil, protocol: P0, takes: [], puts: [], post_owner: helper}
     - {callee: psmSellCommit, protocol: H2b, takes: [psmState], puts: [psmState], post_owner: helper}
@@ -77,6 +79,10 @@ components:
     - S3
     - S11
     status: verified
+    acceptance:
+    - AC-SPEC-PSM-01.1
+    model: psm.sell
+    vector: psm.sellOut
   - arm: PegStabilityModule@"buyStable"
     transition: psm.PegStabilityModule.buyStable
     lean: Rholphin.Model.Psm.pegStabilityModule_buyStable
@@ -118,6 +124,10 @@ components:
     - S11
     status: verified
     to: Active
+    acceptance:
+    - AC-SPEC-PSM-01.1
+    model: psm.buy
+    vector: psm.buyOut
   - arm: PegStabilityModule@"schedulePolicy"
     transition: psm.PegStabilityModule.schedulePolicy
     lean: Rholphin.Model.Psm.pegStabilityModule_schedulePolicy
@@ -138,6 +148,8 @@ components:
     invariants:
     - S12
     status: verified
+    acceptance:
+    - AC-SPEC-PSM-01.1
   - arm: PegStabilityModule@"applyPolicy"
     transition: psm.PegStabilityModule.applyPolicy
     lean: Rholphin.Model.Psm.pegStabilityModule_applyPolicy
@@ -166,6 +178,8 @@ components:
     invariants:
     - S12
     status: verified
+    acceptance:
+    - AC-SPEC-PSM-01.1
   - arm: PegStabilityModule@"info"
     transition: psm.PegStabilityModule.info
     lean: Rholphin.Model.Psm.pegStabilityModule_info
@@ -182,6 +196,8 @@ components:
     invariants:
     - S11
     status: verified
+    acceptance:
+    - AC-SPEC-PSM-01.1
   - arm: PegStabilityModule@"debt"
     transition: psm.PegStabilityModule.debt
     lean: Rholphin.Model.Psm.pegStabilityModule_debt
@@ -197,6 +213,8 @@ components:
     invariants:
     - S11
     status: verified
+    acceptance:
+    - AC-SPEC-PSM-01.1
   states:
   - Idle
   - Active

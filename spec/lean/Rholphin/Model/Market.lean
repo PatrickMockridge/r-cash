@@ -36,6 +36,11 @@ structure Slot where
 structure Market where
   status : MStatus
   version : Nat
+  base : Nat
+  quote : Nat
+
+/-- Cantor pairing; injective, so the two orientations are distinct keys. -/
+def pairKeyNat (a b : Nat) : Nat := (a + b) * (a + b + 1) / 2 + a
 
 structure Index where
   markets : List (Nat × Market)
@@ -118,7 +123,8 @@ theorem delisted_accepts_nothing (m : Market) (to : MStatus) (h : m.status = .de
       rfl
 
 /-- Staging refuses an active or paused pair and a non-increasing version. -/
-def marketIndex_stage (i : Index) (marketId version : Nat) (prior : Option Market) : Option Index :=
+def marketIndex_stage (i : Index) (marketId version base quote : Nat)
+    (prior : Option Market) : Option Index :=
   match lookupMarket i.markets marketId with
   | some _ => none
   | none =>
@@ -126,11 +132,17 @@ def marketIndex_stage (i : Index) (marketId version : Nat) (prior : Option Marke
       | some p =>
           if p.status = .active ∨ p.status = .paused then none
           else if version ≤ p.version then none
-          else some { i with markets := insertMarket i.markets marketId ⟨.draft, version⟩ }
-      | none => some { i with markets := insertMarket i.markets marketId ⟨.draft, version⟩ }
+          else some { i with
+            markets := insertMarket i.markets marketId ⟨.draft, version, base, quote⟩
+            byPair := insertNat (insertNat i.byPair (pairKeyNat base quote) marketId)
+                                (pairKeyNat quote base) marketId }
+      | none => some { i with
+          markets := insertMarket i.markets marketId ⟨.draft, version, base, quote⟩
+          byPair := insertNat (insertNat i.byPair (pairKeyNat base quote) marketId)
+                              (pairKeyNat quote base) marketId }
 
-theorem staged_is_draft {i i' : Index} {marketId version : Nat} {prior : Option Market}
-    (h : marketIndex_stage i marketId version prior = some i') :
+theorem staged_is_draft {i i' : Index} {marketId version base quote : Nat} {prior : Option Market}
+    (h : marketIndex_stage i marketId version base quote prior = some i') :
     (lookupMarket i'.markets marketId).map (fun m => m.status) = some .draft := by
   unfold marketIndex_stage at h
   split at h
@@ -155,10 +167,78 @@ def marketIndex_market (i : Index) (marketId : Nat) : Option Market :=
 
 def marketIndex_markets (i : Index) : List (Nat × Market) := i.markets
 
-def marketIndex_marketFor (i : Index) (pair : Nat) : Option Market :=
+/-- Resolve either orientation of an unordered pair. -/
+def marketIndex_marketFor (i : Index) (pair reversePair : Nat) : Option Market :=
   match lookupNat i.byPair pair with
-  | none => none
   | some marketId => lookupMarket i.markets marketId
+  | none =>
+      match lookupNat i.byPair reversePair with
+      | none => none
+      | some marketId => lookupMarket i.markets marketId
+
+/-- The pause transformation for one market. -/
+def pauseMarket (m : Market) (code : Nat) : Market :=
+  if m.base = code ∨ m.quote = code then
+    if m.status = .active then { m with status := .paused } else m
+  else m
+
+/-- Pause every active market that uses `code`. -/
+def pauseMarkets (markets : List (Nat × Market)) (code : Nat) : List (Nat × Market) :=
+  markets.map (fun entry => (entry.1, pauseMarket entry.2 code))
+
+theorem lookupMarket_pauseMarkets : ∀ (markets : List (Nat × Market)) (id code : Nat),
+    lookupMarket (pauseMarkets markets code) id
+      = (lookupMarket markets id).map (fun m => pauseMarket m code)
+  | [], _id, _code => rfl
+  | (_k, _v) :: rest, id, code => by
+      simp only [pauseMarkets, List.map_cons, lookupMarket]
+      split
+      · rfl
+      · exact lookupMarket_pauseMarkets rest id code
+
+def marketIndex_pauseAsset (i : Index) (code : Nat) : Index :=
+  { i with markets := pauseMarkets i.markets code }
+
+theorem pauseAsset_lookup (i : Index) (id code : Nat) :
+    lookupMarket (marketIndex_pauseAsset i code).markets id
+      = (lookupMarket i.markets id).map (fun m => pauseMarket m code) := by
+  unfold marketIndex_pauseAsset
+  exact lookupMarket_pauseMarkets i.markets id code
+
+theorem pauseAsset_pauses_all (i : Index) (id code : Nat) (m : Market)
+    (h : lookupMarket i.markets id = some m) :
+    lookupMarket (marketIndex_pauseAsset i code).markets id
+      = some (pauseMarket m code) := by
+  rw [pauseAsset_lookup, h]
+  rfl
+
+theorem pauseAsset_singleton (id code : Nat) (m : Market)
+    (hbase : m.base = code ∨ m.quote = code) (hactive : m.status = .active) :
+    lookupMarket (marketIndex_pauseAsset ⟨[(id, m)], [], []⟩ code).markets id
+      = some { m with status := .paused } := by
+  rw [pauseAsset_pauses_all _ id code m (by simp [lookupMarket])]
+  simp [pauseMarket, hbase, hactive]
+
+theorem stage_refuses_active (i : Index) (marketId version base quote : Nat)
+    (p : Market) (hactive : p.status = .active ∨ p.status = .paused) :
+    marketIndex_stage i marketId version base quote (some p) = none := by
+  unfold marketIndex_stage
+  split
+  · rfl
+  · simp [hactive]
+
+theorem stage_writes_both {i i' : Index} {marketId version base quote : Nat}
+    (h : marketIndex_stage i marketId version base quote none = some i') :
+    lookupNat i'.byPair (pairKeyNat base quote) = some marketId ∧
+    lookupNat i'.byPair (pairKeyNat quote base) = some marketId := by
+  unfold marketIndex_stage at h
+  split at h
+  · contradiction
+  · split at h
+    · contradiction
+    · simp only [Option.some.injEq] at h
+      subst h
+      simp [lookupNat, insertNat]
 
 /-! ## Gate and views -/
 
@@ -167,8 +247,8 @@ def tradabilityGate_admit (status : MStatus) (fresh : Bool)
   status == .active && fresh && inputValue ≥ minTicket
     && inputValue * Bps ≤ poolValue * maxTradeBps
 
-def listingViews_marketFor (i : Index) (pair : Nat) : Option Market :=
-  marketIndex_marketFor i pair
+def listingViews_marketFor (i : Index) (pair reversePair : Nat) : Option Market :=
+  marketIndex_marketFor i pair reversePair
 def listingViews_market (i : Index) (id : Nat) : Option Market := marketIndex_market i id
 def listingViews_isActive (i : Index) (id : Nat) : Bool :=
   (marketIndex_market i id).any (fun m => m.status == .active)
@@ -180,8 +260,8 @@ def listingViews_currencies (store : List (Nat × Nat)) : List Nat := store.map 
 def listingViews_markets (i : Index) : List (Nat × Market) := i.markets
 
 /-- The factory stages a draft only after the sponsor, feed and pool checks. -/
-def marketFactory_createMarket (checks : Bool) (i : Index) (marketId version : Nat) :
+def marketFactory_createMarket (checks : Bool) (i : Index) (marketId version base quote : Nat) :
     Option Index :=
-  if checks then marketIndex_stage i marketId version none else none
+  if checks then marketIndex_stage i marketId version base quote none else none
 
 end Rholphin.Model.Market

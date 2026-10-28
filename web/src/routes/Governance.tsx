@@ -3,9 +3,11 @@ import { useQuery } from "@tanstack/react-query";
 import Unlock from "../components/Unlock";
 import { useWallet } from "../lib/store";
 import type { V4Currency, V4Pending, V4RiskParams } from "../lib/types";
+import { usePreferences } from "../lib/preferences";
 
 export default function Governance() {
   const { status, client } = useWallet();
+  const { displayCurrency } = usePreferences();
   const [code, setCode] = useState("");
   const [domain, setDomain] = useState("");
   const [nonce, setNonce] = useState("0");
@@ -15,14 +17,19 @@ export default function Governance() {
     enabled: status === "unlocked" && !!client,
     queryFn: async () => JSON.parse(await client!.v4_currencies()) as V4Currency[],
   });
+  const stablecoins = useMemo(
+    () => (currencies.data ?? []).filter((entry) => entry.kind !== "external"),
+    [currencies.data],
+  );
 
   useEffect(() => {
-    if (!code && currencies.data?.length) {
-      const first = currencies.data[0]!;
+    if (!code && stablecoins.length) {
+      const first = stablecoins.find((entry) => entry.code === displayCurrency)
+        ?? stablecoins[0]!;
       setCode(first.code);
       setDomain(`stablecoin:${first.code}`);
     }
-  }, [code, currencies.data]);
+  }, [code, stablecoins, displayCurrency]);
 
   const currency = useMemo(
     () => currencies.data?.find((entry) => entry.code === code),

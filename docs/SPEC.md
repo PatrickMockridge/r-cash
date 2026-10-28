@@ -582,6 +582,40 @@ requires the funder or beneficiary. A one-shot lock; a released or cancelled loc
 | SPEC-POOL-09 | MUST | Release requires the beneficiary and the height; cancel requires the funder or beneficiary. | LiquidityLock | implemented |
 | SPEC-POOL-10 | MUST | A released/cancelled lock refuses `"closed"`. | LiquidityLock | implemented |
 
+### 12.4 Currency mesh, USD default and external assets
+
+The DEX is a **full mesh of direct pairs**, not a hub and not a router. One
+`FxPool` serves an unordered pair in both directions; `byPair` records both
+orientations and `marketFor` resolves either one. The supported currency set is
+versioned in `configs/mesh.json`; the protocol itself accepts any registered
+currency and any direct pair.
+
+USD is the default display, account and new-market quote currency. The native
+R-Cash USD system is the default USD unit. A user may select a different default
+in the client; no on-chain preference state exists. External DAI/USDC/USDT-style
+assets are registered through the external-asset adapter interface in
+`docs/spec/EXTERNAL-ASSETS.md` and trade as separate codes with their own feeds.
+
+Pair creation is permissionless. The launch set (`configs/mesh.json`) is the
+discovery source for supported currencies and priority pairs; priority pairs are
+created and seeded at launch, and an unlisted supported pair shows as unavailable
+until a sponsor/LP creates it. The web client shows a mesh matrix with
+`active`, `draft` and `unlisted` states and an indicative oracle cross-rate even
+when no pool exists.
+
+| ID | Level | Requirement | Owner | Status |
+|---|---|---|---|---|
+| SPEC-DEX-01 | MUST | The DEX supports direct markets for every supported ordered lookup, with exactly one active-or-paused market per unordered pair. | MarketIndex, MarketFactory | planned |
+| SPEC-DEX-02 | MUST | `byPair` records both orientations and `marketFor(base, quote)` resolves either orientation to the same market. | MarketIndex, ListingViews | planned |
+| SPEC-DEX-03 | MUST | USD is the default display, account and new-market quote currency; a client MAY override the default per user with no on-chain state. | Web, SDK, CLI | planned |
+| SPEC-DEX-04 | MUST | The native R-Cash USD system is listed like any other currency; it is the default USD unit. | CurrencyRegistry, mesh config | planned |
+| SPEC-DEX-05 | MUST | An external asset is registered only through `registerExternal`, with a sponsor signature, an adapter attestation, `kind: external` and `decimals: 8`. | CurrencyRegistry, AssetResolver | planned |
+| SPEC-DEX-06 | MUST | An external asset has no VaultBook, PSM, savings or liquidation; stablecoin-only screens filter it out. | Web, SDK | planned |
+| SPEC-DEX-07 | MUST | `MarketIndex.pauseAsset` is governor-authorised and pauses every active market containing the code. | MarketIndex, Governor | planned |
+| SPEC-DEX-08 | MUST | Priority pairs from `configs/mesh.json` are created and seeded at launch; other supported pairs remain permissionless and show unavailable until created. | mesh tooling, ListingViews | planned |
+| SPEC-DEX-09 | MUST | The mesh matrix exposes every supported pair, its market state and an indicative oracle rate. | Web, ListingViews | planned |
+| SPEC-DEX-10 | MUST | A bridged USD asset is priced by its own feed; the DEX does not assume a 1.0 peg for an external code. | OracleHub, FxPool | planned |
+
 ## 13. Governance, timelock and pause
 
 ### 13.1 Admin authority
@@ -640,8 +674,10 @@ OracleHub → CurrencyRegistry → AssetResolver → TransferBook → PoolTempla
 AccountFactory`. Each step registers in Root; the installer verifies the keys at the
 carrying block before the next step.
 
-The currency entry stores `{stablecoinUri, custodyUri, paramsUri, vaultUri,
-liquidationUri, savingsUri, psmUri, bufferUri, paramsHash, sponsor, status}`.
+A stablecoin entry stores `{kind: stablecoin, stablecoinUri, custodyUri, paramsUri,
+vaultUri, liquidationUri, savingsUri, psmUri, bufferUri, paramsHash, sponsor, status}`.
+An external entry stores `{kind: external, assetUri, decimals: 8, sponsor, status}` and has
+no issuer, vault, PSM or savings URIs.
 
 | ID | Level | Requirement | Owner | Status |
 |---|---|---|---|---|
@@ -655,6 +691,8 @@ liquidationUri, savingsUri, psmUri, bufferUri, paramsHash, sponsor, status}`.
 | SPEC-REG-08 | MUST | The manifest lists every component URI and no capability or key. | rcash-core, ops | implemented |
 | SPEC-REG-09 | MUST | A stale registry status is corrected by a governed pause, not by the issuer reading the registry. | CurrencyRegistry, VaultBook | implemented |
 | SPEC-REG-10 | MUST | The contract catalogue matches the built terms and arm lists. | components.json | implemented |
+| SPEC-REG-11 | MUST | An external asset is listed only by `registerExternal` with a sponsor signature, an adapter attestation and `decimals: 8`. | CurrencyRegistry, AssetResolver | planned |
+| SPEC-REG-12 | MUST | An external entry carries no R-Cash issuer system and is filtered out of Vault/Earn/Redeem. | CurrencyRegistry, web | planned |
 
 ## 15. Clients (Rust SDK, CLI, WASM)
 
@@ -677,6 +715,11 @@ arithmetic. Trusted inputs are hex bytes, lengths and base units.
   same signed body. WASM uses the on-chain `opId` plus the IndexedDB journal.
 - Slippage minima are explicit parameters. The CLI defaults to 50 bps from the quote and
   refuses a zero minimum for swap, add and remove.
+- USD is the default display, account and new-market quote; `--display-currency` /
+  `RCASH_DISPLAY_CURRENCY` overrides it for human output, and the web stores the choice in
+  localStorage. No on-chain preference state exists.
+- `v4 currencies` reports `kind` and, for an external asset, `assetUri`, `decimals`, `chain`
+  and `custodian`. `v4 market` resolves either orientation of an unordered pair.
 - Errors map to the refusal taxonomy; 429/503/admission/duplicate/term-too-large exit with
   the documented code and never masquerade as a protocol refusal.
 
@@ -693,7 +736,9 @@ arithmetic. Trusted inputs are hex bytes, lengths and base units.
 | SPEC-CLI-09 | MUST | WASM exports the same methods with camelCase JSON and exact string amounts. | WASM | implemented |
 | SPEC-CLI-10 | MUST | `make demo` runs a real send → claim journey. | CLI | implemented |
 | SPEC-CLI-11 | MUST | Error classes are distinguishable and documented. | SDK | implemented |
-| SPEC-CLI-12 | MUST | V4Currency carries custody, params, liquidation, savings, PSM and sponsor URIs. | SDK/WASM/web | implemented |
+| SPEC-CLI-12 | MUST | V4Currency carries kind and, for stablecoins, custody/params/liquidation/savings/PSM/sponsor URIs. | SDK/WASM/web | implemented |
+| SPEC-CLI-13 | MUST | USD is the default display/account/new-market quote and a client may override it. | SDK/CLI/WASM/web | planned |
+| SPEC-CLI-14 | MUST | A client can read an external asset's kind, provenance and decimals. | SDK/WASM/web | planned |
 
 ## 16. Web UI
 
@@ -706,18 +751,18 @@ Ramps remain disabled and are named as exclusions.
 
 | Screen | Required behaviour |
 |---|---|
-| Accounts | REV + per-asset balances; faucet; fund REV; currency list from the chain; copy key/address; no hard-coded asset list. |
+| Accounts | REV + per-asset balances; a total in the preferred currency (USD by default); faucet; fund REV; currency list from the chain; copy key/address; no hard-coded asset list. |
 | Receive | Public key/address; open a claim link; no secret display beyond the fragment. |
 | Pay | Asset picker; amount; recipient pubkey; expiry from finalized height; memo; opId generated and journaled before send; stipend with non-refundable warning; claim link; refund of expired sends. |
 | Claim | Status, expiry countdown, stipend, memo; claim disabled unless open and unexpired; REV-for-phlo warning. |
 | Vault | Per-currency collateral, debt, accrued interest, health, liquidation price; deposit, mint, repay, withdraw; totals; keeper liquidation. |
 | Earn | Savings share value, position, deposit/withdraw, yield to date. |
 | Redeem | PSM info, buy/sell, fee, ceiling, signed debt; explains par redemption and the finite buffer. |
-| Markets | List; create with the 25-field form and validation; activate; swap; add/remove liquidity; seed + lock countdown; reserves. |
+| Markets | Currency mesh matrix with `active`/`draft`/`paused`/`unlisted` states; USD default quote; create with the 25-field form and validation; activate; swap; add/remove liquidity; seed + lock countdown; reserves. |
 | Liquidity | Existing market slot, lock countdown, add/release, non-zero minima. |
 | History | Journal + on-chain transfer status; pending reconciliation on boot. |
 | Governance | Read-only admin set, pending actions and timelock state. |
-| Settings | Node, manifest, keystore export, lock. |
+| Settings | Node, manifest, preferred display currency (USD default), keystore export, lock. |
 
 The IndexedDB journal records every write before submission, with transfer URI, asset,
 amount, expiry, opId, recipient and status. Pending entries are reconciled on boot.
@@ -738,6 +783,9 @@ amount, expiry, opId, recipient and status. Pending entries are reconciled on bo
 | SPEC-WEB-12 | MUST | A locked wallet shows "unlock to quote" for freshness-gated reads. | Convert/Liquidity | implemented |
 | SPEC-WEB-13 | MUST | Batch and Ramps are disabled with an accurate reason. | Disabled | implemented |
 | SPEC-WEB-14 | MUST | The journal never stores a claim secret or a private key. | db.ts | implemented |
+| SPEC-WEB-15 | MUST | The preferred currency defaults to USD and is user-selectable in Settings; no secret is stored with it. | preferences.ts, Settings | planned |
+| SPEC-WEB-16 | MUST | Accounts shows a preferred-currency total and per-asset converted values, or "no price" when a feed is missing. | Accounts | planned |
+| SPEC-WEB-17 | MUST | Markets shows the full supported mesh with availability and an indicative oracle rate; external assets are labelled. | Markets | planned |
 
 ## 17. Operations
 
@@ -752,6 +800,13 @@ amount, expiry, opId, recipient and status. Pending entries are reconciled on bo
   writes `deployments/devnet-v4.systems.json`.
 - `deployments/devnet-v4.json` is the component manifest (23 fields, no nulls).
   `testnet-v4.json` is annotated as incomplete until the public testnet completes.
+- `configs/mesh.json` is the tracked source for the supported currency set, majors,
+  USD default and priority pairs. `make mesh-plan` validates it; `make mesh-install`
+  deploys the native systems and feeds and seeds the priority pairs on a fresh devnet;
+  `make mesh-pair BASE=... QUOTE=...` creates a non-priority pair. The full mesh remains
+  permissionless; only priority pairs are seeded at launch.
+- A bridged asset is listable only after a bridge or custodian deploys an 8-decimal ERTP
+  adapter; the mesh install refuses an enabled external entry without an `adapterUri`.
 - A failed deploy is never retried blind; the client classifies refusal, duplicate and
   finality.
 - 1 GiB hosts and public-testnet completion are not conformance targets.
@@ -768,12 +823,14 @@ amount, expiry, opId, recipient and status. Pending entries are reconciled on bo
 | SPEC-OPS-08 | MUST | Docs, Makefile and manifests describe the shipped behaviour. | docs | implemented |
 | SPEC-OPS-09 | MUST | `unit-all` is the ordered campaign list. | Makefile | implemented |
 | SPEC-OPS-10 | MUST | The demo journey runs end to end on the bootstrapped devnet. | CLI | implemented |
+| SPEC-OPS-11 | MUST | `make mesh-plan` validates the tracked mesh config before any deployment. | tools/mesh.py | implemented |
+| SPEC-OPS-12 | MUST | `make mesh-install` deploys the native currencies, feeds and priority pairs; an external entry without an adapter is refused. | tools/mesh.py | planned |
 
 ## 18. Invariants and conformance
 
 ### 18.1 Normative invariants
 
-`docs/spec/20-INVARIANTS.md` is the sole normative invariant text: I1–I22 and S1–S12, with
+`docs/spec/20-INVARIANTS.md` is the sole normative invariant text: I1–I15 and I19–I24, plus S1–S12, with
 S3 revised to:
 
 ```
@@ -788,32 +845,33 @@ surplus. `psmDebt` is signed. `badDebt` is a cumulative memo outside the identit
 | ID | Level | Requirement | Owner | Status |
 |---|---|---|---|---|
 | SPEC-INV-01 | MUST | Every requirement maps to at least one invariant or is a pure client/ops requirement. | spec | implemented |
-| SPEC-INV-02 | MUST | S1–S12 and I1–I22 hold; S3 uses the revised identity. | contracts | implemented |
+| SPEC-INV-02 | MUST | S1–S12 and I1–I15/I19–I24 hold; S3 uses the revised identity. | contracts | implemented |
 | SPEC-INV-03 | MUST | The final report traces each requirement to its evidence and states PASS/FAIL/BLOCKED/SKIPPED. | ops | planned |
 
 ### 18.3 Refusal strings
 
 ```
-action  age  already active  amount  amount mismatch  asset  bad attestation  bad buffer authority
-bad burn authority  bad custody authority  bad directory authority  bad index  bad index authority
-bad liquidation authority  bad mint authority  bad savings authority  bad secret
-bad settlement authority  bad signature  bad sponsor  bad sponsor signature  bad vault auth
-bad version  balance  band  base feed  base feed policy  base spread  below MCR  below threshold
-bonus  book expiry  bps  buffer  burn  ceiling  changed  close  close factor  closed
-currency mismatch  custody  default expiry  deposit  depth  depth floor  duplicate  early  exists
-expired  expiry  feed attestation  feed inactive  feed info  first deposit balance  frozen  funded
-future price  healthy  height  height not monotonic  lock beneficiary  lock height  lock too short
-lock unfunded  locked  max debt  max expiry  max memo  max op id  max stipend  max supply  max trade
-mcr  memo  min amount  min debt  min liquidity  min rev  min stable  min ticket  minimum  no account
-no attestation  no currency  no feed  no lock  no market  no purse  no rate  no slot  no system
-no terms  no vault  not LP  not a REV payment  not a stablecoin payment  not active
-not an LP payment  not base  not beneficiary  not draft  not expired  not funder  not installer
-not owner  not quote  not reporter  not sealed  not seeded  not sender  not this asset  opId
-oracle age  output  pair  pair active  params hash  paused  payment  pending  psm fee  psm floor
-quorum  quote feed  quote feed policy  rate  recapitalise  replay  reporter not allowlisted
-reporters  retired  savings share  sealed  seed mismatch  shares  shares mismatch  skew  slippage
-slug  sponsor mismatch  sponsor owner  sponsor slots  spread  stale  stale feed  stale submit
-stipend  supply  terms fields  terms mismatch  threshold  timelock  tolerance  transition  trial
+action  age  already active  amount  amount mismatch  asset  asset mismatch  bad attestation
+bad buffer authority  bad burn authority  bad custody authority  bad directory authority  bad index
+bad index authority  bad liquidation authority  bad mint authority  bad savings authority
+bad secret  bad settlement authority  bad signature  bad sponsor  bad sponsor signature
+bad vault auth  bad version  balance  band  base feed  base feed policy  base spread  below MCR
+below threshold  bonus  book expiry  bps  buffer  burn  ceiling  changed  close  close factor
+closed  currency mismatch  custody  default expiry  deposit  depth  depth floor  duplicate  early
+exists  expired  expiry  external attestation  external decimals  external kind  feed attestation
+feed inactive  feed info  first deposit balance  frozen  funded  future price  healthy  height
+height not monotonic  lock beneficiary  lock height  lock too short  lock unfunded  locked  max debt
+max expiry  max memo  max op id  max stipend  max supply  max trade  mcr  memo  min amount  min debt
+min liquidity  min rev  min stable  min ticket  minimum  no account  no attestation  no currency
+no feed  no lock  no market  no purse  no rate  no slot  no system  no terms  no vault  not LP
+not a REV payment  not a stablecoin payment  not active  not an LP payment  not base
+not beneficiary  not draft  not expired  not funder  not installer  not owner  not quote
+not reporter  not sealed  not seeded  not sender  not this asset  opId  oracle age  output  pair
+pair active  params hash  paused  payment  pending  psm fee  psm floor  quorum  quote feed
+quote feed policy  rate  recapitalise  replay  reporter not allowlisted  reporters  retired
+savings share  sealed  seed mismatch  shares  shares mismatch  skew  slippage  slug
+sponsor mismatch  sponsor owner  sponsor slots  spread  stale  stale feed  stale submit  stipend
+supply  terms fields  terms mismatch  threshold  timelock  tolerance  transition  trial
 trial submits  underwater repayment  unfunded  unknown  unknown admin action  unknown asset
 unknown component  verify failed  version
 ```
@@ -829,7 +887,7 @@ records the decision for each one.
 |---|---|---|
 | SPEC-EXC-01 | Batch payouts | Not in the protocol; separate deploys are not atomic. |
 | SPEC-EXC-02 | Ramp registry / fiat ramps | No custody or fiat integration. |
-| SPEC-EXC-03 | CPMM / router / multi-hop | Direct pairs only in this version. |
+| SPEC-EXC-03 | CPMM / router / multi-hop | Direct pairs only; the full mesh is the alternative to a router. |
 | SPEC-EXC-04 | Cards, platform API | Out of product scope. |
 | SPEC-EXC-05 | MetaMask signing | Spike not run; no decision. |
 | SPEC-EXC-06 | OTC / RFQ / limit orders | Not implemented. |

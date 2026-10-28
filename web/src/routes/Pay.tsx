@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Unlock from "../components/Unlock";
 import { useWallet } from "../lib/store";
@@ -6,6 +6,7 @@ import { claimLink } from "../lib/claim";
 import { addJournal } from "../lib/db";
 import { claim_hash } from "../wasm";
 import type { V4Currency, V4Send } from "../lib/types";
+import { usePreferences } from "../lib/preferences";
 
 interface Sent extends V4Send {
   secret: string;
@@ -14,6 +15,7 @@ interface Sent extends V4Send {
 export default function Pay() {
   const { status, client } = useWallet();
   const queryClient = useQueryClient();
+  const { displayCurrency } = usePreferences();
   const [toPub, setToPub] = useState("");
   const [asset, setAsset] = useState("REV");
   const [amount, setAmount] = useState("0.01");
@@ -37,6 +39,10 @@ export default function Pay() {
     () => ["REV", ...(currencies.data ?? []).map((currency) => currency.code)],
     [currencies.data],
   );
+
+  useEffect(() => {
+    if (assets.includes(displayCurrency)) setAsset(displayCurrency);
+  }, [assets, displayCurrency]);
 
   if (status !== "unlocked") return <Unlock />;
 

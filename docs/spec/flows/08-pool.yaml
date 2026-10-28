@@ -1,8 +1,8 @@
 # Flow specification.
 # Arm keys, source lines, access modes and refusal sets are checked against
 # contracts/build/arm_inventory.json by tools/check_flows.py. Guards, effects,
-# invariants and status are the authored content; status is not a synonym for
-# tested. See README.md for the schema and protocol labels.
+# acceptance IDs, model/vector and invariants are the authored content; status is
+# not a synonym for tested. See README.md for the schema and protocol labels.
 
 schema: rcash.flows/v1
 subsystem: pool
@@ -40,6 +40,8 @@ components:
     - I11
     - I13
     status: verified
+    acceptance:
+    - AC-SPEC-POOL-01.1
   states:
   - Live
   initial: Live
@@ -59,6 +61,8 @@ components:
     refusals: []
     invariants: []
     status: verified
+    acceptance:
+    - AC-SPEC-POOL-01.1
   - arm: FxPool@"reserves"
     transition: pool.FxPool.reserves
     lean: Rholphin.Model.Pool.fxPool_reserves
@@ -74,6 +78,8 @@ components:
     invariants:
     - I10
     status: verified
+    acceptance:
+    - AC-SPEC-POOL-01.1
   - arm: FxPool@"balances"
     transition: pool.FxPool.balances
     lean: Rholphin.Model.Pool.fxPool_balances
@@ -88,6 +94,8 @@ components:
     invariants:
     - I10
     status: verified
+    acceptance:
+    - AC-SPEC-POOL-01.1
   - arm: FxPool@"attest"
     transition: pool.FxPool.attest
     lean: Rholphin.Model.Pool.fxPool_attest
@@ -104,6 +112,8 @@ components:
     - I10
     - I11
     status: verified
+    acceptance:
+    - AC-SPEC-POOL-01.1
   - arm: FxPool@"quote"
     transition: pool.FxPool.quote
     lean: Rholphin.Model.Pool.fxPool_quote
@@ -127,6 +137,8 @@ components:
     - I9
     - I12
     status: verified
+    acceptance:
+    - AC-SPEC-POOL-01.1
   - arm: FxPool@"swap"
     transition: pool.FxPool.swap
     lean: Rholphin.Model.Pool.fxPool_swap
@@ -163,6 +175,10 @@ components:
     - I10
     - I12
     status: verified
+    acceptance:
+    - AC-SPEC-POOL-01.1
+    model: amm.swap
+    vector: amm.outB2Q
   - arm: FxPool@"addLiquidity"
     transition: pool.FxPool.addLiquidity
     lean: Rholphin.Model.Pool.fxPool_addLiquidity
@@ -205,6 +221,8 @@ components:
     - I12
     status: verified
     to: Seeded
+    acceptance:
+    - AC-SPEC-POOL-01.1
   - arm: FxPool@"removeLiquidity"
     transition: pool.FxPool.removeLiquidity
     lean: Rholphin.Model.Pool.fxPool_removeLiquidity
@@ -235,6 +253,8 @@ components:
     status: verified
     from: Seeded
     to: Empty
+    acceptance:
+    - AC-SPEC-POOL-01.1
   states:
   - Empty
   - Seeded
@@ -273,6 +293,8 @@ components:
     status: verified
     from: Unfunded
     to: Funded
+    acceptance:
+    - AC-SPEC-POOL-01.1
   - arm: LiquidityLock@"release"
     transition: pool.LiquidityLock.release
     lean: Rholphin.Model.Pool.liquidityLock_release
@@ -303,6 +325,8 @@ components:
     status: verified
     from: Funded
     to: Released
+    acceptance:
+    - AC-SPEC-POOL-01.1
   - arm: LiquidityLock@"cancel"
     transition: pool.LiquidityLock.cancel
     lean: Rholphin.Model.Pool.liquidityLock_cancel
@@ -331,6 +355,8 @@ components:
     status: verified
     from: Funded
     to: Cancelled
+    acceptance:
+    - AC-SPEC-POOL-01.1
   - arm: LiquidityLock@"info"
     transition: pool.LiquidityLock.info
     lean: Rholphin.Model.Pool.liquidityLock_info
@@ -346,6 +372,8 @@ components:
     invariants:
     - I13
     status: verified
+    acceptance:
+    - AC-SPEC-POOL-01.1
   states:
   - Unfunded
   - Funded

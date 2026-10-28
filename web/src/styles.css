@@ -384,3 +384,13 @@ ul.plain {
 ul.plain li {
   padding: 4px 0;
 }
+
+/* Currency mesh matrix */
+.mesh-wrap { overflow-x: auto; }
+.mesh th, .mesh td { padding: 0.35rem 0.5rem; text-align: center; }
+.mesh-cell { background: none; border: 0; color: inherit; cursor: pointer; padding: 0; font-size: 0.72rem; }
+.mesh-active .mesh-cell { color: #1f7a4d; font-weight: 600; }
+.mesh-draft .mesh-cell { color: #8a6100; }
+.mesh-paused .mesh-cell { color: #9a3412; }
+.mesh-delisted .mesh-cell { color: #6b7280; text-decoration: line-through; }
+.mesh-unlisted .mesh-cell { color: #9ca3af; }

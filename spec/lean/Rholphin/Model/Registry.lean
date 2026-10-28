@@ -13,11 +13,26 @@ namespace Rholphin.Model.Registry
 
 open Rholphin
 
+inductive AssetKind where
+  | stablecoin
+  | external
+  deriving Repr, DecidableEq
+
 structure Entry where
   uri : Nat
   version : Nat
   retired : Bool
+  kind : AssetKind
+  decimals : Nat
   deriving Repr, DecidableEq
+
+/-- A listed R-Cash stablecoin entry. -/
+def Entry.stablecoin (uri version : Nat) : Entry :=
+  { uri := uri, version := version, retired := false, kind := .stablecoin, decimals := 8 }
+
+/-- A listed external asset (bridge/custodian adapter). -/
+def Entry.external (uri : Nat) : Entry :=
+  { uri := uri, version := 1, retired := false, kind := .external, decimals := 8 }
 
 structure RootStore where
   entries : List (Nat × Entry)
@@ -64,11 +79,11 @@ def root_keys (s : RootStore) : List Nat := s.entries.map (fun p => p.1)
 def root_register (s : RootStore) (key uri version : Nat) : Option RootStore :=
   if s.frozen then none
   else if (lookup s.entries key).isSome then none
-  else some { s with entries := insert s.entries key ⟨uri, version, false⟩ }
+  else some { s with entries := insert s.entries key (Entry.stablecoin uri version) }
 
 theorem root_register_resolves {s : RootStore} {key uri version : Nat} {s' : RootStore}
     (h : root_register s key uri version = some s') :
-    root_get s' key = some ⟨uri, version, false⟩ := by
+    root_get s' key = some (Entry.stablecoin uri version) := by
   unfold root_register at h
   split at h
   · contradiction
@@ -76,7 +91,7 @@ theorem root_register_resolves {s : RootStore} {key uri version : Nat} {s' : Roo
     · contradiction
     · simp only [Option.some.injEq] at h
       subst h
-      simp [root_get, lookup, insert]
+      simp [Entry.stablecoin, root_get, lookup, insert]
 
 def root_rotate (s : RootStore) (key expected newUri newVersion : Nat) : Option RootStore :=
   match lookup s.entries key with
@@ -85,7 +100,7 @@ def root_rotate (s : RootStore) (key expected newUri newVersion : Nat) : Option 
       if s.frozen then none
       else if entry.version ≠ expected then none
       else some
-        { s with entries := insert s.entries key ⟨newUri, newVersion, false⟩ }
+        { s with entries := insert s.entries key (Entry.stablecoin newUri newVersion) }
 
 def root_deprecate (s : RootStore) (key : Nat) : Option RootStore :=
   match lookup s.entries key with
@@ -136,6 +151,29 @@ theorem currencyRegistry_register_resolves {s s' : CurrencyStore} {code : Nat} {
   · simp only [Option.some.injEq] at h
     subst h
     simp [lookup, insert]
+
+/-- List an external asset.  The adapter has already been attested; the model
+records the one-entry-per-code and 8-decimal rules. -/
+def currencyRegistry_registerExternal (s : CurrencyStore) (code uri : Nat) : Option CurrencyStore :=
+  if (lookup s.currencies code).isSome then none
+  else some { s with currencies := insert s.currencies code (Entry.external uri), rev := s.rev + 1 }
+
+@[simp] theorem Entry.external_kind (uri : Nat) :
+    (Entry.external uri).kind = AssetKind.external := rfl
+
+@[simp] theorem Entry.external_decimals (uri : Nat) :
+    (Entry.external uri).decimals = 8 := rfl
+
+theorem currencyRegistry_registerExternal_shape {s s' : CurrencyStore} {code uri : Nat}
+    (h : currencyRegistry_registerExternal s code uri = some s') :
+    (lookup s'.currencies code).map (fun e => (e.kind, e.decimals))
+      = some (AssetKind.external, 8) := by
+  unfold currencyRegistry_registerExternal at h
+  split at h
+  · contradiction
+  · simp only [Option.some.injEq] at h
+    subst h
+    simp [Entry.external, lookup, insert]
 
 def currencyRegistry_currency (s : CurrencyStore) (code : Nat) : Option Entry :=
   lookup s.currencies code

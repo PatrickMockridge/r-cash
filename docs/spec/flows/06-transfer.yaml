@@ -1,8 +1,8 @@
 # Flow specification.
 # Arm keys, source lines, access modes and refusal sets are checked against
 # contracts/build/arm_inventory.json by tools/check_flows.py. Guards, effects,
-# invariants and status are the authored content; status is not a synonym for
-# tested. See README.md for the schema and protocol labels.
+# acceptance IDs, model/vector and invariants are the authored content; status is
+# not a synonym for tested. See README.md for the schema and protocol labels.
 
 schema: rcash.flows/v1
 subsystem: transfer
@@ -50,6 +50,8 @@ components:
     - I14
     - I15
     status: verified
+    acceptance:
+    - AC-SPEC-PAY-01.1
   states:
   - Live
   initial: Live
@@ -83,6 +85,8 @@ components:
     status: verified
     from: Open
     to: Claimed
+    acceptance:
+    - AC-SPEC-PAY-01.1
   - arm: TransferContract@"refund"
     transition: transfer.TransferContract.refund
     lean: Rholphin.Model.Transfer.transferContract_refund
@@ -109,6 +113,8 @@ components:
     status: verified
     from: Open
     to: Refunded
+    acceptance:
+    - AC-SPEC-PAY-01.1
   - arm: TransferContract@"info"
     transition: transfer.TransferContract.info
     lean: Rholphin.Model.Transfer.transferContract_info
@@ -124,6 +130,8 @@ components:
     invariants:
     - I14
     status: verified
+    acceptance:
+    - AC-SPEC-PAY-01.1
   states:
   - Open
   - Claimed

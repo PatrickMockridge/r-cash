@@ -7,6 +7,7 @@ export interface BalanceEntry {
 
 export interface V4Currency {
   code: string;
+  kind: "stablecoin" | "external" | string;
   stablecoinUri: string;
   custodyUri: string;
   paramsUri: string;
@@ -18,6 +19,10 @@ export interface V4Currency {
   paramsHash: string;
   sponsor: string;
   status: string;
+  assetUri?: string | null;
+  decimals?: number;
+  chain?: string | null;
+  custodian?: string | null;
 }
 
 export interface V4Market {

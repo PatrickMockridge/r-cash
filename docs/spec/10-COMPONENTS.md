@@ -35,7 +35,7 @@ separately and do not create a runtime cycle.
 | `PegStabilityModule` | `psmState`; REV and stablecoin purses in closure | `fundRev`, `buyStable`, `sellStable`, `info`, `debt`, `schedulePolicy`, `applyPolicy` | Par issuance/redemption against a finite REV buffer; signed `stableDebt`; fees stay in the REV purse. |
 | `CollateralMath` | none | `accrue`, `health`, `payout`, `seize` | Pure issuer arithmetic; replaces the deleted RiskMath. |
 | `LiquidationEngine` | none | `liquidate`, `attest` | Holds the only liquidation capability. Permissionless callers burn stablecoin and receive REV; the VaultBook keeps the accounting. |
-| `CurrencyRegistry` | `currencyState` | `register`, `currency`, `currencies`, `setPaused` | Sponsor-signed currency listing. Verifies the live stablecoin attestation, then writes the directory. |
+| `CurrencyRegistry` | `currencyState` | `register`, `registerExternal`, `currency`, `currencies`, `setPaused` | Sponsor-signed currency listing. Verifies the live stablecoin attestation, then writes the directory. |
 | `StablecoinDirectory` | `stablecoinDirectoryState` | `register`, `lookup`, `entries` | The one code → system index. Only the registry holds its write capability. |
 
 The system is deployed per currency by the signed `31_stablecoin.rho`: the deploy verifies
@@ -55,9 +55,9 @@ factory in v0.4, because the creation path is already signature- and bounds-gate
 
 | Component | State | Interface | Responsibility |
 |---|---|---|---|
-| `CurrencyRegistry` | `currencyState` | `register`, `currency`, `currencies`, `setPaused` | Currency records. Registration requires a sponsor signature over the system URI and params hash, and the live stablecoin attestation; the registry then writes `StablecoinDirectory(code)`, so the directory match is structural. Status is `active` or `paused`; pause is governor-gated. |
+| `CurrencyRegistry` | `currencyState` | `register`, `registerExternal`, `currency`, `currencies`, `setPaused` | Currency records. Registration requires a sponsor signature over the system URI and params hash, and the live stablecoin attestation; the registry then writes `StablecoinDirectory(code)`, so the directory match is structural. Status is `active` or `paused`; pause is governor-gated. External assets add `kind: external`, `assetUri` and `decimals: 8`; they have no VaultBook/PSM/savings. |
 | `MarketTerms` | `termsState` | `put`, `get`, `boundsOk` | Content-addressed `termsHash → {terms, values}`. `put` recomputes the hash and rejects a mismatch. |
-| `MarketIndex` | `marketState` | `stage`, `activate`, `pause`, `delist`, `cancel`, `market`, `marketFor`, `status`, `isActive`, `admin` | Market status, pair uniqueness, version monotonicity and nonce in one cell. |
+| `MarketIndex` | `marketState` | `stage`, `activate`, `setStatus`, `pauseAsset`, `market`, `markets`, `marketFor` | Market status, pair uniqueness, version monotonicity and nonce in one cell. |
 | `MarketDirectory` | `directoryState` | `bind`, `seal`, `unseal`, `byId`, `slot` | Per-market `{poolUri, bookUri, lockUri, termsHash, sealed}`. Only `MarketFactory` writes; a draft slot may be overwritten, then sealed. |
 | `OracleRegistry` | `oracleRegState` | `registerFeed`, `feedEntry`, `reporters`, `allowlist`, `admin` | Reporter allowlist and per-currency feed URI plus policy hash. |
 
@@ -79,7 +79,7 @@ factory in v0.4, because the creation path is already signature- and bounds-gate
 | `PurseStore` (owner, R) | `purseState` | `ensure`, `deposit`, `withdraw`, `balance`, `facet` | One ERTP purse per asset, created through `AssetResolver`; `balance` reads the purse's `getCurrentAmount`. |
 | `AccountGate` (owner, R) | none | `verify` | Derives the caller's REV address from `deployerId` and compares it with the owner; no state. |
 | `TransferClient` | none | `send`, `claim`, `refund`, `info` | Account-side transfer orchestration; resolves the book and market. |
-| `AssetResolver` | none | `issuer(assetId)`, `kind(assetId)` | `REV` resolves through ERTP; every other id resolves through `CurrencyRegistry` and the live `Stablecoin`. Resolution happens at arm entry; no registry capability is cached. |
+| `AssetResolver` | none | `issuer(assetId)`, `kind(assetId)` | `REV` resolves through ERTP; a stablecoin entry resolves through its live `Stablecoin`; an external entry resolves through its bridge/custodian adapter (`issuer`/`brand`). Resolution happens at arm entry; no registry capability is cached. |
 | `ListingViews` | none | `marketFor`, `market`, `isActive`, `terms`, `currency`, `currencies`, `markets` | Read-only projection over the market index, terms store and currency registry; resolves each component by Root at arm entry. |
 
 ## 5. Atomic clusters

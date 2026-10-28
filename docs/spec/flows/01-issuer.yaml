@@ -1,8 +1,8 @@
 # Flow specification.
 # Arm keys, source lines, access modes and refusal sets are checked against
 # contracts/build/arm_inventory.json by tools/check_flows.py. Guards, effects,
-# invariants and status are the authored content; status is not a synonym for
-# tested. See README.md for the schema and protocol labels.
+# acceptance IDs, model/vector and invariants are the authored content; status is
+# not a synonym for tested. See README.md for the schema and protocol labels.
 
 schema: rcash.flows/v1
 subsystem: issuer
@@ -26,6 +26,8 @@ components:
     refusals: []
     invariants: []
     status: verified
+    acceptance:
+    - AC-SPEC-ISS-01.1
   - arm: Stablecoin@"issuer"
     transition: issuer.Stablecoin.issuer
     lean: Rholphin.Model.Issuer.stablecoin_issuer
@@ -39,6 +41,8 @@ components:
     refusals: []
     invariants: []
     status: verified
+    acceptance:
+    - AC-SPEC-ISS-01.1
   - arm: Stablecoin@"supply"
     transition: issuer.Stablecoin.supply
     lean: Rholphin.Model.Issuer.stablecoin_supply
@@ -54,6 +58,8 @@ components:
     invariants:
     - S1
     status: verified
+    acceptance:
+    - AC-SPEC-ISS-01.1
   - arm: Stablecoin@"mint"
     transition: issuer.Stablecoin.mint
     lean: Rholphin.Model.Issuer.stablecoin_mint
@@ -88,6 +94,10 @@ components:
     - S5
     - S9
     status: verified
+    acceptance:
+    - AC-SPEC-ISS-01.1
+    model: issuer.mint
+    vector: ledger.mint
   - arm: Stablecoin@"burn"
     transition: issuer.Stablecoin.burn
     lean: Rholphin.Model.Issuer.stablecoin_burn
@@ -119,6 +129,8 @@ components:
     - S3
     - S7
     status: verified
+    acceptance:
+    - AC-SPEC-ISS-01.1
   - arm: Stablecoin@"settle"
     transition: issuer.Stablecoin.settle
     lean: Rholphin.Model.Issuer.stablecoin_settle
@@ -146,6 +158,8 @@ components:
     - S7
     - S9
     status: verified
+    acceptance:
+    - AC-SPEC-ISS-01.1
   - arm: Stablecoin@"amountOf"
     transition: issuer.Stablecoin.amountOf
     lean: Rholphin.Model.Issuer.stablecoin_amountOf
@@ -159,6 +173,8 @@ components:
     refusals: []
     invariants: []
     status: verified
+    acceptance:
+    - AC-SPEC-ISS-01.1
   - arm: Stablecoin@"attest"
     transition: issuer.Stablecoin.attest
     lean: Rholphin.Model.Issuer.stablecoin_attest
@@ -173,6 +189,8 @@ components:
     invariants:
     - S8
     status: verified
+    acceptance:
+    - AC-SPEC-ISS-01.1
   states:
   - Live
   initial: Live
@@ -197,6 +215,8 @@ components:
     invariants:
     - S7
     status: verified
+    acceptance:
+    - AC-SPEC-ISS-01.1
   - arm: CollateralCustody@"withdraw"
     transition: issuer.CollateralCustody.withdraw
     lean: Rholphin.Model.Issuer.collateralCustody_withdraw
@@ -216,6 +236,8 @@ components:
     invariants:
     - S7
     status: verified
+    acceptance:
+    - AC-SPEC-ISS-01.1
   - arm: CollateralCustody@"balance"
     transition: issuer.CollateralCustody.balance
     lean: Rholphin.Model.Issuer.collateralCustody_balance
@@ -230,6 +252,8 @@ components:
     invariants:
     - S7
     status: verified
+    acceptance:
+    - AC-SPEC-ISS-01.1
   - arm: CollateralCustody@"attest"
     transition: issuer.CollateralCustody.attest
     lean: Rholphin.Model.Issuer.collateralCustody_attest
@@ -243,6 +267,8 @@ components:
     refusals: []
     invariants: []
     status: verified
+    acceptance:
+    - AC-SPEC-ISS-01.1
   states:
   - Live
   initial: Live
@@ -263,6 +289,8 @@ components:
     refusals: []
     invariants: []
     status: verified
+    acceptance:
+    - AC-SPEC-ISS-01.1
   - arm: RiskParameters@"info"
     transition: issuer.RiskParameters.info
     lean: Rholphin.Model.Issuer.riskParameters_info
@@ -277,6 +305,8 @@ components:
     refusals: []
     invariants: []
     status: verified
+    acceptance:
+    - AC-SPEC-ISS-01.1
   - arm: RiskParameters@"scheduleParams"
     transition: issuer.RiskParameters.scheduleParams
     lean: Rholphin.Model.Issuer.riskParameters_scheduleParams
@@ -297,6 +327,8 @@ components:
     invariants:
     - S12
     status: verified
+    acceptance:
+    - AC-SPEC-ISS-01.1
   - arm: RiskParameters@"applyParams"
     transition: issuer.RiskParameters.applyParams
     lean: Rholphin.Model.Issuer.riskParameters_applyParams
@@ -327,6 +359,8 @@ components:
     status: verified
     from: Genesis
     to: Live
+    acceptance:
+    - AC-SPEC-ISS-01.1
   - arm: RiskParameters@"attest"
     transition: issuer.RiskParameters.attest
     lean: Rholphin.Model.Issuer.riskParameters_attest
@@ -340,6 +374,8 @@ components:
     refusals: []
     invariants: []
     status: verified
+    acceptance:
+    - AC-SPEC-ISS-01.1
   states:
   - Genesis
   - Live

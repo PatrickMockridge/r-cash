@@ -30,7 +30,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: python deps
-        run: pip install pyyaml
+        run: pip install pyyaml hypothesis
       - uses: leanprover/lean-action@v1
         with:
           lake-package-directory: spec/lean
@@ -39,6 +39,10 @@ jobs:
           python3 tools/rho_inventory.py --check
           python3 tools/check_flows.py --check --strict
           python3 tools/render_flows.py --check
+          python3 tools/check_traceability.py --check --strict
+          python3 tools/check_mesh.py
+          python3 tools/check_vectors.py
+          python3 -m unittest discover -s tests/model -t tests/model
           python3 tools/check_lean.py
 
   rust:

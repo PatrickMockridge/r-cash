@@ -4,9 +4,12 @@ import Unlock from "../components/Unlock";
 import { useWallet } from "../lib/store";
 import { formatUnits } from "../lib/format";
 import type { V4Currency } from "../lib/types";
+import { convertPreferred, usePrices } from "../lib/prices";
+import { usePreferences } from "../lib/preferences";
 
 export default function Accounts() {
   const { status, client, address } = useWallet();
+  const { displayCurrency } = usePreferences();
   const queryClient = useQueryClient();
   const [assetsInput, setAssetsInput] = useState("REV");
   const [assetsLoaded, setAssetsLoaded] = useState(false);
@@ -45,6 +48,8 @@ export default function Accounts() {
 
   const funded = (rev.data?.baseUnits ?? 0) > 0;
 
+  const heldAssets = assets.filter((asset) => asset !== "REV");
+  const prices = usePrices(funded ? assets : [], displayCurrency);
   const balances = useQuery({
     queryKey: ["v4-balances", address, assetsInput],
     enabled: status === "unlocked" && !!client && funded && assets.length > 0,
@@ -57,6 +62,12 @@ export default function Accounts() {
       return amounts;
     },
   });
+
+  const preferredTotal = assets.reduce((sum, asset) => {
+    const amount = asset === "REV" ? (rev.data?.baseUnits ?? 0) : (balances.data?.[asset] ?? 0);
+    const converted = convertPreferred(amount, prices.data?.[asset]);
+    return converted === null ? sum : sum + converted;
+  }, 0n);
 
   if (status !== "unlocked") return <Unlock />;
 
@@ -131,15 +142,28 @@ export default function Accounts() {
 
         <div className="grid">
           <div>
+            <span className="muted">Total in {displayCurrency}</span>
+            <strong>{formatUnits(preferredTotal)}</strong>
+          </div>
+          <div>
             <span className="muted">Native REV</span>
             <strong>{formatUnits(rev.data?.baseUnits ?? 0)}</strong>
           </div>
-          {assets.map((asset) => (
-            <div key={asset}>
-              <span className="muted">{asset} purse</span>
-              <strong>{formatUnits(balances.data?.[asset] ?? 0)}</strong>
-            </div>
-          ))}
+          {heldAssets.map((asset) => {
+            const converted = convertPreferred(
+              balances.data?.[asset] ?? 0,
+              prices.data?.[asset],
+            );
+            return (
+              <div key={asset}>
+                <span className="muted">{asset} purse</span>
+                <strong>{formatUnits(balances.data?.[asset] ?? 0)}</strong>
+                <span className="muted small">
+                  {converted === null ? "no price" : `${formatUnits(converted)} ${displayCurrency}`}
+                </span>
+              </div>
+            );
+          })}
         </div>
       </section>
 

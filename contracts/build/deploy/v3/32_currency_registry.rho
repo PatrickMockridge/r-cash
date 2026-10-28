@@ -6,7 +6,7 @@
 new
   StablecoinDirectory, stablecoinDirectoryState,
   CurrencyRegistry, currencyState,
-  registryStatus, registryGovernor,
+  registryStatus, registryGovernor, registrySetStatus,
   directoryAuth,
   rl(`rho:registry:lookup`),
   rs(`rho:registry:insertArbitrary`),
@@ -68,6 +68,23 @@ in {
     }
   } |
 
+  // Commit one status change to the registry cell. The caller has already
+  // authorised the change; this helper takes, rechecks the code and reposts.
+  contract registrySetStatus(@code, @status, ret) = {
+    for (@s <- currencyState) {
+      match s.get("currencies").get(code) {
+        Nil => { currencyState!(s) | ret!((false, "no currency")) }
+        entry => {
+          currencyState!(
+            s.set("currencies",
+              s.get("currencies").set(code, entry.set("status", status)))
+              .set("rev", s.get("rev") + 1)) |
+          ret!((true, status))
+        }
+      }
+    }
+  } |
+
   contract CurrencyRegistry(@"register", @code, @scUri, @custodyUri, @paramsUri,
                             @vaultUri, @liqUri, @savingsUri, @psmUri, @bufferUri,
                             @paramsHash, @sponsorHex, @sig, ret) = {
@@ -112,6 +129,7 @@ in {
                                         } else {
                                           new entryCh in {
                                             entryCh!({
+                                              "kind": "stablecoin",
                                               "stablecoinUri": scUri,
                                               "custodyUri": custodyUri,
                                               "paramsUri": paramsUri,
@@ -174,6 +192,104 @@ in {
     }
   } |
 
+  // List an asset issued outside the R-Cash stablecoin system (a bridge or
+  // custodian adapter). The adapter attests its code, kind, sponsor and
+  // 8-decimal ERTP scale; R-Cash makes no redemption or reserve claim.
+  contract CurrencyRegistry(@"registerExternal", @code, @assetUri, @sponsorHex,
+                                     @sig, ret) = {
+    for (@s <<- currencyState) {
+      match s.get("currencies").get(code) {
+        Nil => {
+          new rCh, vCh, vc, dCh, okCh, ac, atCh, dregCh in {
+            rl!(`__ROOT_URI__`, *rCh) |
+            for (RegRoot <- rCh) {
+              RegRoot!("resolve", "component:verifier", 1, *vCh) |
+              for (@(true, verUri, _) <- vCh) {
+                rl!(verUri, *vc) |
+                for (Verifier <- vc) {
+                  Verifier!("hash",
+                    ("rcash:external-asset-register:v1|" ++ code ++ "|" ++ assetUri
+                     ++ "|" ++ sponsorHex).toUtf8Bytes(), *dCh) |
+                  for (@digest <- dCh) {
+                    Verifier!("sigOk", digest, sig, sponsorHex.hexToBytes(), *okCh) |
+                    for (@ok <- okCh) {
+                      if (ok == false) { ret!((false, "bad sponsor signature")) }
+                      else {
+                        rl!(assetUri, *ac) |
+                        for (Asset <- ac) {
+                          Asset!("attest", *atCh) |
+                          for (@att <- atCh) {
+                            match att {
+                              (true, a) => {
+                                if (a.get("asset") != code) {
+                                  ret!((false, "asset mismatch"))
+                                } else {
+                                  if (a.get("kind") != "external") {
+                                    ret!((false, "external kind"))
+                                  } else {
+                                    if (a.get("sponsor") != sponsorHex) {
+                                      ret!((false, "sponsor mismatch"))
+                                    } else {
+                                      if (a.get("decimals") != 8) {
+                                        ret!((false, "external decimals"))
+                                      } else {
+                                        new entryCh in {
+                                          entryCh!({
+                                            "kind": "external",
+                                            "assetUri": assetUri,
+                                            "decimals": 8,
+                                            "sponsor": sponsorHex,
+                                            "status": "active"
+                                          }) |
+                                          for (@entry <- entryCh) {
+                                            StablecoinDirectory!("register", code,
+                                              entry, *directoryAuth, *dregCh) |
+                                            for (@dr <- dregCh) {
+                                              match dr {
+                                                (true, Nil) => {
+                                                  for (@s2 <- currencyState) {
+                                                    match s2.get("currencies").get(code) {
+                                                      Nil => {
+                                                        currencyState!(
+                                                          s2.set("currencies",
+                                                            s2.get("currencies").set(code, entry))
+                                                            .set("rev", s2.get("rev") + 1)) |
+                                                        ret!((true, entry))
+                                                      }
+                                                      existing => {
+                                                        currencyState!(s2) |
+                                                        ret!(1 / 0)
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                                _ => { ret!(dr) }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                              _ => { ret!((false, "external attestation")) }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        existing => { ret!((false, "exists", existing)) }
+      }
+    }
+  } |
+
   contract CurrencyRegistry(@"currency", @code, ret) = {
     for (@s <<- currencyState) {
       match s.get("currencies").get(code) {
@@ -194,30 +310,43 @@ in {
       match s.get("currencies").get(code) {
         Nil => { ret!((false, "no currency")) }
         entry => {
-          new vCh, pCh, stCh in {
-            rl!(entry.get("vaultUri"), *vCh) |
-            for (VaultBook <- vCh) {
-              VaultBook!("pause", paused, nonce, sigs, *pCh) |
-              for (@v <- pCh) {
-                match v {
-                  (true, Nil) => {
-                    registryStatus!(paused, *stCh) |
-                    for (@status <- stCh) {
-                      for (@s2 <- currencyState) {
-                        match s2.get("currencies").get(code) {
-                          Nil => { currencyState!(s2) | ret!((false, "no currency")) }
-                          entry2 => {
-                            currencyState!(
-                              s2.set("currencies",
-                                s2.get("currencies").set(code, entry2.set("status", status)))
-                                .set("rev", s2.get("rev") + 1)) |
-                            ret!((true, status))
-                          }
+          match entry.get("kind") {
+            "external" => {
+              new gCh, vCh, stCh in {
+                registryGovernor!(*gCh) |
+                for (Governor <- gCh) {
+                  Governor!("authorize", "currency:" ++ code, nonce, "setPaused",
+                            paused.toString(), sigs, *vCh) |
+                  for (@v <- vCh) {
+                    match v {
+                      (true, Nil) => {
+                        registryStatus!(paused, *stCh) |
+                        for (@status <- stCh) {
+                          registrySetStatus!(code, status, *ret)
                         }
                       }
+                      _ => { ret!(v) }
                     }
                   }
-                  _ => { ret!(v) }
+                }
+              }
+            }
+            _ => {
+              new vCh, pCh, stCh in {
+                rl!(entry.get("vaultUri"), *vCh) |
+                for (VaultBook <- vCh) {
+                  VaultBook!("pause", paused, nonce, sigs, *pCh) |
+                  for (@v <- pCh) {
+                    match v {
+                      (true, Nil) => {
+                        registryStatus!(paused, *stCh) |
+                        for (@status <- stCh) {
+                          registrySetStatus!(code, status, *ret)
+                        }
+                      }
+                      _ => { ret!(v) }
+                    }
+                  }
                 }
               }
             }

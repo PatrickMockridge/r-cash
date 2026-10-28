@@ -1,0 +1,64 @@
+// Add the first liquidity to a mesh market from the owner's account, then fund
+// the seed lock. The base and quote assets must already be in the account.
+// Returns [ownerId, shares, reserves, lockShares].
+// Placeholders: __ROOT_URI__, __POOL_URI__, __LOCK_URI__, __PUBKEY__,
+//               __BASE__, __QUOTE__, __BASE_AMT__, __QUOTE_AMT__, __LOCK_UNTIL__.
+new
+  rl(`rho:registry:lookup`),
+  rootCh, poolCh, lockCh, afCh, ac, oCh, wBaseCh, wQuoteCh, lpCh,
+  resCh, lockFundCh,
+  deployId(`rho:rchain:deployId`),
+  deployerId(`rho:rchain:deployerId`)
+in {
+  rl!(`__ROOT_URI__`, *rootCh) |
+  rl!(`__POOL_URI__`, *poolCh) |
+  rl!(`__LOCK_URI__`, *lockCh) |
+  for (Root <- rootCh; FxPool <- poolCh; LiquidityLock <- lockCh) {
+    Root!("resolve", "component:account-factory", 1, *afCh) |
+    for (@(true, afUri, _) <- afCh) {
+      rl!(afUri, *ac) |
+      for (AccountFactory <- ac) {
+        AccountFactory!("getOrCreate", "__PUBKEY__".hexToBytes(), *oCh) |
+        for (@(true, account, ownerId) <- oCh) {
+          @account!("withdraw", *deployerId, "__BASE__", __BASE_AMT__, *wBaseCh) |
+          for (@wb <- wBaseCh) {
+            match wb {
+              (true, basePay) => {
+                @account!("withdraw", *deployerId, "__QUOTE__", __QUOTE_AMT__, *wQuoteCh) |
+                for (@wq <- wQuoteCh) {
+                  match wq {
+                    (true, quotePay) => {
+                      FxPool!("addLiquidity", basePay, quotePay, 0, *lpCh) |
+                      for (@lp <- lpCh) {
+                        match lp {
+                          (true, lpPayment, shares) => {
+                            LiquidityLock!("fund", *deployerId, lpPayment, ownerId,
+                                           __LOCK_UNTIL__, *lockFundCh) |
+                            for (@lf <- lockFundCh) {
+                              match lf {
+                                (true, lockShares) => {
+                                  FxPool!("reserves", *resCh) |
+                                  for (@res <- resCh) {
+                                    deployId!([ownerId, shares, res, lockShares])
+                                  }
+                                }
+                                _ => { deployId!(lf) }
+                              }
+                            }
+                          }
+                          _ => { deployId!(lp) }
+                        }
+                      }
+                    }
+                    _ => { deployId!(wq) }
+                  }
+                }
+              }
+              _ => { deployId!(wb) }
+            }
+          }
+        }
+      }
+    }
+  }
+}

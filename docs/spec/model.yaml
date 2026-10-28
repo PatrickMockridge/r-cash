@@ -1,0 +1,53 @@
+# Executable model registry. A flow arm that names `model:` must use one of
+# these transitions, and a `vector:` must exist in tests/vectors/arith.json.
+# The Python model is an independent test model, not the authority; Lean/spec
+# wins on disagreement.
+transitions:
+  registry.register_external:
+    test: tests/model/test_mesh.py
+    vector: registry.external.kind
+  registry.set_paused:
+    test: tests/model/test_mesh.py
+  market.stage:
+    test: tests/model/test_market.py
+    vector: market.stage.ok
+  market.reverse_lookup:
+    test: tests/model/test_market.py
+  market.pause_asset:
+    test: tests/model/test_market.py
+    vector: market.pause.status
+  issuer.mint:
+    test: tests/model/test_issuer.py
+    vector: ledger.mint
+  issuer.repay:
+    test: tests/model/test_issuer.py
+    vector: ledger.repay
+  issuer.liquidate:
+    test: tests/model/test_issuer.py
+    vector: ledger.liquidate
+  issuer.write_off:
+    test: tests/model/test_issuer.py
+    vector: ledger.writeOff
+  issuer.cover0:
+    test: tests/model/test_issuer.py
+    vector: ledger.cover0
+  psm.buy:
+    test: tests/model/test_psm.py
+    vector: psm.buyOut
+  psm.sell:
+    test: tests/model/test_psm.py
+    vector: psm.sellOut
+  vault.deposit:
+    test: tests/model/test_vault.py
+  vault.withdraw:
+    test: tests/model/test_vault.py
+  savings.deposit:
+    test: tests/model/test_buffer_savings.py
+  savings.withdraw:
+    test: tests/model/test_buffer_savings.py
+  buffer.cover:
+    test: tests/model/test_buffer_savings.py
+    vector: buffer.cover.cancelled
+  amm.swap:
+    test: tests/model/test_amm.py
+    vector: amm.outB2Q

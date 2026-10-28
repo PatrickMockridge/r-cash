@@ -36,17 +36,34 @@ in {
                 for (@e <- eCh) {
                   match e {
                     (true, entry) => {
-                      match entry.get("stablecoinUri") { scUri => {
-                        rl!(scUri, *scCh) |
-                        for (Stablecoin <- scCh) {
-                          Stablecoin!("brand", *bCh) |
-                          Stablecoin!("issuer", *iCh) |
-                          for (@(true, brand) <- bCh;
-                               @(true, issuer) <- iCh) {
-                            ret!((true, brand, issuer))
-                          }
+                      match entry.get("kind") {
+                        "external" => {
+                          match entry.get("assetUri") { assetUri => {
+                            rl!(assetUri, *scCh) |
+                            for (Asset <- scCh) {
+                              Asset!("brand", *bCh) |
+                              Asset!("issuer", *iCh) |
+                              for (@(true, brand) <- bCh;
+                                   @(true, issuer) <- iCh) {
+                                ret!((true, brand, issuer))
+                              }
+                            }
+                          } }
                         }
-                      } }
+                        _ => {
+                          match entry.get("stablecoinUri") { scUri => {
+                            rl!(scUri, *scCh) |
+                            for (Stablecoin <- scCh) {
+                              Stablecoin!("brand", *bCh) |
+                              Stablecoin!("issuer", *iCh) |
+                              for (@(true, brand) <- bCh;
+                                   @(true, issuer) <- iCh) {
+                                ret!((true, brand, issuer))
+                              }
+                            }
+                          } }
+                        }
+                      }
                     }
                     _ => { ret!((false, "unknown asset")) }
                   }
@@ -73,7 +90,11 @@ in {
                 CurrencyRegistry!("currency", assetId, *eCh) |
                 for (@e <- eCh) {
                   match e {
-                    (true, entry) => { ret!((true, "stablecoin")) }
+                    (true, entry) => {
+                      if (entry.get("kind") == "external") {
+                        ret!((true, "external"))
+                      } else { ret!((true, "stablecoin")) }
+                    }
                     _ => { ret!((false, "unknown asset")) }
                   }
                 }

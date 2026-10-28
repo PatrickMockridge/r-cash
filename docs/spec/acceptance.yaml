@@ -1,0 +1,3346 @@
+# Generated skeleton from SPEC.md; reviewed for the DEX/mesh entries.
+# Every MUST must be present exactly once. Statuses: verified | campaign | platform | draft | blocked.
+SPEC-GEN-01:
+  level: MUST
+  owner: whole app
+  status: verified
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-GEN-01.1
+    given: the initial state and preconditions of SPEC-GEN-01
+    when: the gate or conformance report is run
+    then: The product consists of the components and surfaces specified here; a surface not specified is not part of the product.
+    checks: &id001
+    - static:traceability
+    - static:spec-check
+SPEC-GEN-02:
+  level: MUST
+  owner: contracts
+  status: verified
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-GEN-02.1
+    given: the initial state and preconditions of SPEC-GEN-02
+    when: the gate or conformance report is run
+    then: "Every refusal returns an exact reason string from the normative list in \xA718.3; tests assert exact equality."
+    checks: *id001
+SPEC-GEN-03:
+  level: MUST
+  owner: docs/ops
+  status: verified
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-GEN-03.1
+    given: the initial state and preconditions of SPEC-GEN-03
+    when: the gate or conformance report is run
+    then: Documentation, manifests and Makefile targets describe the shipped behaviour only; a stale claim is a defect.
+    checks: *id001
+SPEC-GEN-04:
+  level: MUST
+  owner: ops
+  status: verified
+  spec_status: planned
+  criteria:
+  - id: AC-SPEC-GEN-04.1
+    given: a completed conformance run
+    when: the report is generated
+    then: every requirement ID has PASS/FAIL/BLOCKED/SKIPPED; BLOCKED is never counted as PASS
+    checks: *id001
+SPEC-MOD-01:
+  level: MUST
+  owner: all
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-MOD-01.1
+    given: the initial state and preconditions of SPEC-MOD-01
+    when: an arm is invoked on valid and invalid preconditions
+    then: 'Every deploy is atomic; a failure rolls back tuple space, REV and ERTP (AC: a failing arm after a burn leaves supply
+      unchanged).'
+    checks: &id002
+    - static:flows
+    - model:invariants
+    - platform:atomicity
+  - id: AC-SPEC-MOD-01.2
+    given: a precondition that the requirement says must be refused
+    when: an arm is invoked on valid and invalid preconditions
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-MOD-02:
+  level: MUST
+  owner: all
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-MOD-02.1
+    given: the initial state and preconditions of SPEC-MOD-02
+    when: an arm is invoked on valid and invalid preconditions
+    then: Every arm replies exactly once; no arm leaves a caller waiting.
+    checks: *id002
+  - id: AC-SPEC-MOD-02.2
+    given: a precondition that the requirement says must be refused
+    when: an arm is invoked on valid and invalid preconditions
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-MOD-03:
+  level: MUST
+  owner: all value arms
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-MOD-03.1
+    given: the initial state and preconditions of SPEC-MOD-03
+    when: an arm is invoked on valid and invalid preconditions
+    then: A refusal before any value movement returns the payment; after value movement the arm fails `1/0`.
+    checks: *id002
+  - id: AC-SPEC-MOD-03.2
+    given: a precondition that the requirement says must be refused
+    when: an arm is invoked on valid and invalid preconditions
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-MOD-04:
+  level: MUST
+  owner: all stateful
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-MOD-04.1
+    given: the initial state and preconditions of SPEC-MOD-04
+    when: an arm is invoked on valid and invalid preconditions
+    then: State commits revalidate the consumed cell's `rev`; a mismatch fails the deploy.
+    checks: *id002
+  - id: AC-SPEC-MOD-04.2
+    given: a precondition that the requirement says must be refused
+    when: an arm is invoked on valid and invalid preconditions
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-MOD-05:
+  level: MUST
+  owner: all
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-MOD-05.1
+    given: the initial state and preconditions of SPEC-MOD-05
+    when: an arm is invoked on valid and invalid preconditions
+    then: Capabilities are closure-held and never returned or stored. `check_captures` passes.
+    checks: *id002
+  - id: AC-SPEC-MOD-05.2
+    given: a precondition that the requirement says must be refused
+    when: an arm is invoked on valid and invalid preconditions
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-MOD-06:
+  level: MUST
+  owner: Account, TransferContract, FxPool, PSM
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-MOD-06.1
+    given: the initial state and preconditions of SPEC-MOD-06
+    when: an arm is invoked on valid and invalid preconditions
+    then: 'Caller-supplied facets are sinks: they may receive value, never authority.'
+    checks: *id002
+  - id: AC-SPEC-MOD-06.2
+    given: a precondition that the requirement says must be refused
+    when: an arm is invoked on valid and invalid preconditions
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-MOD-07:
+  level: MUST
+  owner: all
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-MOD-07.1
+    given: the initial state and preconditions of SPEC-MOD-07
+    when: an arm is invoked on valid and invalid preconditions
+    then: Unmatched receives are silent in Rholang; every call path either replies or is documented as fire-and-forget.
+    checks: *id002
+  - id: AC-SPEC-MOD-07.2
+    given: a precondition that the requirement says must be refused
+    when: an arm is invoked on valid and invalid preconditions
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-MOD-08:
+  level: MUST
+  owner: all attest arms
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-MOD-08.1
+    given: the initial state and preconditions of SPEC-MOD-08
+    when: an arm is invoked on valid and invalid preconditions
+    then: An attestation identifies template and currency and reveals no secret.
+    checks: *id002
+  - id: AC-SPEC-MOD-08.2
+    given: a precondition that the requirement says must be refused
+    when: an arm is invoked on valid and invalid preconditions
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-ID-01:
+  level: MUST
+  owner: AccountFactory
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-ID-01.1
+    given: the initial state and preconditions of SPEC-ID-01
+    when: an owner or foreign key calls an account/factory arm
+    then: One account per owner; `getOrCreate` is idempotent and returns the same account and ownerId.
+    checks: &id003
+    - campaign:unit-accounts
+    - model:invariants
+  - id: AC-SPEC-ID-01.2
+    given: a precondition that the requirement says must be refused
+    when: an owner or foreign key calls an account/factory arm
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-ID-02:
+  level: MUST
+  owner: AccountGate
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-ID-02.1
+    given: the initial state and preconditions of SPEC-ID-02
+    when: an owner or foreign key calls an account/factory arm
+    then: Owner arms require the caller's `deployerId` to derive `ownerId`; others refuse `"not owner"`.
+    checks: *id003
+  - id: AC-SPEC-ID-02.2
+    given: a precondition that the requirement says must be refused
+    when: an owner or foreign key calls an account/factory arm
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-ID-03:
+  level: MUST
+  owner: Account, VaultBook
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-ID-03.1
+    given: the initial state and preconditions of SPEC-ID-03
+    when: an owner or foreign key calls an account/factory arm
+    then: The vault proof is never returned after creation and authorises only that owner's vault.
+    checks: *id003
+  - id: AC-SPEC-ID-03.2
+    given: a precondition that the requirement says must be refused
+    when: an owner or foreign key calls an account/factory arm
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-ID-04:
+  level: MUST
+  owner: PurseStore, AssetResolver
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-ID-04.1
+    given: the initial state and preconditions of SPEC-ID-04
+    when: an owner or foreign key calls an account/factory arm
+    then: A purse exists per asset at first use via `AssetResolver`; an unknown asset refuses `"unknown asset"`.
+    checks: *id003
+  - id: AC-SPEC-ID-04.2
+    given: a precondition that the requirement says must be refused
+    when: an owner or foreign key calls an account/factory arm
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-ID-05:
+  level: MUST
+  owner: Account
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-ID-05.1
+    given: the initial state and preconditions of SPEC-ID-05
+    when: an owner or foreign key calls an account/factory arm
+    then: '`depositFacet` can only receive; it cannot withdraw or act as the owner.'
+    checks: *id003
+  - id: AC-SPEC-ID-05.2
+    given: a precondition that the requirement says must be refused
+    when: an owner or foreign key calls an account/factory arm
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-ID-06:
+  level: MUST
+  owner: Account, PurseStore
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-ID-06.1
+    given: the initial state and preconditions of SPEC-ID-06
+    when: an owner or foreign key calls an account/factory arm
+    then: '`deposit`/`withdraw`/`balance` use the caller''s own purse only; a foreign deployer is refused.'
+    checks: *id003
+  - id: AC-SPEC-ID-06.2
+    given: a precondition that the requirement says must be refused
+    when: an owner or foreign key calls an account/factory arm
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-ID-07:
+  level: MUST
+  owner: AssetResolver
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-ID-07.1
+    given: the initial state and preconditions of SPEC-ID-07
+    when: an owner or foreign key calls an account/factory arm
+    then: "REV is resolved through the native ERTP issuer, every other asset through `CurrencyRegistry` \u2192 live `Stablecoin`."
+    checks: *id003
+  - id: AC-SPEC-ID-07.2
+    given: a precondition that the requirement says must be refused
+    when: an owner or foreign key calls an account/factory arm
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-ID-08:
+  level: MUST
+  owner: Account
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-ID-08.1
+    given: the initial state and preconditions of SPEC-ID-08
+    when: an owner or foreign key calls an account/factory arm
+    then: Account state is `{nextTransferId, ops, rev}`; every mutation revalidates `rev`.
+    checks: *id003
+  - id: AC-SPEC-ID-08.2
+    given: a precondition that the requirement says must be refused
+    when: an owner or foreign key calls an account/factory arm
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-ID-09:
+  level: MUST
+  owner: Account
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-ID-09.1
+    given: the initial state and preconditions of SPEC-ID-09
+    when: an owner or foreign key calls an account/factory arm
+    then: '`Account.transfers` returns the owner''s op map for history.'
+    checks: *id003
+  - id: AC-SPEC-ID-09.2
+    given: a precondition that the requirement says must be refused
+    when: an owner or foreign key calls an account/factory arm
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-ID-10:
+  level: MUST
+  owner: Account
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-ID-10.1
+    given: the initial state and preconditions of SPEC-ID-10
+    when: an owner or foreign key calls an account/factory arm
+    then: Account creation and purse creation are paid by the creator; no protocol subsidy.
+    checks: *id003
+  - id: AC-SPEC-ID-10.2
+    given: a precondition that the requirement says must be refused
+    when: an owner or foreign key calls an account/factory arm
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-PAY-01:
+  level: MUST
+  owner: TransferBook
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-PAY-01.1
+    given: the initial state and preconditions of SPEC-PAY-01
+    when: send, claim or refund is invoked
+    then: Send measures the payment and refuses a declared/actual mismatch with `"amount mismatch"`, returning the payment.
+    checks: &id004
+    - campaign:unit-transfer
+    - campaign:unit-transfer-memo
+    - model:invariants
+  - id: AC-SPEC-PAY-01.2
+    given: a precondition that the requirement says must be refused
+    when: send, claim or refund is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-PAY-02:
+  level: MUST
+  owner: TransferBook, Bounds
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-PAY-02.1
+    given: the initial state and preconditions of SPEC-PAY-02
+    when: send, claim or refund is invoked
+    then: Minimum amount, minimum expiry lead and maximum expiry are enforced from book params.
+    checks: *id004
+  - id: AC-SPEC-PAY-02.2
+    given: a precondition that the requirement says must be refused
+    when: send, claim or refund is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-PAY-03:
+  level: MUST
+  owner: TransferBook, Bounds
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-PAY-03.1
+    given: the initial state and preconditions of SPEC-PAY-03
+    when: send, claim or refund is invoked
+    then: Memo, opId and stipend bounds are enforced; refusals are `"memo"`, `"opId"`, `"stipend"`.
+    checks: *id004
+  - id: AC-SPEC-PAY-03.2
+    given: a precondition that the requirement says must be refused
+    when: send, claim or refund is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-PAY-04:
+  level: MUST
+  owner: Account
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-PAY-04.1
+    given: the initial state and preconditions of SPEC-PAY-04
+    when: send, claim or refund is invoked
+    then: A completed opId replay returns the same `(id, uri)` and moves no funds; a pending replay returns `(false, "pending",
+      id)`.
+    checks: *id004
+  - id: AC-SPEC-PAY-04.2
+    given: a precondition that the requirement says must be refused
+    when: send, claim or refund is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-PAY-05:
+  level: MUST
+  owner: Account
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-PAY-05.1
+    given: the initial state and preconditions of SPEC-PAY-05
+    when: send, claim or refund is invoked
+    then: A refused send leaves no reservation.
+    checks: *id004
+  - id: AC-SPEC-PAY-05.2
+    given: a precondition that the requirement says must be refused
+    when: send, claim or refund is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-PAY-06:
+  level: MUST
+  owner: Account
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-PAY-06.1
+    given: the initial state and preconditions of SPEC-PAY-06
+    when: send, claim or refund is invoked
+    then: The stipend is a direct native REV transfer to the recipient's REV address, capped, non-refundable, default 0.
+    checks: *id004
+  - id: AC-SPEC-PAY-06.2
+    given: a precondition that the requirement says must be refused
+    when: send, claim or refund is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-PAY-07:
+  level: MUST
+  owner: TransferContract
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-PAY-07.1
+    given: the initial state and preconditions of SPEC-PAY-07
+    when: send, claim or refund is invoked
+    then: Claim requires the secret preimage and an unexpired transfer; expiry is checked before the secret.
+    checks: *id004
+  - id: AC-SPEC-PAY-07.2
+    given: a precondition that the requirement says must be refused
+    when: send, claim or refund is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-PAY-08:
+  level: MUST
+  owner: TransferContract
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-PAY-08.1
+    given: the initial state and preconditions of SPEC-PAY-08
+    when: send, claim or refund is invoked
+    then: Refund requires expiry and the sender; a third party is refused `"not sender"`.
+    checks: *id004
+  - id: AC-SPEC-PAY-08.2
+    given: a precondition that the requirement says must be refused
+    when: send, claim or refund is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-PAY-09:
+  level: MUST
+  owner: TransferContract
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-PAY-09.1
+    given: the initial state and preconditions of SPEC-PAY-09
+    when: send, claim or refund is invoked
+    then: Claim and refund are mutually exclusive; the loser refuses `"closed"`.
+    checks: *id004
+  - id: AC-SPEC-PAY-09.2
+    given: a precondition that the requirement says must be refused
+    when: send, claim or refund is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-PAY-10:
+  level: MUST
+  owner: TransferContract
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-PAY-10.1
+    given: the initial state and preconditions of SPEC-PAY-10
+    when: send, claim or refund is invoked
+    then: '`info` exposes memo, opId and stipend without exposing the secret.'
+    checks: *id004
+  - id: AC-SPEC-PAY-10.2
+    given: a precondition that the requirement says must be refused
+    when: send, claim or refund is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-PAY-11:
+  level: MUST
+  owner: Account, web
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-PAY-11.1
+    given: the initial state and preconditions of SPEC-PAY-11
+    when: send, claim or refund is invoked
+    then: Account history returns the owner's transfers; the web journal is the client-side copy.
+    checks: *id004
+  - id: AC-SPEC-PAY-11.2
+    given: a precondition that the requirement says must be refused
+    when: send, claim or refund is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-PAY-12:
+  level: MUST
+  owner: 40_transfer, Bounds
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-PAY-12.1
+    given: the initial state and preconditions of SPEC-PAY-12
+    when: send, claim or refund is invoked
+    then: Book params are `{defaultExpiryBlocks, maxExpiryBlocks, minAmount, maxMemoBytes, maxOpIdBytes, maxStipend}` under
+      `rcash:book-params:v4`.
+    checks: *id004
+  - id: AC-SPEC-PAY-12.2
+    given: a precondition that the requirement says must be refused
+    when: send, claim or refund is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-ORA-01:
+  level: MUST
+  owner: OracleRegistry, Bounds
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-ORA-01.1
+    given: the initial state and preconditions of SPEC-ORA-01
+    when: a feed or hub arm is invoked
+    then: Exactly three distinct reporters; the sponsor occupies at most one slot; one feed per currency.
+    checks: &id005
+    - campaign:unit-feed
+    - campaign:unit-hub
+    - model:invariants
+  - id: AC-SPEC-ORA-01.2
+    given: a precondition that the requirement says must be refused
+    when: a feed or hub arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-ORA-02:
+  level: MUST
+  owner: OracleFeed
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-ORA-02.1
+    given: the initial state and preconditions of SPEC-ORA-02
+    when: a feed or hub arm is invoked
+    then: Submissions are signed over the exact v3 preimage, slot-bound, monotone in height and stale-limited.
+    checks: *id005
+  - id: AC-SPEC-ORA-02.2
+    given: a precondition that the requirement says must be refused
+    when: a feed or hub arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-ORA-03:
+  level: MUST
+  owner: OracleFeed
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-ORA-03.1
+    given: the initial state and preconditions of SPEC-ORA-03
+    when: a feed or hub arm is invoked
+    then: Activation requires the trial length, minimum submissions, quorum and a fresh median.
+    checks: *id005
+  - id: AC-SPEC-ORA-03.2
+    given: a precondition that the requirement says must be refused
+    when: a feed or hub arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-ORA-04:
+  level: MUST
+  owner: OracleFeed
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-ORA-04.1
+    given: the initial state and preconditions of SPEC-ORA-04
+    when: a feed or hub arm is invoked
+    then: '`get` refuses paused, trial and stale states with the exact strings.'
+    checks: *id005
+  - id: AC-SPEC-ORA-04.2
+    given: a precondition that the requirement says must be refused
+    when: a feed or hub arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-ORA-05:
+  level: MUST
+  owner: OracleHub
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-ORA-05.1
+    given: the initial state and preconditions of SPEC-ORA-05
+    when: a feed or hub arm is invoked
+    then: '`getPair` computes the cross rate and per-feed ages; callers pass and enforce their own max age.'
+    checks: *id005
+  - id: AC-SPEC-ORA-05.2
+    given: a precondition that the requirement says must be refused
+    when: a feed or hub arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-ORA-06:
+  level: MUST
+  owner: OracleRegistry
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-ORA-06.1
+    given: the initial state and preconditions of SPEC-ORA-06
+    when: a feed or hub arm is invoked
+    then: Feed binding requires the sponsor signature and the live attestation; a bad signature refuses `"bad sponsor signature"`.
+    checks: *id005
+  - id: AC-SPEC-ORA-06.2
+    given: a precondition that the requirement says must be refused
+    when: a feed or hub arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-ORA-07:
+  level: MUST
+  owner: consumers
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-ORA-07.1
+    given: the initial state and preconditions of SPEC-ORA-07
+    when: a feed or hub arm is invoked
+    then: A stale or missing rate refuses mint, withdraw, liquidate, PSM buy/sell and pool quote/swap/add; repay and exits
+      continue.
+    checks: *id005
+  - id: AC-SPEC-ORA-07.2
+    given: a precondition that the requirement says must be refused
+    when: a feed or hub arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-ORA-08:
+  level: MUST
+  owner: Codec, clients
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-ORA-08.1
+    given: the initial state and preconditions of SPEC-ORA-08
+    when: a feed or hub arm is invoked
+    then: Policy hash is `H(rcash:oracle-policy:v3, values)` in the length-prefixed encoding.
+    checks: *id005
+  - id: AC-SPEC-ORA-08.2
+    given: a precondition that the requirement says must be refused
+    when: a feed or hub arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-ORA-09:
+  level: MUST
+  owner: OracleFeed, Governor
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-ORA-09.1
+    given: the initial state and preconditions of SPEC-ORA-09
+    when: a feed or hub arm is invoked
+    then: Governor suspension (`setPaused`) and trial restart are immediate and domain-scoped.
+    checks: *id005
+  - id: AC-SPEC-ORA-09.2
+    given: a precondition that the requirement says must be refused
+    when: a feed or hub arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-ORA-10:
+  level: MUST
+  owner: clients
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-ORA-10.1
+    given: the initial state and preconditions of SPEC-ORA-10
+    when: a feed or hub arm is invoked
+    then: The web and clients display the feed status and ages; no client invents a price.
+    checks: *id005
+  - id: AC-SPEC-ORA-10.2
+    given: a precondition that the requirement says must be refused
+    when: a feed or hub arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-ISS-01:
+  level: MUST
+  owner: 31_stablecoin, CurrencyRegistry
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-ISS-01.1
+    given: the initial state and preconditions of SPEC-ISS-01
+    when: an issuer, custody or vault arm is invoked
+    then: One system per currency; listing binds all eight URIs in the v3 preimage.
+    checks: &id006
+    - campaign:unit-stablecoin
+    - campaign:unit-interest
+    - model:issuer
+    - model:vault
+  - id: AC-SPEC-ISS-01.2
+    given: a precondition that the requirement says must be refused
+    when: an issuer, custody or vault arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-ISS-02:
+  level: MUST
+  owner: Bounds, 31_stablecoin
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-ISS-02.1
+    given: the initial state and preconditions of SPEC-ISS-02
+    when: an issuer, custody or vault arm is invoked
+    then: Params are the signed v2 11-value set; bounds and hash are enforced at creation.
+    checks: *id006
+  - id: AC-SPEC-ISS-02.2
+    given: a precondition that the requirement says must be refused
+    when: an issuer, custody or vault arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-ISS-03:
+  level: MUST
+  owner: 31_stablecoin
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-ISS-03.1
+    given: the initial state and preconditions of SPEC-ISS-03
+    when: an issuer, custody or vault arm is invoked
+    then: '`savingsShareBps` and `psmFeeBps` are seeded from the signed params.'
+    checks: *id006
+  - id: AC-SPEC-ISS-03.2
+    given: a precondition that the requirement says must be refused
+    when: an issuer, custody or vault arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-ISS-04:
+  level: MUST
+  owner: VaultBook
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-ISS-04.1
+    given: the initial state and preconditions of SPEC-ISS-04
+    when: an issuer, custody or vault arm is invoked
+    then: Health is required on mint and collateral withdrawal; stale or zero rate refuses `"stale feed"`/`"no rate"`.
+    checks: *id006
+  - id: AC-SPEC-ISS-04.2
+    given: a precondition that the requirement says must be refused
+    when: an issuer, custody or vault arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-ISS-05:
+  level: MUST
+  owner: VaultBook, Stablecoin
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-ISS-05.1
+    given: the initial state and preconditions of SPEC-ISS-05
+    when: an issuer, custody or vault arm is invoked
+    then: Min/max debt, debt ceiling and max supply are enforced before minting.
+    checks: *id006
+  - id: AC-SPEC-ISS-05.2
+    given: a precondition that the requirement says must be refused
+    when: an issuer, custody or vault arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-ISS-06:
+  level: MUST
+  owner: VaultBook, Stablecoin
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-ISS-06.1
+    given: the initial state and preconditions of SPEC-ISS-06
+    when: an issuer, custody or vault arm is invoked
+    then: Interest accrues per block and is ceiled; a repay splits principal and interest via `settle`.
+    checks: *id006
+  - id: AC-SPEC-ISS-06.2
+    given: a precondition that the requirement says must be refused
+    when: an issuer, custody or vault arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-ISS-07:
+  level: MUST
+  owner: VaultBook
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-ISS-07.1
+    given: the initial state and preconditions of SPEC-ISS-07
+    when: an issuer, custody or vault arm is invoked
+    then: Repay overpayment returns the payment; supply falls only by principal.
+    checks: *id006
+  - id: AC-SPEC-ISS-07.2
+    given: a precondition that the requirement says must be refused
+    when: an issuer, custody or vault arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-ISS-08:
+  level: MUST
+  owner: VaultBook, SurplusBuffer
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-ISS-08.1
+    given: the initial state and preconditions of SPEC-ISS-08
+    when: an issuer, custody or vault arm is invoked
+    then: Interest reaches the buffer and the savings waterfall in the same deploy.
+    checks: *id006
+  - id: AC-SPEC-ISS-08.2
+    given: a precondition that the requirement says must be refused
+    when: an issuer, custody or vault arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-ISS-09:
+  level: MUST
+  owner: Stablecoin
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-ISS-09.1
+    given: the initial state and preconditions of SPEC-ISS-09
+    when: an issuer, custody or vault arm is invoked
+    then: 'The mint halt is live: `sin > surplus` refuses `"recapitalise"` and is rechecked before the ERTP mint.'
+    checks: *id006
+  - id: AC-SPEC-ISS-09.2
+    given: a precondition that the requirement says must be refused
+    when: an issuer, custody or vault arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-ISS-10:
+  level: MUST
+  owner: VaultBook, PSM
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-ISS-10.1
+    given: the initial state and preconditions of SPEC-ISS-10
+    when: an issuer, custody or vault arm is invoked
+    then: Pause gates mint, withdraw and PSM buy only; repay, liquidate, deposit, savings and redemption continue.
+    checks: *id006
+  - id: AC-SPEC-ISS-10.2
+    given: a precondition that the requirement says must be refused
+    when: an issuer, custody or vault arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-ISS-11:
+  level: MUST
+  owner: VaultBook
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-ISS-11.1
+    given: the initial state and preconditions of SPEC-ISS-11
+    when: an issuer, custody or vault arm is invoked
+    then: The vault view accrues and returns health, rate and freshness; no stale-health answer.
+    checks: *id006
+  - id: AC-SPEC-ISS-11.2
+    given: a precondition that the requirement says must be refused
+    when: an issuer, custody or vault arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-ISS-12:
+  level: MUST
+  owner: VaultBook, PSM, RiskParameters
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-ISS-12.1
+    given: the initial state and preconditions of SPEC-ISS-12
+    when: an issuer, custody or vault arm is invoked
+    then: Risk parameters are live from `paramsState`; a governed change applies to subsequent arms.
+    checks: *id006
+  - id: AC-SPEC-ISS-12.2
+    given: a precondition that the requirement says must be refused
+    when: an issuer, custody or vault arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-ISS-13:
+  level: MUST
+  owner: RiskParameters, registry
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-ISS-13.1
+    given: the initial state and preconditions of SPEC-ISS-13
+    when: an issuer, custody or vault arm is invoked
+    then: Genesis `paramsHash` is the registry identity; `currentHash` changes on a governed update.
+    checks: *id006
+  - id: AC-SPEC-ISS-13.2
+    given: a precondition that the requirement says must be refused
+    when: an issuer, custody or vault arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-ISS-14:
+  level: MUST
+  owner: VaultBook
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-ISS-14.1
+    given: the initial state and preconditions of SPEC-ISS-14
+    when: an issuer, custody or vault arm is invoked
+    then: '`open` and `deposit` remain available while paused.'
+    checks: *id006
+  - id: AC-SPEC-ISS-14.2
+    given: a precondition that the requirement says must be refused
+    when: an issuer, custody or vault arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-ISS-15:
+  level: MUST
+  owner: VaultBook
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-ISS-15.1
+    given: the initial state and preconditions of SPEC-ISS-15
+    when: an issuer, custody or vault arm is invoked
+    then: 'A vault owned by another deployer cannot be operated: `"not owner"`/`"bad vault auth"`.'
+    checks: *id006
+  - id: AC-SPEC-ISS-15.2
+    given: a precondition that the requirement says must be refused
+    when: an issuer, custody or vault arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-ISS-16:
+  level: MUST
+  owner: Stablecoin, VaultBook, Custody
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-ISS-16.1
+    given: the initial state and preconditions of SPEC-ISS-16
+    when: an issuer, custody or vault arm is invoked
+    then: Attestation identifies template and currency and reveals no capability.
+    checks: *id006
+  - id: AC-SPEC-ISS-16.2
+    given: a precondition that the requirement says must be refused
+    when: an issuer, custody or vault arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-LIQ-01:
+  level: MUST
+  owner: VaultBook, LiquidationEngine
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-LIQ-01.1
+    given: the initial state and preconditions of SPEC-LIQ-01
+    when: a liquidation or write-off path is invoked
+    then: Only an unhealthy vault is liquidatable, through the liquidation capability only.
+    checks: &id007
+    - campaign:unit-liquidation
+    - model:vault
+  - id: AC-SPEC-LIQ-01.2
+    given: a precondition that the requirement says must be refused
+    when: a liquidation or write-off path is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-LIQ-02:
+  level: MUST
+  owner: VaultBook
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-LIQ-02.1
+    given: the initial state and preconditions of SPEC-LIQ-02
+    when: a liquidation or write-off path is invoked
+    then: Close factor is `ceil(accrued * closeFactorBps / 10000)`; excess refuses `"close factor"`.
+    checks: *id007
+  - id: AC-SPEC-LIQ-02.2
+    given: a precondition that the requirement says must be refused
+    when: a liquidation or write-off path is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-LIQ-03:
+  level: MUST
+  owner: VaultBook, CollateralMath
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-LIQ-03.1
+    given: the initial state and preconditions of SPEC-LIQ-03
+    when: a liquidation or write-off path is invoked
+    then: Seizure uses the bonus formula with floor; slippage below `minCollateral` refuses `"slippage"`.
+    checks: *id007
+  - id: AC-SPEC-LIQ-03.2
+    given: a precondition that the requirement says must be refused
+    when: a liquidation or write-off path is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-LIQ-04:
+  level: MUST
+  owner: VaultBook
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-LIQ-04.1
+    given: the initial state and preconditions of SPEC-LIQ-04
+    when: a liquidation or write-off path is invoked
+    then: Underwater repayment requires covering the collateral's value; otherwise `"underwater repayment"`.
+    checks: *id007
+  - id: AC-SPEC-LIQ-04.2
+    given: a precondition that the requirement says must be refused
+    when: a liquidation or write-off path is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-LIQ-05:
+  level: MUST
+  owner: VaultBook, SurplusBuffer
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-LIQ-05.1
+    given: the initial state and preconditions of SPEC-LIQ-05
+    when: a liquidation or write-off path is invoked
+    then: A write-off books `badDebt` (cumulative) and `sin` (outstanding) and clears the vault.
+    checks: *id007
+  - id: AC-SPEC-LIQ-05.2
+    given: a precondition that the requirement says must be refused
+    when: a liquidation or write-off path is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-LIQ-06:
+  level: MUST
+  owner: VaultBook
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-LIQ-06.1
+    given: the initial state and preconditions of SPEC-LIQ-06
+    when: a liquidation or write-off path is invoked
+    then: The write-off calls `cover` in the same deploy and revalidates the vault cell; a mismatch fails the deploy.
+    checks: *id007
+  - id: AC-SPEC-LIQ-06.2
+    given: a precondition that the requirement says must be refused
+    when: a liquidation or write-off path is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-LIQ-07:
+  level: MUST
+  owner: SurplusBuffer
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-LIQ-07.1
+    given: the initial state and preconditions of SPEC-LIQ-07
+    when: a liquidation or write-off path is invoked
+    then: '`cover` burns `min(surplus, sin)` and leaves the residual `sin`.'
+    checks: *id007
+  - id: AC-SPEC-LIQ-07.2
+    given: a precondition that the requirement says must be refused
+    when: a liquidation or write-off path is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-LIQ-08:
+  level: MUST
+  owner: Stablecoin
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-LIQ-08.1
+    given: the initial state and preconditions of SPEC-LIQ-08
+    when: a liquidation or write-off path is invoked
+    then: New minting refuses `"recapitalise"` while `sin > surplus`.
+    checks: *id007
+  - id: AC-SPEC-LIQ-08.2
+    given: a precondition that the requirement says must be refused
+    when: a liquidation or write-off path is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-LIQ-09:
+  level: MUST
+  owner: VaultBook
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-LIQ-09.1
+    given: the initial state and preconditions of SPEC-LIQ-09
+    when: a liquidation or write-off path is invoked
+    then: A stale feed refuses liquidation; repay remains available.
+    checks: *id007
+  - id: AC-SPEC-LIQ-09.2
+    given: a precondition that the requirement says must be refused
+    when: a liquidation or write-off path is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-LIQ-10:
+  level: MUST
+  owner: VaultBook
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-LIQ-10.1
+    given: the initial state and preconditions of SPEC-LIQ-10
+    when: a liquidation or write-off path is invoked
+    then: The liquidator receives the seized REV; a refusal returns the stablecoin payment.
+    checks: *id007
+  - id: AC-SPEC-LIQ-10.2
+    given: a precondition that the requirement says must be refused
+    when: a liquidation or write-off path is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-LIQ-11:
+  level: MUST
+  owner: VaultBook
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-LIQ-11.1
+    given: the initial state and preconditions of SPEC-LIQ-11
+    when: a liquidation or write-off path is invoked
+    then: '`totals` exposes debt, accrued interest, collateral, `badDebt` and `sin`.'
+    checks: *id007
+  - id: AC-SPEC-LIQ-11.2
+    given: a precondition that the requirement says must be refused
+    when: a liquidation or write-off path is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-LIQ-12:
+  level: MUST
+  owner: whole app
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-LIQ-12.1
+    given: the initial state and preconditions of SPEC-LIQ-12
+    when: a liquidation or write-off path is invoked
+    then: No recapitalisation token, debt auction or MKR analogue exists.
+    checks: *id007
+  - id: AC-SPEC-LIQ-12.2
+    given: a precondition that the requirement says must be refused
+    when: a liquidation or write-off path is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-BUF-01:
+  level: MUST
+  owner: SurplusBuffer, Stablecoin
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-BUF-01.1
+    given: the initial state and preconditions of SPEC-BUF-01
+    when: a buffer or savings arm is invoked
+    then: Interest is deposited only through the settlement capability.
+    checks: &id008
+    - campaign:unit-savings
+    - campaign:unit-timelock
+    - model:buffer
+  - id: AC-SPEC-BUF-01.2
+    given: a precondition that the requirement says must be refused
+    when: a buffer or savings arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-BUF-02:
+  level: MUST
+  owner: SurplusBuffer
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-BUF-02.1
+    given: the initial state and preconditions of SPEC-BUF-02
+    when: a buffer or savings arm is invoked
+    then: '`cover` absorbs `min(surplus, sin)` and burns it; residual `sin` remains.'
+    checks: *id008
+  - id: AC-SPEC-BUF-02.2
+    given: a precondition that the requirement says must be refused
+    when: a buffer or savings arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-BUF-03:
+  level: MUST
+  owner: SurplusBuffer
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-BUF-03.1
+    given: the initial state and preconditions of SPEC-BUF-03
+    when: a buffer or savings arm is invoked
+    then: '`cover(0)` reconciles outstanding `sin` against new surplus.'
+    checks: *id008
+  - id: AC-SPEC-BUF-03.2
+    given: a precondition that the requirement says must be refused
+    when: a buffer or savings arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-BUF-04:
+  level: MUST
+  owner: SurplusBuffer, SavingsPool
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-BUF-04.1
+    given: the initial state and preconditions of SPEC-BUF-04
+    when: a buffer or savings arm is invoked
+    then: '`paySavings` moves the configured share and skips an empty pool.'
+    checks: *id008
+  - id: AC-SPEC-BUF-04.2
+    given: a precondition that the requirement says must be refused
+    when: a buffer or savings arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-BUF-05:
+  level: MUST
+  owner: VaultBook
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-BUF-05.1
+    given: the initial state and preconditions of SPEC-BUF-05
+    when: a buffer or savings arm is invoked
+    then: "The waterfall is deposit \u2192 cover(0) \u2192 paySavings in one deploy."
+    checks: *id008
+  - id: AC-SPEC-BUF-05.2
+    given: a precondition that the requirement says must be refused
+    when: a buffer or savings arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-BUF-06:
+  level: MUST
+  owner: SurplusBuffer, Governor
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-BUF-06.1
+    given: the initial state and preconditions of SPEC-BUF-06
+    when: a buffer or savings arm is invoked
+    then: Savings share changes are timelocked via the governor.
+    checks: *id008
+  - id: AC-SPEC-BUF-06.2
+    given: a precondition that the requirement says must be refused
+    when: a buffer or savings arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-BUF-07:
+  level: MUST
+  owner: SurplusBuffer
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-BUF-07.1
+    given: the initial state and preconditions of SPEC-BUF-07
+    when: a buffer or savings arm is invoked
+    then: '`info` exposes surplus, sin and the share.'
+    checks: *id008
+  - id: AC-SPEC-BUF-07.2
+    given: a precondition that the requirement says must be refused
+    when: a buffer or savings arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-BUF-08:
+  level: MUST
+  owner: SurplusBuffer
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-BUF-08.1
+    given: the initial state and preconditions of SPEC-BUF-08
+    when: a buffer or savings arm is invoked
+    then: No stablecoin remains counted as surplus after it is burned.
+    checks: *id008
+  - id: AC-SPEC-BUF-08.2
+    given: a precondition that the requirement says must be refused
+    when: a buffer or savings arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-BUF-09:
+  level: MUST
+  owner: Governor
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-BUF-09.1
+    given: the initial state and preconditions of SPEC-BUF-09
+    when: a buffer or savings arm is invoked
+    then: Only a 2-of-3 governor can schedule or apply a share change; early execute refuses `"early"`.
+    checks: *id008
+  - id: AC-SPEC-BUF-09.2
+    given: a precondition that the requirement says must be refused
+    when: a buffer or savings arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-BUF-10:
+  level: MUST
+  owner: SurplusBuffer
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-BUF-10.1
+    given: the initial state and preconditions of SPEC-BUF-10
+    when: a buffer or savings arm is invoked
+    then: The effective share is `floor(surplus * bps / 10000)`; no rounding in the protocol's favour.
+    checks: *id008
+  - id: AC-SPEC-BUF-10.2
+    given: a precondition that the requirement says must be refused
+    when: a buffer or savings arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-SAV-01:
+  level: MUST
+  owner: SavingsPool
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-SAV-01.1
+    given: the initial state and preconditions of SPEC-SAV-01
+    when: a savings arm is invoked
+    then: The owner is derived from `deployerId`; no arm accepts an arbitrary owner.
+    checks: &id009
+    - campaign:unit-savings
+    - model:buffer
+  - id: AC-SPEC-SAV-01.2
+    given: a precondition that the requirement says must be refused
+    when: a savings arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-SAV-02:
+  level: MUST
+  owner: SavingsPool
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-SAV-02.1
+    given: the initial state and preconditions of SPEC-SAV-02
+    when: a savings arm is invoked
+    then: First deposit is 1:1; later shares floor at `amount * totalShares / totalAssets`.
+    checks: *id009
+  - id: AC-SPEC-SAV-02.2
+    given: a precondition that the requirement says must be refused
+    when: a savings arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-SAV-03:
+  level: MUST
+  owner: SavingsPool
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-SAV-03.1
+    given: the initial state and preconditions of SPEC-SAV-03
+    when: a savings arm is invoked
+    then: A zero-share deposit refuses `"shares"` and returns the payment.
+    checks: *id009
+  - id: AC-SPEC-SAV-03.2
+    given: a precondition that the requirement says must be refused
+    when: a savings arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-SAV-04:
+  level: MUST
+  owner: SavingsPool
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-SAV-04.1
+    given: the initial state and preconditions of SPEC-SAV-04
+    when: a savings arm is invoked
+    then: Withdraw is pro-rata, floored, and bounded by the owner's shares.
+    checks: *id009
+  - id: AC-SPEC-SAV-04.2
+    given: a precondition that the requirement says must be refused
+    when: a savings arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-SAV-05:
+  level: MUST
+  owner: SavingsPool
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-SAV-05.1
+    given: the initial state and preconditions of SPEC-SAV-05
+    when: a savings arm is invoked
+    then: '`notify` adds assets without minting shares and is capability-only.'
+    checks: *id009
+  - id: AC-SPEC-SAV-05.2
+    given: a precondition that the requirement says must be refused
+    when: a savings arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-SAV-06:
+  level: MUST
+  owner: VaultBook, SurplusBuffer
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-SAV-06.1
+    given: the initial state and preconditions of SPEC-SAV-06
+    when: a savings arm is invoked
+    then: Interest is distributed automatically on repay; no keeper is required.
+    checks: *id009
+  - id: AC-SPEC-SAV-06.2
+    given: a precondition that the requirement says must be refused
+    when: a savings arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-SAV-07:
+  level: MUST
+  owner: SurplusBuffer
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-SAV-07.1
+    given: the initial state and preconditions of SPEC-SAV-07
+    when: a savings arm is invoked
+    then: The empty pool never receives a notify; interest stays in the buffer.
+    checks: *id009
+  - id: AC-SPEC-SAV-07.2
+    given: a precondition that the requirement says must be refused
+    when: a savings arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-SAV-08:
+  level: MUST
+  owner: SavingsPool
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-SAV-08.1
+    given: the initial state and preconditions of SPEC-SAV-08
+    when: a savings arm is invoked
+    then: '`info` exposes share value; `position` exposes the owner''s holding.'
+    checks: *id009
+  - id: AC-SPEC-SAV-08.2
+    given: a precondition that the requirement says must be refused
+    when: a savings arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-SAV-09:
+  level: MUST
+  owner: SavingsPool
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-SAV-09.1
+    given: the initial state and preconditions of SPEC-SAV-09
+    when: a savings arm is invoked
+    then: No lock, minimum or promised rate exists.
+    checks: *id009
+  - id: AC-SPEC-SAV-09.2
+    given: a precondition that the requirement says must be refused
+    when: a savings arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-SAV-10:
+  level: MUST
+  owner: SavingsPool
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-SAV-10.1
+    given: the initial state and preconditions of SPEC-SAV-10
+    when: a savings arm is invoked
+    then: A donation cannot inflate the next depositor's cost because there is no public donation arm and the share math uses
+      total assets.
+    checks: *id009
+  - id: AC-SPEC-SAV-10.2
+    given: a precondition that the requirement says must be refused
+    when: a savings arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-PSM-01:
+  level: MUST
+  owner: PSM
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-PSM-01.1
+    given: the initial state and preconditions of SPEC-PSM-01
+    when: a PSM arm is invoked
+    then: '`fundRev` accepts REV permissionlessly and reports the amount.'
+    checks: &id010
+    - campaign:unit-psm
+    - model:psm
+  - id: AC-SPEC-PSM-01.2
+    given: a precondition that the requirement says must be refused
+    when: a PSM arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-PSM-02:
+  level: MUST
+  owner: PSM
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-PSM-02.1
+    given: the initial state and preconditions of SPEC-PSM-02
+    when: a PSM arm is invoked
+    then: Buy gross floors, fee ceils, output is the difference, and the full REV is deposited.
+    checks: *id010
+  - id: AC-SPEC-PSM-02.2
+    given: a precondition that the requirement says must be refused
+    when: a PSM arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-PSM-03:
+  level: MUST
+  owner: PSM
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-PSM-03.1
+    given: the initial state and preconditions of SPEC-PSM-03
+    when: a PSM arm is invoked
+    then: Sell gross floors, fee ceils, output is the difference, and the stablecoin is burned.
+    checks: *id010
+  - id: AC-SPEC-PSM-03.2
+    given: a precondition that the requirement says must be refused
+    when: a PSM arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-PSM-04:
+  level: MUST
+  owner: PSM
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-PSM-04.1
+    given: the initial state and preconditions of SPEC-PSM-04
+    when: a PSM arm is invoked
+    then: '`stableDebt` stays signed and may go negative; vault-issued stablecoin redeems at par.'
+    checks: *id010
+  - id: AC-SPEC-PSM-04.2
+    given: a precondition that the requirement says must be refused
+    when: a PSM arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-PSM-05:
+  level: MUST
+  owner: PSM
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-PSM-05.1
+    given: the initial state and preconditions of SPEC-PSM-05
+    when: a PSM arm is invoked
+    then: The ceiling bounds positive debt; `ceiling >= stableDebt` is required for a policy change.
+    checks: *id010
+  - id: AC-SPEC-PSM-05.2
+    given: a precondition that the requirement says must be refused
+    when: a PSM arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-PSM-06:
+  level: MUST
+  owner: PSM
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-PSM-06.1
+    given: the initial state and preconditions of SPEC-PSM-06
+    when: a PSM arm is invoked
+    then: An empty REV purse refuses sell with `"buffer"` and returns the payment.
+    checks: *id010
+  - id: AC-SPEC-PSM-06.2
+    given: a precondition that the requirement says must be refused
+    when: a PSM arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-PSM-07:
+  level: MUST
+  owner: PSM
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-PSM-07.1
+    given: the initial state and preconditions of SPEC-PSM-07
+    when: a PSM arm is invoked
+    then: Min-output bounds refuse `"min stable"`/`"min rev"` and return the payment.
+    checks: *id010
+  - id: AC-SPEC-PSM-07.2
+    given: a precondition that the requirement says must be refused
+    when: a PSM arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-PSM-08:
+  level: MUST
+  owner: PSM
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-PSM-08.1
+    given: the initial state and preconditions of SPEC-PSM-08
+    when: a PSM arm is invoked
+    then: Fees stay in the PSM REV purse and are excluded from surplus and savings.
+    checks: *id010
+  - id: AC-SPEC-PSM-08.2
+    given: a precondition that the requirement says must be refused
+    when: a PSM arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-PSM-09:
+  level: MUST
+  owner: PSM, VaultBook
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-PSM-09.1
+    given: the initial state and preconditions of SPEC-PSM-09
+    when: a PSM arm is invoked
+    then: Buy is paused with the currency; sell remains available for redemption.
+    checks: *id010
+  - id: AC-SPEC-PSM-09.2
+    given: a precondition that the requirement says must be refused
+    when: a PSM arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-PSM-10:
+  level: MUST
+  owner: PSM, Governor
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-PSM-10.1
+    given: the initial state and preconditions of SPEC-PSM-10
+    when: a PSM arm is invoked
+    then: Fee and ceiling changes are timelocked and validated.
+    checks: *id010
+  - id: AC-SPEC-PSM-10.2
+    given: a precondition that the requirement says must be refused
+    when: a PSM arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-PSM-11:
+  level: MUST
+  owner: PSM
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-PSM-11.1
+    given: the initial state and preconditions of SPEC-PSM-11
+    when: a PSM arm is invoked
+    then: '`info` exposes debt, fee, ceiling and REV balance.'
+    checks: *id010
+  - id: AC-SPEC-PSM-11.2
+    given: a precondition that the requirement says must be refused
+    when: a PSM arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-PSM-12:
+  level: MUST
+  owner: PSM
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-PSM-12.1
+    given: the initial state and preconditions of SPEC-PSM-12
+    when: a PSM arm is invoked
+    then: A sell of vault-issued stablecoin produces negative `stableDebt` and preserves S3.
+    checks: *id010
+  - id: AC-SPEC-PSM-12.2
+    given: a precondition that the requirement says must be refused
+    when: a PSM arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-MKT-01:
+  level: MUST
+  owner: Bounds, MarketTerms
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-MKT-01.1
+    given: the initial state and preconditions of SPEC-MKT-01
+    when: a terms, factory or index arm is invoked
+    then: Terms are the v4 25-value schema in the stated order.
+    checks: &id011
+    - campaign:unit-market
+    - model:market
+    - static:flows
+  - id: AC-SPEC-MKT-01.2
+    given: a precondition that the requirement says must be refused
+    when: a terms, factory or index arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-MKT-02:
+  level: MUST
+  owner: core/tools/tests
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-MKT-02.1
+    given: the initial state and preconditions of SPEC-MKT-02
+    when: a terms, factory or index arm is invoked
+    then: Rholang, Rust and Python encoders are byte-identical and vectors are regenerated.
+    checks: *id011
+  - id: AC-SPEC-MKT-02.2
+    given: a precondition that the requirement says must be refused
+    when: a terms, factory or index arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-MKT-03:
+  level: MUST
+  owner: MarketFactory
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-MKT-03.1
+    given: the initial state and preconditions of SPEC-MKT-03
+    when: a terms, factory or index arm is invoked
+    then: The sponsor signature binds marketId, termsHash and sponsor.
+    checks: *id011
+  - id: AC-SPEC-MKT-03.2
+    given: a precondition that the requirement says must be refused
+    when: a terms, factory or index arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-MKT-04:
+  level: MUST
+  owner: Bounds, Factory, Index, Pool
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-MKT-04.1
+    given: the initial state and preconditions of SPEC-MKT-04
+    when: a terms, factory or index arm is invoked
+    then: Every terms field is enforced by the stated owner.
+    checks: *id011
+  - id: AC-SPEC-MKT-04.2
+    given: a precondition that the requirement says must be refused
+    when: a terms, factory or index arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-MKT-05:
+  level: MUST
+  owner: MarketIndex
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-MKT-05.1
+    given: the initial state and preconditions of SPEC-MKT-05
+    when: a terms, factory or index arm is invoked
+    then: Slugs are unique; versions strictly increase after delisting.
+    checks: *id011
+  - id: AC-SPEC-MKT-05.2
+    given: a precondition that the requirement says must be refused
+    when: a terms, factory or index arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-MKT-06:
+  level: MUST
+  owner: MarketFactory
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-MKT-06.1
+    given: the initial state and preconditions of SPEC-MKT-06
+    when: a terms, factory or index arm is invoked
+    then: The sponsor owner is derived from the sponsor key and the lock beneficiary equals the sponsor.
+    checks: *id011
+  - id: AC-SPEC-MKT-06.2
+    given: a precondition that the requirement says must be refused
+    when: a terms, factory or index arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-MKT-07:
+  level: MUST
+  owner: MarketIndex
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-MKT-07.1
+    given: the initial state and preconditions of SPEC-MKT-07
+    when: a terms, factory or index arm is invoked
+    then: Activation checks the sealed slot, funded lock, seed base/quote and initial shares.
+    checks: *id011
+  - id: AC-SPEC-MKT-07.2
+    given: a precondition that the requirement says must be refused
+    when: a terms, factory or index arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-MKT-08:
+  level: MUST
+  owner: MarketIndex
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-MKT-08.1
+    given: the initial state and preconditions of SPEC-MKT-08
+    when: a terms, factory or index arm is invoked
+    then: "Status transitions are only those in \xA712.2; others refuse `\"transition\"`."
+    checks: *id011
+  - id: AC-SPEC-MKT-08.2
+    given: a precondition that the requirement says must be refused
+    when: a terms, factory or index arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-MKT-09:
+  level: MUST
+  owner: FxPool
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-MKT-09.1
+    given: the initial state and preconditions of SPEC-MKT-09
+    when: a terms, factory or index arm is invoked
+    then: Paused/delisted markets refuse quote, swap and add; exit remains available.
+    checks: *id011
+  - id: AC-SPEC-MKT-09.2
+    given: a precondition that the requirement says must be refused
+    when: a terms, factory or index arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-MKT-10:
+  level: MUST
+  owner: ListingViews
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-MKT-10.1
+    given: the initial state and preconditions of SPEC-MKT-10
+    when: a terms, factory or index arm is invoked
+    then: '`ListingViews` enumerates currencies and markets for clients.'
+    checks: *id011
+  - id: AC-SPEC-MKT-10.2
+    given: a precondition that the requirement says must be refused
+    when: a terms, factory or index arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-MKT-11:
+  level: MUST
+  owner: MarketIndex, FxPool
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-MKT-11.1
+    given: the initial state and preconditions of SPEC-MKT-11
+    when: a terms, factory or index arm is invoked
+    then: A market with a mismatched terms hash refuses activation and swap.
+    checks: *id011
+  - id: AC-SPEC-MKT-11.2
+    given: a precondition that the requirement says must be refused
+    when: a terms, factory or index arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-MKT-12:
+  level: MUST
+  owner: MarketFactory
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-MKT-12.1
+    given: the initial state and preconditions of SPEC-MKT-12
+    when: a terms, factory or index arm is invoked
+    then: The factory refuses an inactive or missing feed and a mismatched policy hash.
+    checks: *id011
+  - id: AC-SPEC-MKT-12.2
+    given: a precondition that the requirement says must be refused
+    when: a terms, factory or index arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-MKT-13:
+  level: MUST
+  owner: FxPool
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-MKT-13.1
+    given: the initial state and preconditions of SPEC-MKT-13
+    when: a terms, factory or index arm is invoked
+    then: The AMM fee, max trade, min ticket and first-deposit tolerance match the terms.
+    checks: *id011
+  - id: AC-SPEC-MKT-13.2
+    given: a precondition that the requirement says must be refused
+    when: a terms, factory or index arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-MKT-14:
+  level: MUST
+  owner: FxPool
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-MKT-14.1
+    given: the initial state and preconditions of SPEC-MKT-14
+    when: a terms, factory or index arm is invoked
+    then: A full removal sets `seeded = false`; a later deposit reseeds.
+    checks: *id011
+  - id: AC-SPEC-MKT-14.2
+    given: a precondition that the requirement says must be refused
+    when: a terms, factory or index arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-POOL-01:
+  level: MUST
+  owner: FxPool
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-POOL-01.1
+    given: the initial state and preconditions of SPEC-POOL-01
+    when: a pool or liquidity arm is invoked
+    then: Reserves equal native custody; shares equal LP minted minus burned.
+    checks: &id012
+    - campaign:unit-market
+    - model:amm
+    - model:invariants
+  - id: AC-SPEC-POOL-01.2
+    given: a precondition that the requirement says must be refused
+    when: a pool or liquidity arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-POOL-02:
+  level: MUST
+  owner: FxPool
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-POOL-02.1
+    given: the initial state and preconditions of SPEC-POOL-02
+    when: a pool or liquidity arm is invoked
+    then: First deposit mints `depositValue - 1e8` and requires `>= minLiquidity`.
+    checks: *id012
+  - id: AC-SPEC-POOL-02.2
+    given: a precondition that the requirement says must be refused
+    when: a pool or liquidity arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-POOL-03:
+  level: MUST
+  owner: AmmMath, FxPool
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-POOL-03.1
+    given: the initial state and preconditions of SPEC-POOL-03
+    when: a pool or liquidity arm is invoked
+    then: Quote rounds down; the pool never pays more than the oracle formula.
+    checks: *id012
+  - id: AC-SPEC-POOL-03.2
+    given: a precondition that the requirement says must be refused
+    when: a pool or liquidity arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-POOL-04:
+  level: MUST
+  owner: FxPool
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-POOL-04.1
+    given: the initial state and preconditions of SPEC-POOL-04
+    when: a pool or liquidity arm is invoked
+    then: '`maxTradeBps` is measured against the input reserve.'
+    checks: *id012
+  - id: AC-SPEC-POOL-04.2
+    given: a precondition that the requirement says must be refused
+    when: a pool or liquidity arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-POOL-05:
+  level: MUST
+  owner: FxPool
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-POOL-05.1
+    given: the initial state and preconditions of SPEC-POOL-05
+    when: a pool or liquidity arm is invoked
+    then: The tradability gate is called by swap and add, not duplicated.
+    checks: *id012
+  - id: AC-SPEC-POOL-05.2
+    given: a precondition that the requirement says must be refused
+    when: a pool or liquidity arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-POOL-06:
+  level: MUST
+  owner: FxPool
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-POOL-06.1
+    given: the initial state and preconditions of SPEC-POOL-06
+    when: a pool or liquidity arm is invoked
+    then: 'LP add is atomic: both payments in, shares out, or refund both.'
+    checks: *id012
+  - id: AC-SPEC-POOL-06.2
+    given: a precondition that the requirement says must be refused
+    when: a pool or liquidity arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-POOL-07:
+  level: MUST
+  owner: FxPool
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-POOL-07.1
+    given: the initial state and preconditions of SPEC-POOL-07
+    when: a pool or liquidity arm is invoked
+    then: LP removal pays both assets and never strands a balance.
+    checks: *id012
+  - id: AC-SPEC-POOL-07.2
+    given: a precondition that the requirement says must be refused
+    when: a pool or liquidity arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-POOL-08:
+  level: MUST
+  owner: LiquidityLock
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-POOL-08.1
+    given: the initial state and preconditions of SPEC-POOL-08
+    when: a pool or liquidity arm is invoked
+    then: A funded lock refuses a second fund and returns the payment.
+    checks: *id012
+  - id: AC-SPEC-POOL-08.2
+    given: a precondition that the requirement says must be refused
+    when: a pool or liquidity arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-POOL-09:
+  level: MUST
+  owner: LiquidityLock
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-POOL-09.1
+    given: the initial state and preconditions of SPEC-POOL-09
+    when: a pool or liquidity arm is invoked
+    then: Release requires the beneficiary and the height; cancel requires the funder or beneficiary.
+    checks: *id012
+  - id: AC-SPEC-POOL-09.2
+    given: a precondition that the requirement says must be refused
+    when: a pool or liquidity arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-POOL-10:
+  level: MUST
+  owner: LiquidityLock
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-POOL-10.1
+    given: the initial state and preconditions of SPEC-POOL-10
+    when: a pool or liquidity arm is invoked
+    then: A released/cancelled lock refuses `"closed"`.
+    checks: *id012
+  - id: AC-SPEC-POOL-10.2
+    given: a precondition that the requirement says must be refused
+    when: a pool or liquidity arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-DEX-01:
+  level: MUST
+  owner: MarketIndex, MarketFactory
+  status: verified
+  spec_status: planned
+  criteria:
+  - id: AC-SPEC-DEX-01.1
+    given: a supported currency set and an active market for a pair in one orientation
+    when: the pair is looked up in the reverse orientation and a second orientation is staged
+    then: both lookups resolve to one marketId; staging the second orientation refuses "pair active" and creates no second
+      market record
+    checks: &id013
+    - static:mesh
+    - model:mesh
+    - model:market
+    - campaign:unit-mesh
+    - campaign:unit-external
+    - offline:web-test
+    - offline:sdk-fixture
+SPEC-DEX-02:
+  level: MUST
+  owner: MarketIndex, ListingViews
+  status: verified
+  spec_status: planned
+  criteria:
+  - id: AC-SPEC-DEX-02.1
+    given: an active market with base and quote
+    when: marketFor is called with base/quote and with quote/base
+    then: both calls return the same market record, including its original base/quote orientation
+    checks: *id013
+SPEC-DEX-03:
+  level: MUST
+  owner: Web, SDK, CLI
+  status: verified
+  spec_status: planned
+  criteria:
+  - id: AC-SPEC-DEX-03.1
+    given: a fresh client with no stored preference
+    when: the client renders accounts, payments or a new market
+    then: USD is selected; a stored user preference overrides it without changing on-chain state
+    checks: *id013
+SPEC-DEX-04:
+  level: MUST
+  owner: CurrencyRegistry, mesh config
+  status: campaign
+  spec_status: planned
+  criteria:
+  - id: AC-SPEC-DEX-04.1
+    given: the native USD system is deployed and registered
+    when: a USD market or USD account operation is performed
+    then: USD behaves as the default stablecoin unit and is distinct from every external USD code
+    checks: *id013
+SPEC-DEX-05:
+  level: MUST
+  owner: CurrencyRegistry, AssetResolver
+  status: verified
+  spec_status: planned
+  criteria:
+  - id: AC-SPEC-DEX-05.1
+    given: a sponsor and an 8-decimal external adapter
+    when: registerExternal is called with a valid signature and attestation
+    then: the entry has kind external, assetUri and decimals 8; a wrong kind, sponsor, asset or decimals refuses before any
+      write
+    checks: *id013
+SPEC-DEX-06:
+  level: MUST
+  owner: Web, SDK
+  status: campaign
+  spec_status: planned
+  criteria:
+  - id: AC-SPEC-DEX-06.1
+    given: an external asset entry
+    when: Vault, Earn, Redeem or the stablecoin governance screens enumerate currencies
+    then: the external asset is excluded; Accounts, Pay, Convert, Liquidity and Markets include it with an external label
+    checks: *id013
+SPEC-DEX-07:
+  level: MUST
+  owner: MarketIndex, Governor
+  status: verified
+  spec_status: planned
+  criteria:
+  - id: AC-SPEC-DEX-07.1
+    given: several active markets, some containing code X
+    when: the governor-authorized pauseAsset(X) is executed
+    then: every active market containing X becomes paused and no other market changes
+    checks: *id013
+SPEC-DEX-08:
+  level: MUST
+  owner: mesh tooling, ListingViews
+  status: campaign
+  spec_status: planned
+  criteria:
+  - id: AC-SPEC-DEX-08.1
+    given: the tracked mesh config with priority pairs
+    when: mesh-install runs on a fresh chain
+    then: every priority pair is created, seeded and active; every other supported pair remains unlisted and permissionless
+    checks: *id013
+SPEC-DEX-09:
+  level: MUST
+  owner: Web, ListingViews
+  status: verified
+  spec_status: planned
+  criteria:
+  - id: AC-SPEC-DEX-09.1
+    given: a supported currency set and on-chain market records
+    when: the Markets mesh matrix is rendered
+    then: each supported pair shows active/draft/paused/unlisted and an indicative oracle rate; no liquidity is implied for
+      an unlisted pair
+    checks: *id013
+SPEC-DEX-10:
+  level: MUST
+  owner: OracleHub, FxPool
+  status: campaign
+  spec_status: planned
+  criteria:
+  - id: AC-SPEC-DEX-10.1
+    given: an external USD code with a depegged feed and the native USD code
+    when: a price or swap uses the external code
+    then: the external feed price is used; native USD is not substituted and no 1.0 peg is assumed
+    checks: *id013
+SPEC-GOV-01:
+  level: MUST
+  owner: Governor, AdminGuard
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-GOV-01.1
+    given: the initial state and preconditions of SPEC-GOV-01
+    when: a governor or admin arm is invoked
+    then: Admin actions require 2-of-3 over the exact domain preimage and a monotone nonce.
+    checks: &id014
+    - campaign:unit-timelock
+    - campaign:unit-v3
+    - model:invariants
+  - id: AC-SPEC-GOV-01.2
+    given: a precondition that the requirement says must be refused
+    when: a governor or admin arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-GOV-02:
+  level: MUST
+  owner: Governor
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-GOV-02.1
+    given: the initial state and preconditions of SPEC-GOV-02
+    when: a governor or admin arm is invoked
+    then: Timelocked actions are scheduled, executed after 100 blocks, and recheck the args hash.
+    checks: *id014
+  - id: AC-SPEC-GOV-02.2
+    given: a precondition that the requirement says must be refused
+    when: a governor or admin arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-GOV-03:
+  level: MUST
+  owner: Governor
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-GOV-03.1
+    given: the initial state and preconditions of SPEC-GOV-03
+    when: a governor or admin arm is invoked
+    then: Early execute refuses `"early"`; unknown refuses `"unknown"`; replay refuses `"replay"`.
+    checks: *id014
+  - id: AC-SPEC-GOV-03.2
+    given: a precondition that the requirement says must be refused
+    when: a governor or admin arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-GOV-04:
+  level: MUST
+  owner: Governor, contracts
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-GOV-04.1
+    given: the initial state and preconditions of SPEC-GOV-04
+    when: a governor or admin arm is invoked
+    then: Risk params, savings share and PSM policy are timelocked; pause and market status are immediate.
+    checks: *id014
+  - id: AC-SPEC-GOV-04.2
+    given: a precondition that the requirement says must be refused
+    when: a governor or admin arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-GOV-05:
+  level: MUST
+  owner: all
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-GOV-05.1
+    given: the initial state and preconditions of SPEC-GOV-05
+    when: a governor or admin arm is invoked
+    then: "The pause matrix in \xA713.2 is the complete matrix; any other refusal is a defect."
+    checks: *id014
+  - id: AC-SPEC-GOV-05.2
+    given: a precondition that the requirement says must be refused
+    when: a governor or admin arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-GOV-06:
+  level: MUST
+  owner: Governor
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-GOV-06.1
+    given: the initial state and preconditions of SPEC-GOV-06
+    when: a governor or admin arm is invoked
+    then: '`pending` exposes scheduled actions for clients.'
+    checks: *id014
+  - id: AC-SPEC-GOV-06.2
+    given: a precondition that the requirement says must be refused
+    when: a governor or admin arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-GOV-07:
+  level: MUST
+  owner: RiskParameters
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-GOV-07.1
+    given: the initial state and preconditions of SPEC-GOV-07
+    when: a governor or admin arm is invoked
+    then: A governed params change applies to subsequent arms and does not rewrite the genesis hash.
+    checks: *id014
+  - id: AC-SPEC-GOV-07.2
+    given: a precondition that the requirement says must be refused
+    when: a governor or admin arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-GOV-08:
+  level: MUST
+  owner: Root
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-GOV-08.1
+    given: the initial state and preconditions of SPEC-GOV-08
+    when: a governor or admin arm is invoked
+    then: Root freeze is terminal; a frozen root refuses further registration.
+    checks: *id014
+  - id: AC-SPEC-GOV-08.2
+    given: a precondition that the requirement says must be refused
+    when: a governor or admin arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-GOV-09:
+  level: MUST
+  owner: CurrencyRegistry, VaultBook
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-GOV-09.1
+    given: the initial state and preconditions of SPEC-GOV-09
+    when: a governor or admin arm is invoked
+    then: Currency pause is reported in the registry entry for clients and enforced by the issuer.
+    checks: *id014
+  - id: AC-SPEC-GOV-09.2
+    given: a precondition that the requirement says must be refused
+    when: a governor or admin arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-GOV-10:
+  level: MUST
+  owner: FxPool, MarketIndex
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-GOV-10.1
+    given: the initial state and preconditions of SPEC-GOV-10
+    when: a governor or admin arm is invoked
+    then: Market status is the sole pool pause authority; no dead `poolState.paused` field exists.
+    checks: *id014
+  - id: AC-SPEC-GOV-10.2
+    given: a precondition that the requirement says must be refused
+    when: a governor or admin arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-REG-01:
+  level: MUST
+  owner: Root
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-REG-01.1
+    given: the initial state and preconditions of SPEC-REG-01
+    when: a registry or resolver arm is invoked
+    then: Root registration is installer-signed; rotation/freeze are 2-of-3 and versioned.
+    checks: &id015
+    - campaign:unit-v3
+    - campaign:unit-external
+    - model:mesh
+    - static:flows
+  - id: AC-SPEC-REG-01.2
+    given: a precondition that the requirement says must be refused
+    when: a registry or resolver arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-REG-02:
+  level: MUST
+  owner: CurrencyRegistry
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-REG-02.1
+    given: the initial state and preconditions of SPEC-REG-02
+    when: a registry or resolver arm is invoked
+    then: Exactly one system per currency; duplicate listing refuses `"currency exists"`/`"duplicate"`.
+    checks: *id015
+  - id: AC-SPEC-REG-02.2
+    given: a precondition that the requirement says must be refused
+    when: a registry or resolver arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-REG-03:
+  level: MUST
+  owner: CurrencyRegistry
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-REG-03.1
+    given: the initial state and preconditions of SPEC-REG-03
+    when: a registry or resolver arm is invoked
+    then: Currency registration binds all eight URIs plus params hash and sponsor in the v3 preimage.
+    checks: *id015
+  - id: AC-SPEC-REG-03.2
+    given: a precondition that the requirement says must be refused
+    when: a registry or resolver arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-REG-04:
+  level: MUST
+  owner: CurrencyRegistry
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-REG-04.1
+    given: the initial state and preconditions of SPEC-REG-04
+    when: a registry or resolver arm is invoked
+    then: The directory is written only after the live attestation matches.
+    checks: *id015
+  - id: AC-SPEC-REG-04.2
+    given: a precondition that the requirement says must be refused
+    when: a registry or resolver arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-REG-05:
+  level: MUST
+  owner: AssetResolver
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-REG-05.1
+    given: the initial state and preconditions of SPEC-REG-05
+    when: a registry or resolver arm is invoked
+    then: Asset resolution is per-call; no registry capability is cached in a bundle.
+    checks: *id015
+  - id: AC-SPEC-REG-05.2
+    given: a precondition that the requirement says must be refused
+    when: a registry or resolver arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-REG-06:
+  level: MUST
+  owner: installers
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-REG-06.1
+    given: the initial state and preconditions of SPEC-REG-06
+    when: a registry or resolver arm is invoked
+    then: "Install order matches \xA714 and each step's Root keys resolve before the next."
+    checks: *id015
+  - id: AC-SPEC-REG-06.2
+    given: a precondition that the requirement says must be refused
+    when: a registry or resolver arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-REG-07:
+  level: MUST
+  owner: ListingViews
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-REG-07.1
+    given: the initial state and preconditions of SPEC-REG-07
+    when: a registry or resolver arm is invoked
+    then: '`ListingViews` resolves components at arm entry and never caches.'
+    checks: *id015
+  - id: AC-SPEC-REG-07.2
+    given: a precondition that the requirement says must be refused
+    when: a registry or resolver arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-REG-08:
+  level: MUST
+  owner: rcash-core, ops
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-REG-08.1
+    given: the initial state and preconditions of SPEC-REG-08
+    when: a registry or resolver arm is invoked
+    then: The manifest lists every component URI and no capability or key.
+    checks: *id015
+  - id: AC-SPEC-REG-08.2
+    given: a precondition that the requirement says must be refused
+    when: a registry or resolver arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-REG-09:
+  level: MUST
+  owner: CurrencyRegistry, VaultBook
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-REG-09.1
+    given: the initial state and preconditions of SPEC-REG-09
+    when: a registry or resolver arm is invoked
+    then: A stale registry status is corrected by a governed pause, not by the issuer reading the registry.
+    checks: *id015
+  - id: AC-SPEC-REG-09.2
+    given: a precondition that the requirement says must be refused
+    when: a registry or resolver arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-REG-10:
+  level: MUST
+  owner: components.json
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-REG-10.1
+    given: the initial state and preconditions of SPEC-REG-10
+    when: a registry or resolver arm is invoked
+    then: The contract catalogue matches the built terms and arm lists.
+    checks: *id015
+  - id: AC-SPEC-REG-10.2
+    given: a precondition that the requirement says must be refused
+    when: a registry or resolver arm is invoked
+    then: the exact documented refusal is returned and no state change or payment loss occurs
+    checks:
+    - model:refusals
+    - static:flows
+SPEC-REG-11:
+  level: MUST
+  owner: CurrencyRegistry, AssetResolver
+  status: verified
+  spec_status: planned
+  criteria:
+  - id: AC-SPEC-REG-11.1
+    given: a bridge/custodian adapter with attest and issuer/brand arms
+    when: registerExternal is called
+    then: it verifies the external-asset-register v1 signature and attestation, rejects duplicate codes and stores exactly
+      one external entry
+    checks: *id015
+SPEC-REG-12:
+  level: MUST
+  owner: CurrencyRegistry, web
+  status: campaign
+  spec_status: planned
+  criteria:
+  - id: AC-SPEC-REG-12.1
+    given: an external entry
+    when: a stablecoin-only screen or view enumerates it
+    then: it is filtered out; no VaultBook, PSM, savings or liquidation URI is invented
+    checks: *id015
+SPEC-CLI-01:
+  level: MUST
+  owner: SDK/CLI/WASM
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-CLI-01.1
+    given: the initial state and preconditions of SPEC-CLI-01
+    when: the SDK, CLI or WASM method is called against a fixture
+    then: "SDK, CLI and WASM expose every user-facing arm in \xA715."
+    checks: &id016
+    - offline:sdk-fixture
+    - offline:cli-fixture
+    - offline:wasm
+    - campaign:demo
+SPEC-CLI-02:
+  level: MUST
+  owner: rcash-core
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-CLI-02.1
+    given: the initial state and preconditions of SPEC-CLI-02
+    when: the SDK, CLI or WASM method is called against a fixture
+    then: Amounts are exact base units; no floats; parsing refuses >8 decimals.
+    checks: *id016
+SPEC-CLI-03:
+  level: MUST
+  owner: SDK/WASM
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-CLI-03.1
+    given: the initial state and preconditions of SPEC-CLI-03
+    when: the SDK, CLI or WASM method is called against a fixture
+    then: Freshness-gated reads use the signing client; locked wallets refuse clearly.
+    checks: *id016
+SPEC-CLI-04:
+  level: MUST
+  owner: SDK
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-CLI-04.1
+    given: the initial state and preconditions of SPEC-CLI-04
+    when: the SDK, CLI or WASM method is called against a fixture
+    then: Success requires finality and absence from `rejectedDeploys`.
+    checks: *id016
+SPEC-CLI-05:
+  level: MUST
+  owner: SDK
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-CLI-05.1
+    given: the initial state and preconditions of SPEC-CLI-05
+    when: the SDK, CLI or WASM method is called against a fixture
+    then: 'Retries are idempotent: native op cache or on-chain opId.'
+    checks: *id016
+SPEC-CLI-06:
+  level: MUST
+  owner: SDK
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-CLI-06.1
+    given: the initial state and preconditions of SPEC-CLI-06
+    when: the SDK, CLI or WASM method is called against a fixture
+    then: Expiry anchors to the finalized height.
+    checks: *id016
+SPEC-CLI-07:
+  level: MUST
+  owner: CLI/web
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-CLI-07.1
+    given: the initial state and preconditions of SPEC-CLI-07
+    when: the SDK, CLI or WASM method is called against a fixture
+    then: Swap/add/remove defaults are non-zero (50 bps) and explicit.
+    checks: *id016
+SPEC-CLI-08:
+  level: MUST
+  owner: CLI
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-CLI-08.1
+    given: the initial state and preconditions of SPEC-CLI-08
+    when: the SDK, CLI or WASM method is called against a fixture
+    then: The CLI exposes vault, savings, PSM, buffer, markets and governance commands.
+    checks: *id016
+SPEC-CLI-09:
+  level: MUST
+  owner: WASM
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-CLI-09.1
+    given: the initial state and preconditions of SPEC-CLI-09
+    when: the SDK, CLI or WASM method is called against a fixture
+    then: WASM exports the same methods with camelCase JSON and exact string amounts.
+    checks: *id016
+SPEC-CLI-10:
+  level: MUST
+  owner: CLI
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-CLI-10.1
+    given: the initial state and preconditions of SPEC-CLI-10
+    when: the SDK, CLI or WASM method is called against a fixture
+    then: "`make demo` runs a real send \u2192 claim journey."
+    checks: *id016
+SPEC-CLI-11:
+  level: MUST
+  owner: SDK
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-CLI-11.1
+    given: the initial state and preconditions of SPEC-CLI-11
+    when: the SDK, CLI or WASM method is called against a fixture
+    then: Error classes are distinguishable and documented.
+    checks: *id016
+SPEC-CLI-12:
+  level: MUST
+  owner: SDK/WASM/web
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-CLI-12.1
+    given: the initial state and preconditions of SPEC-CLI-12
+    when: the SDK, CLI or WASM method is called against a fixture
+    then: V4Currency carries kind and, for stablecoins, custody/params/liquidation/savings/PSM/sponsor URIs.
+    checks: *id016
+SPEC-CLI-13:
+  level: MUST
+  owner: SDK/CLI/WASM/web
+  status: campaign
+  spec_status: planned
+  criteria:
+  - id: AC-SPEC-CLI-13.1
+    given: a CLI/SDK caller with no display preference
+    when: human-readable output is produced
+    then: USD is the default display and new-market quote; an explicit flag/env overrides it and JSON stays explicit
+    checks: *id016
+SPEC-CLI-14:
+  level: MUST
+  owner: SDK/WASM/web
+  status: verified
+  spec_status: planned
+  criteria:
+  - id: AC-SPEC-CLI-14.1
+    given: a stablecoin entry and an external entry
+    when: the client reads currencies
+    then: kind, assetUri, decimals, chain and custodian are exposed; stablecoin-only URIs may be empty for an external entry
+    checks: *id016
+SPEC-WEB-01:
+  level: MUST
+  owner: web
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-WEB-01.1
+    given: the initial state and preconditions of SPEC-WEB-01
+    when: the screen is rendered with fixture state
+    then: "Every user-facing arm in \xA715 has a screen or an explicit CLI-only note."
+    checks: &id017
+    - offline:web-test
+    - offline:web-typecheck
+    - campaign:demo
+SPEC-WEB-02:
+  level: MUST
+  owner: store/wasm
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-WEB-02.1
+    given: the initial state and preconditions of SPEC-WEB-02
+    when: the screen is rendered with fixture state
+    then: The private key never leaves WASM; the keystore is encrypted; no secret in localStorage.
+    checks: *id017
+SPEC-WEB-03:
+  level: MUST
+  owner: format.ts
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-WEB-03.1
+    given: the initial state and preconditions of SPEC-WEB-03
+    when: the screen is rendered with fixture state
+    then: Amounts use exact BigInt formatting; no float arithmetic.
+    checks: *id017
+SPEC-WEB-04:
+  level: MUST
+  owner: Convert/Liquidity/Markets
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-WEB-04.1
+    given: the initial state and preconditions of SPEC-WEB-04
+    when: the screen is rendered with fixture state
+    then: Slippage minima are derived from the quote, default 50 bps, editable, never zero.
+    checks: *id017
+SPEC-WEB-05:
+  level: MUST
+  owner: Pay/db.ts
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-WEB-05.1
+    given: the initial state and preconditions of SPEC-WEB-05
+    when: the screen is rendered with fixture state
+    then: Send journals before submit and reconciles pending entries.
+    checks: *id017
+SPEC-WEB-06:
+  level: MUST
+  owner: Pay
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-WEB-06.1
+    given: the initial state and preconditions of SPEC-WEB-06
+    when: the screen is rendered with fixture state
+    then: opId is generated per send and reused on retry.
+    checks: *id017
+SPEC-WEB-07:
+  level: MUST
+  owner: Pay
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-WEB-07.1
+    given: the initial state and preconditions of SPEC-WEB-07
+    when: the screen is rendered with fixture state
+    then: Memo and stipend are exposed with the non-refundable warning.
+    checks: *id017
+SPEC-WEB-08:
+  level: MUST
+  owner: Pay
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-WEB-08.1
+    given: the initial state and preconditions of SPEC-WEB-08
+    when: the screen is rendered with fixture state
+    then: Expiry uses the finalized height.
+    checks: *id017
+SPEC-WEB-09:
+  level: MUST
+  owner: Claim/History
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-WEB-09.1
+    given: the initial state and preconditions of SPEC-WEB-09
+    when: the screen is rendered with fixture state
+    then: Claim shows status, expiry and stipend; refund is available for expired sends.
+    checks: *id017
+SPEC-WEB-10:
+  level: MUST
+  owner: new routes
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-WEB-10.1
+    given: the initial state and preconditions of SPEC-WEB-10
+    when: the screen is rendered with fixture state
+    then: Vault, Earn, Redeem and Markets screens exist with the behaviours above.
+    checks: *id017
+SPEC-WEB-11:
+  level: MUST
+  owner: Accounts
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-WEB-11.1
+    given: the initial state and preconditions of SPEC-WEB-11
+    when: the screen is rendered with fixture state
+    then: Currencies are discovered from the chain, not `DEFAULT_ASSETS`.
+    checks: *id017
+SPEC-WEB-12:
+  level: MUST
+  owner: Convert/Liquidity
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-WEB-12.1
+    given: the initial state and preconditions of SPEC-WEB-12
+    when: the screen is rendered with fixture state
+    then: A locked wallet shows "unlock to quote" for freshness-gated reads.
+    checks: *id017
+SPEC-WEB-13:
+  level: MUST
+  owner: Disabled
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-WEB-13.1
+    given: the initial state and preconditions of SPEC-WEB-13
+    when: the screen is rendered with fixture state
+    then: Batch and Ramps are disabled with an accurate reason.
+    checks: *id017
+SPEC-WEB-14:
+  level: MUST
+  owner: db.ts
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-WEB-14.1
+    given: the initial state and preconditions of SPEC-WEB-14
+    when: the screen is rendered with fixture state
+    then: The journal never stores a claim secret or a private key.
+    checks: *id017
+SPEC-WEB-15:
+  level: MUST
+  owner: preferences.ts, Settings
+  status: verified
+  spec_status: planned
+  criteria:
+  - id: AC-SPEC-WEB-15.1
+    given: a fresh browser with no preference
+    when: Settings is opened and a currency is selected
+    then: USD is shown by default, the choice persists locally, and no key or secret is stored with it
+    checks: *id017
+SPEC-WEB-16:
+  level: MUST
+  owner: Accounts
+  status: verified
+  spec_status: planned
+  criteria:
+  - id: AC-SPEC-WEB-16.1
+    given: balances in several assets and a preferred currency
+    when: Accounts renders
+    then: it shows a preferred-currency total and per-asset values; a missing feed shows "no price" rather than a zero or
+      a guessed rate
+    checks: *id017
+SPEC-WEB-17:
+  level: MUST
+  owner: Markets
+  status: verified
+  spec_status: planned
+  criteria:
+  - id: AC-SPEC-WEB-17.1
+    given: the tracked mesh config and fixture markets
+    when: Markets renders
+    then: all supported pairs appear with availability and oracle rates; external assets are labelled and unlisted pairs are
+      not shown as tradable
+    checks: *id017
+SPEC-OPS-01:
+  level: MUST
+  owner: Makefile/harness
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-OPS-01.1
+    given: the initial state and preconditions of SPEC-OPS-01
+    when: the operator target is run
+    then: Fresh devnet, install and bootstrap are reproducible from documented commands.
+    checks: &id018
+    - static:spec-check
+    - static:mesh
+    - campaign:install
+SPEC-OPS-02:
+  level: MUST
+  owner: keygen
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-OPS-02.1
+    given: the initial state and preconditions of SPEC-OPS-02
+    when: the operator target is run
+    then: Keys are idempotent; regeneration requires `--fresh`.
+    checks: *id018
+SPEC-OPS-03:
+  level: MUST
+  owner: installers
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-OPS-03.1
+    given: the initial state and preconditions of SPEC-OPS-03
+    when: the operator target is run
+    then: The installer verifies every step before the next and writes no partial manifest.
+    checks: *id018
+SPEC-OPS-04:
+  level: MUST
+  owner: ops
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-OPS-04.1
+    given: the initial state and preconditions of SPEC-OPS-04
+    when: the operator target is run
+    then: Manifests contain no nulls on a completed install and no capabilities.
+    checks: *id018
+SPEC-OPS-05:
+  level: MUST
+  owner: ops
+  status: campaign
+  spec_status: planned
+  criteria:
+  - id: AC-SPEC-OPS-05.1
+    given: a campaign is started
+    when: the report is written
+    then: source SHA, image digest, prefix, memory and timestamps are recorded with each result
+    checks: *id018
+SPEC-OPS-06:
+  level: MUST
+  owner: ops
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-OPS-06.1
+    given: the initial state and preconditions of SPEC-OPS-06
+    when: the operator target is run
+    then: The faucet and deployer budgets are documented and respected.
+    checks: *id018
+SPEC-OPS-07:
+  level: MUST
+  owner: ops
+  status: campaign
+  spec_status: planned
+  criteria:
+  - id: AC-SPEC-OPS-07.1
+    given: a public-testnet or merge-gossip arm
+    when: the campaign reports it
+    then: it is marked BLOCKED with the upstream blocker and never reported as conformance
+    checks: *id018
+SPEC-OPS-08:
+  level: MUST
+  owner: docs
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-OPS-08.1
+    given: the initial state and preconditions of SPEC-OPS-08
+    when: the operator target is run
+    then: Docs, Makefile and manifests describe the shipped behaviour.
+    checks: *id018
+SPEC-OPS-09:
+  level: MUST
+  owner: Makefile
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-OPS-09.1
+    given: the initial state and preconditions of SPEC-OPS-09
+    when: the operator target is run
+    then: '`unit-all` is the ordered campaign list.'
+    checks: *id018
+SPEC-OPS-10:
+  level: MUST
+  owner: CLI
+  status: campaign
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-OPS-10.1
+    given: the initial state and preconditions of SPEC-OPS-10
+    when: the operator target is run
+    then: The demo journey runs end to end on the bootstrapped devnet.
+    checks: *id018
+SPEC-OPS-11:
+  level: MUST
+  owner: tools/mesh.py
+  status: verified
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-OPS-11.1
+    given: the tracked mesh config
+    when: mesh-plan runs
+    then: it rejects duplicate codes/pairs, unknown majors/default, and an enabled external asset without an adapter
+    checks: *id018
+SPEC-OPS-12:
+  level: MUST
+  owner: tools/mesh.py
+  status: campaign
+  spec_status: planned
+  criteria:
+  - id: AC-SPEC-OPS-12.1
+    given: a fresh installed devnet and valid mesh config
+    when: mesh-install runs
+    then: native feeds/systems and priority markets are created and seeded; an enabled external without adapter is refused
+      before any deploy
+    checks: *id018
+SPEC-INV-01:
+  level: MUST
+  owner: spec
+  status: verified
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-INV-01.1
+    given: the initial state and preconditions of SPEC-INV-01
+    when: the Lean or model check is run
+    then: Every requirement maps to at least one invariant or is a pure client/ops requirement.
+    checks: &id019
+    - static:lean
+    - model:invariants
+SPEC-INV-02:
+  level: MUST
+  owner: contracts
+  status: verified
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-INV-02.1
+    given: the initial state and preconditions of SPEC-INV-02
+    when: the Lean or model check is run
+    then: "S1\u2013S12 and I1\u2013I22 hold; S3 uses the revised identity."
+    checks: *id019
+SPEC-INV-03:
+  level: MUST
+  owner: ops
+  status: verified
+  spec_status: planned
+  criteria:
+  - id: AC-SPEC-INV-03.1
+    given: the invariant catalogue and the Lean/model declarations
+    when: the traceability gate runs
+    then: every invariant ID has a normative statement and a declared Lean or model check; untested invariants fail
+    checks: *id019

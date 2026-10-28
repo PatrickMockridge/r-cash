@@ -1,8 +1,8 @@
 # Flow specification.
 # Arm keys, source lines, access modes and refusal sets are checked against
 # contracts/build/arm_inventory.json by tools/check_flows.py. Guards, effects,
-# invariants and status are the authored content; status is not a synonym for
-# tested. See README.md for the schema and protocol labels.
+# acceptance IDs, model/vector and invariants are the authored content; status is
+# not a synonym for tested. See README.md for the schema and protocol labels.
 
 schema: rcash.flows/v1
 subsystem: governance
@@ -31,6 +31,8 @@ components:
     invariants:
     - I19
     status: verified
+    acceptance:
+    - AC-SPEC-GOV-01.1
   states:
   - Live
   initial: Live
@@ -61,6 +63,8 @@ components:
     - I19
     - S12
     status: verified
+    acceptance:
+    - AC-SPEC-GOV-01.1
   - arm: Governor@"schedule"
     transition: governance.Governor.schedule
     lean: Rholphin.Model.Governance.governor_schedule
@@ -88,6 +92,8 @@ components:
     - I19
     - S12
     status: verified
+    acceptance:
+    - AC-SPEC-GOV-01.1
   - arm: Governor@"execute"
     transition: governance.Governor.execute
     lean: Rholphin.Model.Governance.governor_execute
@@ -114,6 +120,8 @@ components:
     - I19
     - S12
     status: verified
+    acceptance:
+    - AC-SPEC-GOV-01.1
   - arm: Governor@"pending"
     transition: governance.Governor.pending
     lean: Rholphin.Model.Governance.governor_pending
@@ -131,6 +139,8 @@ components:
     invariants:
     - S12
     status: verified
+    acceptance:
+    - AC-SPEC-GOV-01.1
   - arm: Governor@"admins"
     transition: governance.Governor.admins
     lean: Rholphin.Model.Governance.governor_admins
@@ -146,6 +156,8 @@ components:
     invariants:
     - I19
     status: verified
+    acceptance:
+    - AC-SPEC-GOV-01.1
   - arm: Governor@"admin"
     transition: governance.Governor.admin
     lean: Rholphin.Model.Governance.governor_admin
@@ -176,6 +188,8 @@ components:
     invariants:
     - I19
     status: verified
+    acceptance:
+    - AC-SPEC-GOV-01.1
   states:
   - Live
   initial: Live

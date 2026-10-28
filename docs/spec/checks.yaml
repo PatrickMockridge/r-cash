@@ -1,0 +1,179 @@
+# Evidence registry for docs/spec/acceptance.yaml.
+#
+# kind:
+#   static   — text/structural or Lean check, runs offline
+#   offline  — executable test, mock or pure model, runs offline
+#   campaign — final disposable-devnet conformance run
+#   platform — native rholo/ERTP/Rholang assumption, only the final campaign
+#
+# A check ID is a stable reference; its artifact may move as long as this file
+# moves with it. check_traceability.py rejects an unknown ID or a missing
+# artifact for static/offline checks.
+
+static:spec-check:
+  kind: static
+  command: "make spec-check"
+static:flows:
+  kind: static
+  command: "python3 tools/check_flows.py --check --strict"
+static:inventory:
+  kind: static
+  command: "python3 tools/rho_inventory.py --check"
+static:lean:
+  kind: static
+  command: "python3 tools/check_lean.py"
+static:arch:
+  kind: static
+  command: "python3 tools/check_arch.py --check"
+static:captures:
+  kind: static
+  command: "python3 tools/check_captures.py --check"
+static:measure:
+  kind: static
+  command: "python3 tools/measure_contracts.py --check"
+static:mesh:
+  kind: static
+  command: "python3 tools/check_mesh.py"
+static:vectors:
+  kind: static
+  command: "python3 tools/check_vectors.py"
+static:traceability:
+  kind: static
+  command: "python3 tools/check_traceability.py --check --strict"
+static:languages:
+  kind: static
+  command: "python3 tools/check_languages.py"
+
+offline:model:
+  kind: offline
+  artifact: "tests/model"
+  command: "python3 -m pytest tests/model -q"
+offline:web-test:
+  kind: offline
+  artifact: "web/src"
+  command: "npm --prefix web test"
+offline:web-typecheck:
+  kind: offline
+  artifact: "web/tsconfig.json"
+  command: "npm --prefix web run typecheck"
+offline:sdk-fixture:
+  kind: offline
+  artifact: "crates/rcash-sdk/tests"
+  command: "cargo test -p rcash-sdk"
+offline:cli-fixture:
+  kind: offline
+  artifact: "crates/rcash-cli/src"
+  command: "cargo test -p rcash-cli"
+offline:wasm:
+  kind: offline
+  artifact: "crates/rcash-wasm/src"
+  command: "cargo test -p rcash-wasm --features rcash-chain/native"
+offline:rust-test:
+  kind: offline
+  artifact: "crates"
+  command: "cargo test --workspace --exclude rcash-wasm"
+
+model:issuer:
+  kind: offline
+  artifact: "tests/model/test_issuer.py"
+model:vault:
+  kind: offline
+  artifact: "tests/model/test_vault.py"
+model:buffer:
+  kind: offline
+  artifact: "tests/model/test_buffer_savings.py"
+model:psm:
+  kind: offline
+  artifact: "tests/model/test_psm.py"
+model:amm:
+  kind: offline
+  artifact: "tests/model/test_amm.py"
+model:market:
+  kind: offline
+  artifact: "tests/model/test_market.py"
+model:mesh:
+  kind: offline
+  artifact: "tests/model/test_mesh.py"
+model:invariants:
+  kind: offline
+  artifact: "tests/model/test_invariants.py"
+model:refusals:
+  kind: offline
+  artifact: "tests/model/test_refusals.py"
+model:vectors:
+  kind: offline
+  artifact: "tests/model/test_vectors.py"
+
+campaign:install:
+  kind: campaign
+  command: "make install"
+campaign:unit-v3:
+  kind: campaign
+  command: "make unit-v3"
+campaign:unit-feed:
+  kind: campaign
+  command: "make unit-feed"
+campaign:unit-hub:
+  kind: campaign
+  command: "make unit-hub"
+campaign:unit-stablecoin:
+  kind: campaign
+  command: "make unit-stablecoin"
+campaign:unit-interest:
+  kind: campaign
+  command: "make unit-interest"
+campaign:unit-liquidation:
+  kind: campaign
+  command: "make unit-liquidation"
+campaign:unit-savings:
+  kind: campaign
+  command: "make unit-savings"
+campaign:unit-psm:
+  kind: campaign
+  command: "make unit-psm"
+campaign:unit-timelock:
+  kind: campaign
+  command: "make unit-timelock"
+campaign:unit-accounts:
+  kind: campaign
+  command: "make unit-accounts"
+campaign:unit-transfer:
+  kind: campaign
+  command: "make unit-transfer"
+campaign:unit-transfer-memo:
+  kind: campaign
+  command: "make unit-transfer-memo"
+campaign:unit-market:
+  kind: campaign
+  command: "make unit-market"
+campaign:unit-external:
+  kind: campaign
+  command: "make unit-external"
+campaign:unit-mesh:
+  kind: campaign
+  command: "make unit-mesh"
+campaign:mesh-install:
+  kind: campaign
+  command: "make mesh-install"
+campaign:demo:
+  kind: campaign
+  command: "make demo"
+campaign:probes:
+  kind: campaign
+  command: "harness/rcash.py probes"
+
+platform:ertp:
+  kind: platform
+  evidence: "final campaign: ERTP mint/burn/transfer/deposit/withdraw/rollback"
+platform:rev:
+  kind: platform
+  evidence: "final campaign: native REV vault transfers, precharge and refunds"
+platform:rholang-parse:
+  kind: platform
+  evidence: "final campaign: node parse/normalize depth and term acceptance"
+platform:atomicity:
+  kind: platform
+  evidence: "final campaign: failed-deploy rollback of tuple space, REV and ERTP"
+platform:timing:
+  kind: platform
+  evidence: "final campaign: block-height expiry, accrual and timelock boundaries"

@@ -21,18 +21,24 @@ from unit_v3 import call, check, one  # noqa: E402
 
 
 def feed_uri(keys: dict, root: str, registry: str, currency: str,
-             prices: list[int]) -> str:
-    """Return the bound feed URI, deploying and binding it when absent."""
+             prices: list[int]) -> tuple[str, str]:
+    """Return (uri, feedId) for the bound feed, binding one when absent.
+
+    The feed id is state, not a convention: another installer may have bound
+    the code (the mesh binds `REV-mesh-1`). A signature over a guessed id is
+    refused by the feed contract, so read the id back from the registry.
+    """
     entry = one(call(registry, "OracleRegistry",
                      f'OracleRegistry!("feedEntry", "{currency}", *r) | '
                      "for (@x <- r) { deployId!(x) }"), keys["deployer"]["secret"])
     if entry[0] is False:
         return setup_feed(keys, root, registry, currency, prices)
-    return entry[1].get("uri")
+    return entry[1]["uri"], entry[1]["feedId"]
 
 
-def submit_price(keys: dict, feed: str, currency: str, index: int, price: int) -> str:
-    feed_id = f"{currency}-hub-test-1"
+def submit_price(keys: dict, feed_ref: tuple[str, str], currency: str,
+                 index: int, price: int) -> str:
+    feed, feed_id = feed_ref
     height = node.height()
     reporter = keys[f"reporter{index + 1}"]
     payload = f"rcash:oracle-submit:v3|{feed_id}|{currency}|{index}|{price}|{height}"
@@ -50,7 +56,7 @@ def submit_price(keys: dict, feed: str, currency: str, index: int, price: int) -
     return one(call(feed, "OracleFeed", body), keys["deployer"]["secret"])
 
 
-def set_price(keys: dict, feed: str, currency: str, price: int) -> None:
+def set_price(keys: dict, feed_ref: tuple[str, str], currency: str, price: int) -> None:
     for index in range(3):
         check(f"{currency} submit {index}",
-              submit_price(keys, feed, currency, index, price), "ok")
+              submit_price(keys, feed_ref, currency, index, price), "ok")

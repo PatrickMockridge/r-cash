@@ -407,8 +407,11 @@ impl Rcash {
     pub async fn v4_currency(&self, code: &str) -> Result<String, JsValue> {
         let c = self.reader().v4_currency(code).await.map_err(js_err)?;
         to_json(serde_json::json!({
-            "code": c.code, "stablecoinUri": c.stablecoin_uri,
+            "code": c.code, "kind": c.kind,
+            "stablecoinUri": c.stablecoin_uri,
             "vaultUri": c.vault_uri, "paramsHash": c.params_hash, "status": c.status,
+            "assetUri": c.asset_uri, "decimals": c.decimals,
+            "chain": c.chain, "custodian": c.custodian,
         }))
     }
 
@@ -733,12 +736,15 @@ impl Rcash {
             .iter()
             .map(|c| {
                 serde_json::json!({
-                    "code": c.code, "stablecoinUri": c.stablecoin_uri,
+                    "code": c.code, "kind": c.kind,
+                    "stablecoinUri": c.stablecoin_uri,
                     "custodyUri": c.custody_uri, "paramsUri": c.params_uri,
                     "vaultUri": c.vault_uri, "liquidationUri": c.liquidation_uri,
                     "savingsUri": c.savings_uri, "psmUri": c.psm_uri,
                     "bufferUri": c.buffer_uri, "paramsHash": c.params_hash,
                     "sponsor": c.sponsor, "status": c.status,
+                    "assetUri": c.asset_uri, "decimals": c.decimals,
+                    "chain": c.chain, "custodian": c.custodian,
                 })
             })
             .collect();

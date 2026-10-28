@@ -26,6 +26,12 @@ from unit_v3 import call, check, one  # noqa: E402
 
 KEYS = ROOT / ".devnet" / "keys.json"
 STATE = ROOT / ".devnet" / "v3-install.json"
+# One policy source. A feed's policy is immutable, so a suite that binds REV
+# with a different maxAge makes the later mesh install adopt a policy the
+# product did not configure. Load the product policy here instead.
+FEED_DEFAULTS = json.loads((ROOT / "configs" / "mesh.json").read_text())["feedDefaults"]
+POLICY_FIELDS = ("quorum", "maxAgeBlocks", "maxSpreadBps", "minPrice",
+                 "maxPrice", "trialBlocks", "trialMinSubmits")
 
 
 def setup_feed(keys: dict, root: str, registry: str, currency: str, prices: list[int]):
@@ -34,7 +40,7 @@ def setup_feed(keys: dict, root: str, registry: str, currency: str, prices: list
     feed_id = f"{currency}-hub-test-1"
     policy_values = [
         currency, reporters[0], reporters[1], reporters[2], sponsor,
-        "2", "50", "200", "1", "1000000000000", "1", "3",
+        *(str(FEED_DEFAULTS[field]) for field in POLICY_FIELDS),
     ]
     policy_hash = blake2b256(canonical("rcash:oracle-policy:v3", policy_values))
     reporters_rholang = "[" + ", ".join(f'"{k}"' for k in reporters) + "]"
@@ -45,13 +51,13 @@ def setup_feed(keys: dict, root: str, registry: str, currency: str, prices: list
         "__REPORTERS__": reporters_rholang,
         "__SPONSOR_PUB__": sponsor,
         "__POLICY_HASH__": policy_hash,
-        "__QUORUM__": "2",
-        "__MAX_AGE__": "50",
-        "__MAX_SPREAD__": "200",
-        "__MIN_PRICE__": "1",
-        "__MAX_PRICE__": "1000000000000",
-        "__TRIAL_BLOCKS__": "1",
-        "__TRIAL_MIN_SUBMITS__": "3",
+        "__QUORUM__": str(FEED_DEFAULTS["quorum"]),
+        "__MAX_AGE__": str(FEED_DEFAULTS["maxAgeBlocks"]),
+        "__MAX_SPREAD__": str(FEED_DEFAULTS["maxSpreadBps"]),
+        "__MIN_PRICE__": str(FEED_DEFAULTS["minPrice"]),
+        "__MAX_PRICE__": str(FEED_DEFAULTS["maxPrice"]),
+        "__TRIAL_BLOCKS__": str(FEED_DEFAULTS["trialBlocks"]),
+        "__TRIAL_MIN_SUBMITS__": str(FEED_DEFAULTS["trialMinSubmits"]),
     })
     feed = deploy_feed(term, keys["deployer"]["secret"])
     uri, att_reply = feed
@@ -110,7 +116,7 @@ def setup_feed(keys: dict, root: str, registry: str, currency: str, prices: list
     )
     check(f"{currency} bind",
           one(bind_term, keys["sponsor"]["secret"]), "ok")
-    return uri
+    return uri, feed_id
 
 
 def main() -> int:

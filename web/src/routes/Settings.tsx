@@ -2,10 +2,16 @@ import { useEffect, useState } from "react";
 import { useWallet } from "../lib/store";
 import { listKeystores, type StoredKeystore } from "../lib/db";
 import { shortId } from "../lib/format";
+import { enabledCurrencies } from "../lib/mesh";
+import { usePreferences } from "../lib/preferences";
 
 export default function Settings() {
   const { status, node, manifest, address, setNode, setManifest, lock, exportKeystore } =
     useWallet();
+  const { displayCurrency, setDisplayCurrency } = usePreferences();
+  const currencies = enabledCurrencies();
+  const majors = currencies.filter((currency) => currency.tier === "major");
+  const locals = currencies.filter((currency) => currency.tier === "local");
   const [nodeInput, setNodeInput] = useState(node);
   const [manifestInput, setManifestInput] = useState(manifest ?? "");
   const [password, setPassword] = useState("");
@@ -75,6 +81,36 @@ export default function Settings() {
         <button className="primary" onClick={saveConfig}>
           Save configuration
         </button>
+      </section>
+
+      <section className="panel">
+        <h3>Preferred currency</h3>
+        <p className="muted small">
+          Amounts, totals and new markets default to USD. Choose another currency for your
+          own display and payment defaults; this preference is stored in this browser only.
+        </p>
+        <label className="field">
+          Default currency
+          <select
+            value={displayCurrency}
+            onChange={(event) => setDisplayCurrency(event.target.value)}
+          >
+            <optgroup label="Majors">
+              {majors.map((currency) => (
+                <option key={currency.code} value={currency.code}>
+                  {currency.code} · {currency.name}
+                </option>
+              ))}
+            </optgroup>
+            <optgroup label="Local currencies">
+              {locals.map((currency) => (
+                <option key={currency.code} value={currency.code}>
+                  {currency.code} · {currency.name}
+                </option>
+              ))}
+            </optgroup>
+          </select>
+        </label>
       </section>
 
       <section className="panel">

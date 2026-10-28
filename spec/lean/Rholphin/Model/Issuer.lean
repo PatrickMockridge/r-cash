@@ -46,6 +46,21 @@ theorem burn_S1 (l : Ledger) (amount : Int) (h : S1 l) :
 only by the composites that burn as an effect (liquidate, repay, writeOff,
 cover and PSM sell).  The theorem is intentionally absent. -/
 
+/-- The principal side of a repayment: `settle` burns principal and deposits
+interest in the buffer.  S1 holds; S3 is a composite obligation because the
+interest deposit and the vault update happen in the same deploy. -/
+def settle (l : Ledger) (principal interest : Int) : Ledger :=
+  { l with
+    totalPrincipal := l.totalPrincipal - principal
+    supply := l.supply - principal }
+
+theorem settle_S1 (l : Ledger) (principal interest : Int) (h : S1 l) :
+    S1 (settle l principal interest) := by
+  unfold S1 at *; unfold settle; simp; omega
+
+theorem settle_principal (l : Ledger) (principal interest : Int) :
+    (settle l principal interest).supply = l.supply - principal := rfl
+
 /-- Interest deposited to the buffer: supply is unchanged, so S3 is unchanged. -/
 def depositInterest (l : Ledger) (interest : Int) : Ledger := l
 
@@ -99,6 +114,9 @@ def writeOff (l : Ledger) (amount accrued d cancelled : Int) : Ledger :=
 theorem writeOff_S1 (l : Ledger) (amount accrued d cancelled : Int) (h : S1 l) :
     S1 (writeOff l amount accrued d cancelled) := by
   unfold S1 at *; unfold writeOff; simp; omega
+
+theorem writeOff_badDebt (l : Ledger) (amount accrued d cancelled : Int) :
+    (writeOff l amount accrued d cancelled).badDebt = l.badDebt + (accrued - amount) := rfl
 
 theorem writeOff_S3 (l : Ledger) (amount accrued d cancelled : Int) (h : S3 l) :
     S3 (writeOff l amount accrued d cancelled) := by

@@ -18,8 +18,8 @@ stateDiagram-v2
 
 | arm | transition | kind | guards | effects | access | refusals | invariants | status | source |
 |---|---|---|---|---|---|---|---|---|---|
-| `MarketTerms@"put"` | `market.MarketTerms.put` | mutate | Bounds.checkTerms(terms, values) → terms fields<br>hash = Codec.canonical(rcash:market-terms:v4, values) → terms fields | terms[hash] = {terms: terms, values: values}<br>rev = rev + 1<br>reply = (true, hash) | consume termsState (arm)<br>post termsState (arm) | — | I5 | verified | contracts/src/deploy/v3/50_market.rho:105 |
-| `MarketTerms@"get"` | `market.MarketTerms.get` | read | terms[hash] != Nil → no terms | reply = (true, terms[hash]) | peek termsState (arm) | no terms (pre) | I5 | verified | contracts/src/deploy/v3/50_market.rho:146 |
+| `MarketTerms@"put"` | `market.MarketTerms.put` | mutate | Bounds.checkTerms(terms, values) → terms fields<br>hash = Codec.canonical(rcash:market-terms:v4, values) → terms fields | terms[hash] = {terms: terms, values: values}<br>rev = rev + 1<br>reply = (true, hash) | consume termsState (arm)<br>post termsState (arm) | — | I5 | verified | contracts/src/deploy/v3/50_market.rho:106 |
+| `MarketTerms@"get"` | `market.MarketTerms.get` | read | terms[hash] != Nil → no terms | reply = (true, terms[hash]) | peek termsState (arm) | no terms (pre) | I5 | verified | contracts/src/deploy/v3/50_market.rho:147 |
 
 ### MarketDirectory
 
@@ -36,10 +36,10 @@ stateDiagram-v2
 
 | arm | transition | kind | guards | effects | access | refusals | invariants | status | source |
 |---|---|---|---|---|---|---|---|---|---|
-| `MarketDirectory@"bind"` | `market.MarketDirectory.bind` | mutate | auth = marketAuth → bad directory authority<br>slots[marketId] = Nil or not sealed → sealed | slots[marketId] = slot<br>rev = rev + 1 | consume directoryState (arm)<br>post directoryState (arm) | bad directory authority (pre)<br>sealed (pre) | I6 | verified | contracts/src/deploy/v3/50_market.rho:155 |
-| `MarketDirectory@"seal"` | `market.MarketDirectory.seal` | mutate | auth = marketAuth → bad directory authority<br>slots[marketId] != Nil → no slot | slots[marketId].sealed = true<br>rev = rev + 1 | consume directoryState (arm)<br>post directoryState (arm) | bad directory authority (pre)<br>no slot (pre) | I6 | verified | contracts/src/deploy/v3/50_market.rho:179 |
-| `MarketDirectory@"byId"` | `market.MarketDirectory.byId` | read | slots[marketId] != Nil → no slot | reply = (true, slot) | peek directoryState (arm) | no slot (pre) | I6 | verified | contracts/src/deploy/v3/50_market.rho:196 |
-| `MarketDirectory@"slot"` | `market.MarketDirectory.slot` | read | slots[marketId] != Nil → no slot | reply = (true, slot) | peek directoryState (arm) | no slot (pre) | I6 | verified | contracts/src/deploy/v3/50_market.rho:205 |
+| `MarketDirectory@"bind"` | `market.MarketDirectory.bind` | mutate | auth = marketAuth → bad directory authority<br>slots[marketId] = Nil or not sealed → sealed | slots[marketId] = slot<br>rev = rev + 1 | consume directoryState (arm)<br>post directoryState (arm) | bad directory authority (pre)<br>sealed (pre) | I6 | verified | contracts/src/deploy/v3/50_market.rho:156 |
+| `MarketDirectory@"seal"` | `market.MarketDirectory.seal` | mutate | auth = marketAuth → bad directory authority<br>slots[marketId] != Nil → no slot | slots[marketId].sealed = true<br>rev = rev + 1 | consume directoryState (arm)<br>post directoryState (arm) | bad directory authority (pre)<br>no slot (pre) | I6 | verified | contracts/src/deploy/v3/50_market.rho:180 |
+| `MarketDirectory@"byId"` | `market.MarketDirectory.byId` | read | slots[marketId] != Nil → no slot | reply = (true, slot) | peek directoryState (arm) | no slot (pre) | I6 | verified | contracts/src/deploy/v3/50_market.rho:197 |
+| `MarketDirectory@"slot"` | `market.MarketDirectory.slot` | read | slots[marketId] != Nil → no slot | reply = (true, slot) | peek directoryState (arm) | no slot (pre) | I6 | verified | contracts/src/deploy/v3/50_market.rho:206 |
 
 ### MarketIndex
 
@@ -52,18 +52,20 @@ stateDiagram-v2
   Draft --> Draft: market.MarketIndex.markets
   Draft --> Draft: market.MarketIndex.marketFor
   Draft --> Draft: market.MarketIndex.setStatus
+  Draft --> Draft: market.MarketIndex.pauseAsset
 ```
 
 #### MarketIndex arms
 
 | arm | transition | kind | guards | effects | access | refusals | invariants | status | source |
 |---|---|---|---|---|---|---|---|---|---|
-| `MarketIndex@"stage"` | `market.MarketIndex.stage` | mutate | auth = marketAuth → bad index authority<br>markets[marketId] = Nil → exists<br>bySlug[slug] = Nil → slug<br>byPair[pairKey] absent or prior delisted and version > prior.version → pair active<br>version > prior.version → version | markets[marketId] = record<br>byPair[pairKey] = marketId<br>bySlug[slug] = marketId<br>rev = rev + 1 | consume indexState (arm)<br>post indexState (arm)<br>post indexState (helper:stagePairCheck) | bad index authority (pre)<br>exists (pre)<br>pair active (pre)<br>slug (pre)<br>version (pre) | I3<br>I4 | verified | contracts/src/deploy/v3/50_market.rho:294 |
-| `MarketIndex@"activate"` | `market.MarketIndex.activate` | mutate | status = "draft" → not draft<br>directory.slots[marketId].sealed → not sealed<br>terms[termsHash] exists → no terms<br>lock.funded → lock unfunded<br>lock.untilHeight >= terms.lockUntilHeight → lock height<br>pool.seeded and rb >= seedBase and rq >= seedQuote → seed mismatch<br>totalShares >= seedInitialShares → shares mismatch<br>pool.termsHash = record.termsHash → terms mismatch<br>rq >= depthFloorQuote → depth | markets[marketId].status = active<br>rev = rev + 1 | peek indexState (arm)<br>consume indexState (helper:activatePool)<br>post indexState (helper:activatePool) | depth (pre)<br>lock height (pre)<br>lock unfunded (pre)<br>no attestation (pre)<br>no lock (pre)<br>no market (pre)<br>not draft (pre)<br>not sealed (pre)<br>not seeded (pre)<br>seed mismatch (pre)<br>shares mismatch (pre)<br>terms mismatch (pre) | I3<br>I4<br>I12 | verified | contracts/src/deploy/v3/50_market.rho:311 |
-| `MarketIndex@"market"` | `market.MarketIndex.market` | read | markets[marketId] != Nil → no market | reply = (true, record) | peek indexState (arm) | no market (pre) | I3 | verified | contracts/src/deploy/v3/50_market.rho:363 |
-| `MarketIndex@"markets"` | `market.MarketIndex.markets` | read | — | reply = (true, markets) | peek indexState (arm) | — | I3 | verified | contracts/src/deploy/v3/50_market.rho:372 |
-| `MarketIndex@"marketFor"` | `market.MarketIndex.marketFor` | read | byPair[market:base/quote] resolves → no market | reply = (true, record) | peek indexState (arm) | no market (pre) | I3 | verified | contracts/src/deploy/v3/50_market.rho:376 |
-| `MarketIndex@"setStatus"` | `market.MarketIndex.setStatus` | mutate | Governor.authorize(market-index, nonce, setStatus, marketId\|status) → below threshold<br>markets[marketId] != Nil → no market<br>legal(status, next) → transition | markets[marketId].status = status<br>rev = rev + 1 | consume indexState (arm)<br>post indexState (arm) | no market (pre)<br>transition (pre) | I4<br>S12 | verified | contracts/src/deploy/v3/50_market.rho:390 |
+| `MarketIndex@"stage"` | `market.MarketIndex.stage` | mutate | auth = marketAuth → bad index authority<br>markets[marketId] = Nil → exists<br>bySlug[slug] = Nil → slug<br>byPair[pairKey] absent or prior delisted and version > prior.version → pair active<br>version > prior.version → version | markets[marketId] = record<br>byPair[pairKey] = marketId<br>bySlug[slug] = marketId<br>rev = rev + 1 | consume indexState (arm)<br>post indexState (arm)<br>post indexState (helper:stagePairCheck) | bad index authority (pre)<br>exists (pre)<br>pair active (pre)<br>slug (pre)<br>version (pre) | I3<br>I4 | verified | contracts/src/deploy/v3/50_market.rho:330 |
+| `MarketIndex@"activate"` | `market.MarketIndex.activate` | mutate | status = "draft" → not draft<br>directory.slots[marketId].sealed → not sealed<br>terms[termsHash] exists → no terms<br>lock.funded → lock unfunded<br>lock.untilHeight >= terms.lockUntilHeight → lock height<br>pool.seeded and rb >= seedBase and rq >= seedQuote → seed mismatch<br>totalShares >= seedInitialShares → shares mismatch<br>pool.termsHash = record.termsHash → terms mismatch<br>rq >= depthFloorQuote → depth | markets[marketId].status = active<br>rev = rev + 1 | peek indexState (arm)<br>consume indexState (helper:activatePool)<br>post indexState (helper:activatePool) | depth (pre)<br>lock height (pre)<br>lock unfunded (pre)<br>no attestation (pre)<br>no lock (pre)<br>no market (pre)<br>not draft (pre)<br>not sealed (pre)<br>not seeded (pre)<br>seed mismatch (pre)<br>shares mismatch (pre)<br>terms mismatch (pre) | I3<br>I4<br>I12 | verified | contracts/src/deploy/v3/50_market.rho:347 |
+| `MarketIndex@"market"` | `market.MarketIndex.market` | read | markets[marketId] != Nil → no market | reply = (true, record) | peek indexState (arm) | no market (pre) | I3 | verified | contracts/src/deploy/v3/50_market.rho:399 |
+| `MarketIndex@"markets"` | `market.MarketIndex.markets` | read | — | reply = (true, markets) | peek indexState (arm) | — | I3 | verified | contracts/src/deploy/v3/50_market.rho:408 |
+| `MarketIndex@"marketFor"` | `market.MarketIndex.marketFor` | read | byPair[market:base/quote] resolves → no market | reply = (true, record) | peek indexState (arm) | no market (pre) | I3 | verified | contracts/src/deploy/v3/50_market.rho:412 |
+| `MarketIndex@"setStatus"` | `market.MarketIndex.setStatus` | mutate | Governor.authorize(market-index, nonce, setStatus, marketId\|status) → below threshold<br>markets[marketId] != Nil → no market<br>legal(status, next) → transition | markets[marketId].status = status<br>rev = rev + 1 | consume indexState (arm)<br>post indexState (arm) | no market (pre)<br>transition (pre) | I4<br>S12 | verified | contracts/src/deploy/v3/50_market.rho:436 |
+| `MarketIndex@"pauseAsset"` | `market.MarketIndex.pauseAsset` | mutate | Governor.authorize(market-index, nonce, pauseAsset, code) → below threshold | markets[id].status = paused for every active market whose base = code or quote = code<br>indexState.rev = rev + 1 | consume indexState (arm)<br>post indexState (arm) | — | I3<br>I4<br>I24 | verified | contracts/src/deploy/v3/50_market.rho:480 |
 
 ### MarketFactory
 
@@ -77,7 +79,7 @@ stateDiagram-v2
 
 | arm | transition | kind | guards | effects | access | refusals | invariants | status | source |
 |---|---|---|---|---|---|---|---|---|---|
-| `MarketFactory@"createMarket"` | `market.MarketFactory.createMarket` | mutate | MarketTerms.put(terms, values) = (true, termsHash) → terms fields<br>Verifier.sigOk(H(rcash:market-create:v1\|marketId\|termsHash\|sponsor), sig) → bad sponsor signature<br>terms.sponsorPubKey = sponsorHex → sponsor mismatch<br>marketOwnerCheck(terms, sponsorHex) → lock beneficiary<br>base feed policy matches and active → base feed policy<br>quote feed policy matches and active → quote feed policy<br>PoolTemplate.create ok → no attestation<br>MarketDirectory.bind ok → sealed<br>MarketDirectory.seal ok → no slot<br>MarketIndex.stage ok → exists | terms[termsHash] = {terms, values}<br>directory.slots[marketId] = {poolUri, lockUri, termsHash, sealed}<br>markets[marketId] = {marketId, slug, pairKey, base, quote, version, termsHash, status: draft}<br>reply = (true, marketId, poolUri, lockUri, termsHash) | — | bad sponsor signature (pre)<br>base feed policy (pre)<br>feed inactive (pre)<br>lock beneficiary (pre)<br>lock too short (pre)<br>quote feed policy (pre)<br>sponsor mismatch (pre)<br>sponsor owner (pre) | I3<br>I5<br>I6 | verified | contracts/src/deploy/v3/50_market.rho:564 |
+| `MarketFactory@"createMarket"` | `market.MarketFactory.createMarket` | mutate | MarketTerms.put(terms, values) = (true, termsHash) → terms fields<br>Verifier.sigOk(H(rcash:market-create:v1\|marketId\|termsHash\|sponsor), sig) → bad sponsor signature<br>terms.sponsorPubKey = sponsorHex → sponsor mismatch<br>marketOwnerCheck(terms, sponsorHex) → lock beneficiary<br>base feed policy matches and active → base feed policy<br>quote feed policy matches and active → quote feed policy<br>PoolTemplate.create ok → no attestation<br>MarketDirectory.bind ok → sealed<br>MarketDirectory.seal ok → no slot<br>MarketIndex.stage ok → exists | terms[termsHash] = {terms, values}<br>directory.slots[marketId] = {poolUri, lockUri, termsHash, sealed}<br>markets[marketId] = {marketId, slug, pairKey, base, quote, version, termsHash, status: draft}<br>reply = (true, marketId, poolUri, lockUri, termsHash) | — | bad sponsor signature (pre)<br>base feed policy (pre)<br>feed inactive (pre)<br>lock beneficiary (pre)<br>lock too short (pre)<br>quote feed policy (pre)<br>sponsor mismatch (pre)<br>sponsor owner (pre) | I3<br>I5<br>I6 | verified | contracts/src/deploy/v3/50_market.rho:642 |
 
 ### ListingViews
 
@@ -97,13 +99,13 @@ stateDiagram-v2
 
 | arm | transition | kind | guards | effects | access | refusals | invariants | status | source |
 |---|---|---|---|---|---|---|---|---|---|
-| `ListingViews@"marketFor"` | `market.ListingViews.marketFor` | read | — | reply = MarketIndex.marketFor | — | — | — | verified | contracts/src/deploy/v3/50_market.rho:449 |
-| `ListingViews@"market"` | `market.ListingViews.market` | read | — | reply = MarketIndex.market | — | — | — | verified | contracts/src/deploy/v3/50_market.rho:466 |
-| `ListingViews@"isActive"` | `market.ListingViews.isActive` | read | — | reply = (true, record.status = active) | — | no market (pre) | I4 | verified | contracts/src/deploy/v3/50_market.rho:481 |
-| `ListingViews@"terms"` | `market.ListingViews.terms` | read | — | reply = MarketTerms.get | — | — | — | verified | contracts/src/deploy/v3/50_market.rho:504 |
-| `ListingViews@"currency"` | `market.ListingViews.currency` | read | — | reply = CurrencyRegistry.currency | — | — | — | verified | contracts/src/deploy/v3/50_market.rho:519 |
-| `ListingViews@"currencies"` | `market.ListingViews.currencies` | read | — | reply = CurrencyRegistry.currencies | — | — | — | verified | contracts/src/deploy/v3/50_market.rho:534 |
-| `ListingViews@"markets"` | `market.ListingViews.markets` | read | — | reply = MarketIndex.markets | — | — | — | verified | contracts/src/deploy/v3/50_market.rho:549 |
+| `ListingViews@"marketFor"` | `market.ListingViews.marketFor` | read | — | reply = MarketIndex.marketFor | — | — | — | verified | contracts/src/deploy/v3/50_market.rho:527 |
+| `ListingViews@"market"` | `market.ListingViews.market` | read | — | reply = MarketIndex.market | — | — | — | verified | contracts/src/deploy/v3/50_market.rho:544 |
+| `ListingViews@"isActive"` | `market.ListingViews.isActive` | read | — | reply = (true, record.status = active) | — | no market (pre) | I4 | verified | contracts/src/deploy/v3/50_market.rho:559 |
+| `ListingViews@"terms"` | `market.ListingViews.terms` | read | — | reply = MarketTerms.get | — | — | — | verified | contracts/src/deploy/v3/50_market.rho:582 |
+| `ListingViews@"currency"` | `market.ListingViews.currency` | read | — | reply = CurrencyRegistry.currency | — | — | — | verified | contracts/src/deploy/v3/50_market.rho:597 |
+| `ListingViews@"currencies"` | `market.ListingViews.currencies` | read | — | reply = CurrencyRegistry.currencies | — | — | — | verified | contracts/src/deploy/v3/50_market.rho:612 |
+| `ListingViews@"markets"` | `market.ListingViews.markets` | read | — | reply = MarketIndex.markets | — | — | — | verified | contracts/src/deploy/v3/50_market.rho:627 |
 
 ### TradabilityGate
 
@@ -117,4 +119,4 @@ stateDiagram-v2
 
 | arm | transition | kind | guards | effects | access | refusals | invariants | status | source |
 |---|---|---|---|---|---|---|---|---|---|
-| `TradabilityGate@"admit"` | `market.TradabilityGate.admit` | read | status = "active" → not active<br>fresh → stale<br>inputValue >= minTicketQuote → min ticket<br>inputValue * 10000 <= poolValue * maxTradeBps → max trade | reply = (true, Nil) | — | max trade (pre)<br>min ticket (pre)<br>not active (pre)<br>stale (pre) | I12 | verified | contracts/src/deploy/v3/50_market.rho:433 |
+| `TradabilityGate@"admit"` | `market.TradabilityGate.admit` | read | status = "active" → not active<br>fresh → stale<br>inputValue >= minTicketQuote → min ticket<br>inputValue * 10000 <= poolValue * maxTradeBps → max trade | reply = (true, Nil) | — | max trade (pre)<br>min ticket (pre)<br>not active (pre)<br>stale (pre) | I12 | verified | contracts/src/deploy/v3/50_market.rho:511 |

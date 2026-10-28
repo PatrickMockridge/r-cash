@@ -81,6 +81,7 @@
 | `CurrencyRegistry@"currency"` | `registry.CurrencyRegistry.currency` | peek:1 | OK | yes | `Rholphin.Model.Registry.currencyRegistry_currency` | verified |  |
 | `CurrencyRegistry@"currencies"` | `registry.CurrencyRegistry.currencies` | peek:1 | OK | yes | `Rholphin.Model.Registry.currencyRegistry_currencies` | verified |  |
 | `CurrencyRegistry@"setPaused"` | `registry.CurrencyRegistry.setPaused` | peek:1, consume:1, post:1 | OK | yes | `Rholphin.Model.Registry.currencyRegistry_setPaused` | verified |  |
+| `CurrencyRegistry@"registerExternal"` | `registry.CurrencyRegistry.registerExternal` | peek:1, consume:1, post:1 | OK | yes | `Rholphin.Model.Registry.currencyRegistry_registerExternal` | verified |  |
 | `AssetResolver@"issuer"` | `registry.AssetResolver.issuer` | — | OK | yes | `Rholphin.Model.Registry.assetResolver_issuer` | verified |  |
 | `AssetResolver@"kind"` | `registry.AssetResolver.kind` | — | OK | yes | `Rholphin.Model.Registry.assetResolver_kind` | verified |  |
 | `TransferBook@"send"` | `transfer.TransferBook.send` | peek:1, post:1 | OK | yes | `Rholphin.Model.Transfer.transferBook_send` | verified |  |
@@ -99,6 +100,7 @@
 | `MarketIndex@"markets"` | `market.MarketIndex.markets` | peek:1 | OK | yes | `Rholphin.Model.Market.marketIndex_markets` | verified |  |
 | `MarketIndex@"marketFor"` | `market.MarketIndex.marketFor` | peek:1 | OK | yes | `Rholphin.Model.Market.marketIndex_marketFor` | verified |  |
 | `MarketIndex@"setStatus"` | `market.MarketIndex.setStatus` | consume:1, post:1 | OK | yes | `Rholphin.Model.Market.marketIndex_setStatus` | verified |  |
+| `MarketIndex@"pauseAsset"` | `market.MarketIndex.pauseAsset` | consume:1, post:1 | OK | yes | `Rholphin.Model.Market.marketIndex_pauseAsset` | verified |  |
 | `MarketFactory@"createMarket"` | `market.MarketFactory.createMarket` | — | OK | yes | `Rholphin.Model.Market.marketFactory_createMarket` | verified |  |
 | `ListingViews@"marketFor"` | `market.ListingViews.marketFor` | — | OK | yes | `Rholphin.Model.Market.listingViews_marketFor` | verified |  |
 | `ListingViews@"market"` | `market.ListingViews.market` | — | OK | yes | `Rholphin.Model.Market.listingViews_market` | verified |  |

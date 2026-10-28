@@ -4,6 +4,8 @@ import Unlock from "../components/Unlock";
 import { useWallet } from "../lib/store";
 import { formatUnits, parseUnits } from "../lib/format";
 import type { V4Market, V4Quote, V4Slot } from "../lib/types";
+import { defaultConvertPair } from "../lib/mesh";
+import { usePreferences } from "../lib/preferences";
 
 interface Pair {
   market: V4Market;
@@ -13,8 +15,10 @@ interface Pair {
 export default function Convert() {
   const { status, client } = useWallet();
   const queryClient = useQueryClient();
-  const [from, setFrom] = useState("REV");
-  const [to, setTo] = useState("V4T");
+  const { displayCurrency } = usePreferences();
+  const [initialFrom, initialTo] = defaultConvertPair(displayCurrency);
+  const [from, setFrom] = useState(initialFrom);
+  const [to, setTo] = useState(initialTo);
   const [amount, setAmount] = useState("0.1");
   const [minOut, setMinOut] = useState("");
   const [slippageBps, setSlippageBps] = useState("50");
@@ -126,7 +130,7 @@ export default function Convert() {
 
       {pair.isError && <p className="error">{String(pair.error)}</p>}
       {pair.data === null && (
-        <p className="error">No market for this pair. Try REV/V4T.</p>
+        <p className="error">No market for this pair. Check the currency mesh in Markets.</p>
       )}
       {pair.data && !active && (
         <p className="warn">

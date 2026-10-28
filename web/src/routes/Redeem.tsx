@@ -4,9 +4,11 @@ import Unlock from "../components/Unlock";
 import { useWallet } from "../lib/store";
 import { formatUnits } from "../lib/format";
 import type { V4Currency, V4PsmInfo } from "../lib/types";
+import { usePreferences } from "../lib/preferences";
 
 export default function Redeem() {
   const { status, client } = useWallet();
+  const { displayCurrency } = usePreferences();
   const queryClient = useQueryClient();
   const [code, setCode] = useState("");
   const [stableAmount, setStableAmount] = useState("1");
@@ -22,10 +24,18 @@ export default function Redeem() {
     enabled: status === "unlocked" && !!client,
     queryFn: async () => JSON.parse(await client!.v4_currencies()) as V4Currency[],
   });
+  const stablecoins = useMemo(
+    () => (currencies.data ?? []).filter((entry) => entry.kind !== "external"),
+    [currencies.data],
+  );
 
   useEffect(() => {
-    if (!code && currencies.data?.length) setCode(currencies.data[0]!.code);
-  }, [code, currencies.data]);
+    if (!code && stablecoins.length) {
+      const first = stablecoins.find((entry) => entry.code === displayCurrency)
+        ?? stablecoins[0]!;
+      setCode(first.code);
+    }
+  }, [code, stablecoins, displayCurrency]);
 
   const currency = useMemo(
     () => currencies.data?.find((entry) => entry.code === code),

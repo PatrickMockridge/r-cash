@@ -8,7 +8,8 @@ new
   MarketIndex, indexState,
   MarketDirectory, directoryState,
   MarketFactory, TradabilityGate, ListingViews,
-  marketNow, marketVerifier, marketOracle, stageMarket, stagePairCheck, activatePool, marketTransition,
+  marketNow, marketVerifier, marketOracle, stageMarket, stagePriorCheck, stagePairCheck,
+  activatePool, marketTransition, pauseAssetMarkets,
   marketOwner, marketOwnerCheck,
   marketAuth,
   rl(`rho:registry:lookup`),
@@ -213,7 +214,10 @@ in {
 
   contract stageMarket(@s, @record, ret) = {
     indexState!(s.set("markets", s.get("markets").set(record.get("marketId"), record))
-                 .set("byPair", s.get("byPair").set(record.get("pairKey"), record.get("marketId")))
+                 .set("byPair", s.get("byPair")
+                   .set(record.get("pairKey"), record.get("marketId"))
+                   .set("market:" ++ record.get("quote") ++ "/" ++ record.get("base"),
+                        record.get("marketId")))
                  .set("bySlug", s.get("bySlug").set(record.get("slug"), record.get("marketId")))
                  .set("rev", s.get("rev") + 1)) |
     ret!((true, record.get("marketId")))
@@ -271,19 +275,51 @@ in {
                         }
   } |
 
+  // A prior market in either orientation owns the unordered pair.
+  contract stagePriorCheck(@s, @record, @prior, ret) = {
+    match s.get("markets").get(prior) {
+      Nil => { stageMarket!(s, record, *ret) }
+      p => {
+        if (p.get("status") == "active" || p.get("status") == "paused") {
+          indexState!(s) | ret!((false, "pair active"))
+        } else {
+          if (record.get("version") <= p.get("version")) {
+            indexState!(s) | ret!((false, "version"))
+          } else { stageMarket!(s, record, *ret) }
+        }
+      }
+    }
+  } |
+
   contract stagePairCheck(@s, @record, ret) = {
     match s.get("byPair").get(record.get("pairKey")) {
-      Nil => { stageMarket!(s, record, *ret) }
-      prior => {
-        match s.get("markets").get(prior) {
+      Nil => {
+        match s.get("byPair").get(
+                "market:" ++ record.get("quote") ++ "/" ++ record.get("base")) {
           Nil => { stageMarket!(s, record, *ret) }
-          p => {
-            if (p.get("status") == "active" || p.get("status") == "paused") {
-              indexState!(s) | ret!((false, "pair active"))
-            } else {
-              if (record.get("version") <= p.get("version")) {
-                indexState!(s) | ret!((false, "version"))
-              } else { stageMarket!(s, record, *ret) }
+          prior => { stagePriorCheck!(s, record, prior, *ret) }
+        }
+      }
+      prior => { stagePriorCheck!(s, record, prior, *ret) }
+    }
+  } |
+
+  // Pure transformer over the market map for the pauseAsset kill switch.
+  contract pauseAssetMarkets(@ids, @i, @code, @markets, ret) = {
+    if (i >= ids.length()) { ret!(markets) }
+    else {
+      match ids.nth(i) {
+        id => {
+          match markets.get(id) {
+            Nil => { pauseAssetMarkets!(ids, i + 1, code, markets, *ret) }
+            record => {
+              if ((record.get("base") == code || record.get("quote") == code)
+                  && record.get("status") == "active") {
+                pauseAssetMarkets!(ids, i + 1, code,
+                                   markets.set(id, record.set("status", "paused")), *ret)
+              } else {
+                pauseAssetMarkets!(ids, i + 1, code, markets, *ret)
+              }
             }
           }
         }
@@ -376,7 +412,17 @@ in {
   contract MarketIndex(@"marketFor", @base, @quote, ret) = {
     for (@s <<- indexState) {
       match s.get("byPair").get("market:" ++ base ++ "/" ++ quote) {
-        Nil => { ret!((false, "no market")) }
+        Nil => {
+          match s.get("byPair").get("market:" ++ quote ++ "/" ++ base) {
+            Nil => { ret!((false, "no market")) }
+            marketId => {
+              match s.get("markets").get(marketId) {
+                Nil => { ret!((false, "no market")) }
+                record => { ret!((true, record)) }
+              }
+            }
+          }
+        }
         marketId => {
           match s.get("markets").get(marketId) {
             Nil => { ret!((false, "no market")) }
@@ -422,6 +468,38 @@ in {
                   }
                   _ => { ret!(v) }
                 }
+              }
+            }
+          }
+        }
+      }
+    }
+  } |
+
+  // Governor kill switch for an asset: pause every active market that uses it.
+  contract MarketIndex(@"pauseAsset", @code, @nonce, @sigs, ret) = {
+    new rootCh, resolveCh, gcCh, replyCh, mCh in {
+      rl!(`__ROOT_URI__`, *rootCh) |
+      for (Root <- rootCh) {
+        Root!("resolve", "component:governor", 1, *resolveCh) |
+        for (@(true, govUri, _) <- resolveCh) {
+          rl!(govUri, *gcCh) |
+          for (Governor <- gcCh) {
+            Governor!("authorize", "market-index", nonce, "pauseAsset", code, sigs, *replyCh) |
+            for (@v <- replyCh) {
+              match v {
+                (true, Nil) => {
+                  for (@s <- indexState) {
+                    pauseAssetMarkets!(s.get("markets").keys().toList(), 0, code,
+                                       s.get("markets"), *mCh) |
+                    for (@markets <- mCh) {
+                      indexState!(s.set("markets", markets)
+                                   .set("rev", s.get("rev") + 1)) |
+                      ret!((true, Nil))
+                    }
+                  }
+                }
+                _ => { ret!(v) }
               }
             }
           }

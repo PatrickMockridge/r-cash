@@ -581,10 +581,15 @@ async fn run(cli: Cli) -> Result<ExitCode> {
                         &cli.json,
                         &serde_json::json!({
                             "code": currency.code,
+                            "kind": currency.kind,
                             "stablecoinUri": currency.stablecoin_uri,
                             "vaultUri": currency.vault_uri,
                             "paramsHash": currency.params_hash,
                             "status": currency.status,
+                            "assetUri": currency.asset_uri,
+                            "decimals": currency.decimals,
+                            "chain": currency.chain,
+                            "custodian": currency.custodian,
                         }),
                     );
                 }
@@ -889,10 +894,13 @@ async fn run(cli: Cli) -> Result<ExitCode> {
                         &serde_json::json!(list
                             .iter()
                             .map(|c| serde_json::json!({
-                                "code": c.code, "stablecoinUri": c.stablecoin_uri,
+                                "code": c.code, "kind": c.kind,
+                                "stablecoinUri": c.stablecoin_uri,
                                 "vaultUri": c.vault_uri, "savingsUri": c.savings_uri,
                                 "psmUri": c.psm_uri, "bufferUri": c.buffer_uri,
-                                "status": c.status,
+                                "status": c.status, "assetUri": c.asset_uri,
+                                "decimals": c.decimals, "chain": c.chain,
+                                "custodian": c.custodian,
                             }))
                             .collect::<Vec<_>>()),
                     );

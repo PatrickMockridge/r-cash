@@ -4,12 +4,16 @@ import Unlock from "../components/Unlock";
 import { useWallet } from "../lib/store";
 import { formatUnits } from "../lib/format";
 import type { V4Lock, V4Market, V4Reserves, V4Slot } from "../lib/types";
+import { defaultConvertPair } from "../lib/mesh";
+import { usePreferences } from "../lib/preferences";
 
 export default function Liquidity() {
   const { status, client } = useWallet();
   const queryClient = useQueryClient();
-  const [base, setBase] = useState("REV");
-  const [quote, setQuote] = useState("V4T");
+  const { displayCurrency } = usePreferences();
+  const [initialBase, initialQuote] = defaultConvertPair(displayCurrency);
+  const [base, setBase] = useState(initialBase);
+  const [quote, setQuote] = useState(initialQuote);
   const [baseAmount, setBaseAmount] = useState("1");
   const [quoteAmount, setQuoteAmount] = useState("75");
   const [lockBlocks, setLockBlocks] = useState("100");
