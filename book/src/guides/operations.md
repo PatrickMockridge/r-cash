@@ -82,9 +82,9 @@ including across a restart.
 `deployments/devnet-v4.json` is the component manifest. It lists component URIs, not
 capabilities and not keys. It is written only after a complete install.
 
-`deployments/testnet-v4.json` is the testnet analogue under `.testnet/`. Systems and markets
-are **not** in the manifest; clients discover them through `ListingViews`. A separate systems
-manifest does not exist and should not be invented.
+`.testnet/testnet-v4.json` is the testnet manifest. Systems and markets are **not** in the
+manifest; clients discover them through `ListingViews`. A separate systems manifest does not
+exist and should not be invented.
 
 The web app copies the devnet manifest to `web/public/devnet.json` with
 `scripts/sync-manifest.mjs`. The WASM constructor recognises a manifest by its `root_uri`
