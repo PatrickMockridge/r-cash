@@ -3,6 +3,8 @@
 //! The SDK is shared by the native CLI and the browser. Everything above this module
 //! speaks `HttpRequest`/`HttpResponse`; only the transport differs.
 
+use std::time::Duration;
+
 use async_trait::async_trait;
 
 use crate::error::ChainError;
@@ -21,6 +23,9 @@ pub struct HttpRequest {
     pub url: String,
     /// JSON body, already serialized.
     pub body: Option<String>,
+    /// Per-request timeout. Discovery uses a short one so a dead listed peer cannot
+    /// stall the first operation; ordinary requests leave it unset (the transport default).
+    pub timeout: Option<Duration>,
 }
 
 /// One HTTP response.
@@ -69,6 +74,10 @@ impl Transport for NativeTransport {
                 .body(body),
             None => builder,
         };
+        let builder = match request.timeout {
+            Some(timeout) => builder.timeout(timeout),
+            None => builder,
+        };
         let response = builder
             .send()
             .await
@@ -96,14 +105,13 @@ impl Transport for NativeTransport {
 pub struct WasmTransport;
 
 #[cfg(target_arch = "wasm32")]
-#[async_trait(?Send)]
-impl Transport for WasmTransport {
-    async fn send(&self, request: HttpRequest) -> Result<HttpResponse, ChainError> {
+impl WasmTransport {
+    async fn send_inner(request: &HttpRequest) -> Result<HttpResponse, ChainError> {
         let builder = match request.method {
             Method::Get => gloo_net::http::Request::get(&request.url),
             Method::Post => gloo_net::http::Request::post(&request.url),
         };
-        let response = match request.body {
+        let response = match &request.body {
             Some(body) => builder
                 .header("content-type", "application/json")
                 .body(body)
@@ -130,5 +138,26 @@ impl Transport for WasmTransport {
             body,
             retry_after,
         })
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+#[async_trait(?Send)]
+impl Transport for WasmTransport {
+    async fn send(&self, request: HttpRequest) -> Result<HttpResponse, ChainError> {
+        let Some(timeout) = request.timeout else {
+            return Self::send_inner(&request).await;
+        };
+        let send = Box::pin(Self::send_inner(&request));
+        let timer = Box::pin(gloo_timers::future::TimeoutFuture::new(
+            timeout.as_millis() as u32
+        ));
+        match futures_util::future::select(send, timer).await {
+            futures_util::future::Either::Left((result, _)) => result,
+            futures_util::future::Either::Right(_) => Err(ChainError::Transport(format!(
+                "request timed out after {}ms",
+                timeout.as_millis()
+            ))),
+        }
     }
 }

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Fail if R-Cash contains native sources, dependencies, build tools or artifacts.
 
-This is the enforcement behind docs/LANGUAGES.md. Run with:
+This is the enforcement behind book/src/trust/repository-map.md. Run with:
 
     make check-languages
 """
@@ -88,7 +88,7 @@ def fail(title: str, details: list[str]) -> None:
     print(f"error: {title}", file=sys.stderr)
     for detail in details:
         print(f"  {detail}", file=sys.stderr)
-    print("See docs/LANGUAGES.md.", file=sys.stderr)
+    print("See book/src/trust/repository-map.md.", file=sys.stderr)
     sys.exit(1)
 
 

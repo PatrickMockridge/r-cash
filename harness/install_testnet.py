@@ -48,6 +48,18 @@ sys.path.insert(0, str(ROOT / "tools"))
 
 from chainclient import ChainClientError, MergeRejected, Node, Refused  # noqa: E402
 from minify_rho import minify  # noqa: E402
+import netconfig  # noqa: E402
+
+KEYS = netconfig.KEYS_PATH
+STATE = netconfig.STATE_PATH
+OPS = netconfig.OPS_PATH
+RCASH = netconfig.CLI_BINARY
+DEFAULT_NODE = netconfig.NODE_URL
+LIVE_HINTS = tuple(dict.fromkeys(
+    [hint for hint in ("rhobot.net", "164.90.140.144", "167.99.43.214")
+     if hint in DEFAULT_NODE] +
+    ["rhobot.net", "164.90.140.144", "167.99.43.214"]
+))
 
 # The Root key(s) each deploy must leave live before the next dependent deploy.
 STEP_KEYS = {
@@ -112,6 +124,9 @@ class Installer:
         admin_keys_path: Path = DEVNET_KEYS,
         manifest_path: Path | None = None,
         min_lock_blocks: str = "302400",
+        shard_id: str | None = None,
+        phlo_limit: int | None = None,
+        phlo_price: int | None = None,
     ):
         if any(hint in node_url for hint in LIVE_HINTS) and not allow_live:
             raise SystemExit(
@@ -125,6 +140,9 @@ class Installer:
         self.ops_path = ops_path
         self.manifest_path = manifest_path or (ROOT / "deployments" / "testnet-v4.json")
         self.min_lock_blocks = min_lock_blocks
+        self.shard_id = shard_id or netconfig.SHARD_ID
+        self.phlo_limit = phlo_limit if phlo_limit is not None else netconfig.PHLO_LIMIT
+        self.phlo_price = phlo_price if phlo_price is not None else netconfig.PHLO_PRICE
         self.keys = json.loads(keys_path.read_text())
         self.deployer = self.keys["deployer"]
         self.devnet = json.loads(admin_keys_path.read_text())
@@ -142,7 +160,11 @@ class Installer:
             proc = subprocess.run(
                 [
                     str(RCASH), "--node", self.node_url, "--keys", str(self.keys_path),
-                    "--key", "deployer", "--json", "deploy",
+                    "--key", "deployer", "--shard-id", self.shard_id,
+                    "--phlo-limit", str(self.phlo_limit),
+                    "--phlo-price", str(self.phlo_price),
+                    *netconfig.pool_argument(self.node_url),
+                    "--json", "deploy",
                     *(["--op", op, "--op-cache", str(self.ops_path)] if op else []),
                     path,
                 ],
@@ -290,6 +312,9 @@ class Installer:
             self.state = json.loads(self.state_path.read_text())
         self.root_uri = self.state.get("root_uri")
 
+        if netconfig.is_testnet():
+            import testnet_preflight
+            testnet_preflight.preflight(self.node_url, True, self.keys_path)
         status = self.chain.preflight()
         try:
             tip = self.chain.last_finalized_block().get("blockHash")
@@ -451,14 +476,23 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--keys", type=Path, default=KEYS)
     ap.add_argument("--state", type=Path, default=STATE)
     ap.add_argument("--ops", type=Path, default=OPS)
-    ap.add_argument("--admin-keys", type=Path, default=DEVNET_KEYS)
-    ap.add_argument("--manifest", type=Path, default=None)
-    ap.add_argument("--min-lock-blocks", default="302400")
+    ap.add_argument("--admin-keys", type=Path,
+                    default=(netconfig.KEYS_PATH if netconfig.is_testnet()
+                             else DEVNET_KEYS))
+    ap.add_argument("--manifest", type=Path,
+                    default=(netconfig.MANIFEST_PATH if netconfig.is_testnet()
+                             else None))
+    ap.add_argument("--min-lock-blocks", default=("10" if netconfig.is_testnet()
+                                                  else "302400"))
+    ap.add_argument("--shard-id", default=netconfig.SHARD_ID)
+    ap.add_argument("--phlo-limit", type=int, default=netconfig.PHLO_LIMIT)
+    ap.add_argument("--phlo-price", type=int, default=netconfig.PHLO_PRICE)
     args = ap.parse_args(argv)
     try:
         return Installer(
             args.node, args.allow_live, args.keys, args.state, args.ops,
             args.admin_keys, args.manifest, args.min_lock_blocks,
+            args.shard_id, args.phlo_limit, args.phlo_price,
         ).run(args.fresh)
     except Refused as error:
         print(f"REFUSED node detail={error}", file=sys.stderr)

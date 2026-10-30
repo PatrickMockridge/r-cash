@@ -57,6 +57,18 @@ pub enum ChainError {
     StillUnknown { deploy_id: String, last: String },
     #[error("keystore error: {0}")]
     Keystore(String),
+    /// The seed does not publish a hostlist: `GET /api/v1/nodes` returned 404.
+    #[error("the node does not publish a deploy hostlist (GET /api/v1/nodes returned 404)")]
+    HostlistUnsupported,
+    /// The hostlist is for a different network than the client expects.
+    #[error("hostlist network mismatch: client expects {expected}, list reports {actual}")]
+    HostlistNetworkMismatch { expected: String, actual: String },
+    /// The hostlist has no entry for the client's shard.
+    #[error("hostlist shard mismatch: no entry matches {expected}")]
+    HostlistShardMismatch { expected: String },
+    /// Discovery produced no usable endpoint.
+    #[error("no eligible node: {reason}")]
+    NoEligibleNode { reason: String },
 }
 
 impl From<serde_json::Error> for ChainError {

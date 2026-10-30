@@ -18,14 +18,16 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 sys.path.insert(0, str(ROOT / "harness"))
 
+import netconfig  # noqa: E402
+
 import deploy as node  # noqa: E402
 import sign_payload  # noqa: E402
 from install_v3 import render  # noqa: E402
 from unit_feed import blake2b256, canonical, deploy_feed  # noqa: E402
 from unit_v3 import call, check, one  # noqa: E402
 
-KEYS = ROOT / ".devnet" / "keys.json"
-STATE = ROOT / ".devnet" / "v3-install.json"
+KEYS = netconfig.KEYS_PATH
+STATE = netconfig.STATE_PATH
 # One policy source. A feed's policy is immutable, so a suite that binds REV
 # with a different maxAge makes the later mesh install adopt a policy the
 # product did not configure. Load the product policy here instead.

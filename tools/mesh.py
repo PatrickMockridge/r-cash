@@ -33,7 +33,11 @@ from mesh_support import (  # noqa: E402
 )
 
 DEFAULT_CONFIG = ROOT / "configs" / "mesh.json"
-STATE_OUT = ROOT / ".devnet" / "mesh-state.json"
+ALLOW_LIVE = False
+sys.path.insert(0, str(ROOT / "harness"))
+import netconfig  # noqa: E402
+
+STATE_OUT = netconfig.MESH_STATE_PATH
 
 
 def load_config(path: Path) -> dict:
@@ -97,7 +101,16 @@ def install_asset(keys: dict, state: dict, config: dict, currency: dict) -> None
     print(f"native {code}: feed + system listed")
 
 
+def guard_live(allow_live: bool) -> None:
+    if netconfig.is_testnet() and not allow_live:
+        raise SystemExit("live testnet requires --allow-live")
+    if any(hint in netconfig.NODE_URL for hint in
+           ("rhobot.net", "164.90.140.144", "167.99.43.214")) and not allow_live:
+        raise SystemExit("live endpoint requires --allow-live")
+
+
 def cmd_install(config: dict, limit: int | None) -> int:
+    guard_live(ALLOW_LIVE)
     keys, state = load_env()
     # REV is the collateral and the cross-rate anchor.
     ensure_feed(keys, state, config, "REV", config["currencies"][0]["initialPriceE8"] // 20 or 1)
@@ -128,6 +141,7 @@ def cmd_install(config: dict, limit: int | None) -> int:
 
 
 def cmd_pair(config: dict, base: str, quote: str) -> int:
+    guard_live(ALLOW_LIVE)
     keys, state = load_env()
     created = create_market(keys, state, config, base, quote)
     market = created["market"]
@@ -143,6 +157,7 @@ def cmd_pair(config: dict, base: str, quote: str) -> int:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
+    ap.add_argument("--allow-live", action="store_true")
     sub = ap.add_subparsers(dest="command", required=True)
     sub.add_parser("plan")
     install = sub.add_parser("install")
@@ -151,7 +166,9 @@ def main(argv: list[str] | None = None) -> int:
     pair = sub.add_parser("pair")
     pair.add_argument("base")
     pair.add_argument("quote")
+    global ALLOW_LIVE
     args = ap.parse_args(argv)
+    ALLOW_LIVE = args.allow_live
     config = load_config(args.config)
     if args.command == "plan":
         return cmd_plan(config)

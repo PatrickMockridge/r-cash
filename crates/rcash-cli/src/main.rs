@@ -22,6 +22,27 @@ struct Cli {
         default_value = "http://localhost:40403"
     )]
     node: String,
+    /// Additional known nodes for the endpoint pool, comma-separated or repeated. The
+    /// hostlist is still discovered in the background and augments this list.
+    #[arg(long, global = true, env = "RCASH_NODES", value_delimiter = ',')]
+    nodes: Vec<String>,
+    /// Disable hostlist discovery; the pool then uses --node/--nodes only.
+    #[arg(long, global = true, env = "RCASH_NO_HOSTLIST")]
+    no_hostlist: bool,
+    /// Shard id carried by every signed deploy.
+    #[arg(long, global = true, env = "RCASH_SHARD", default_value = "/root")]
+    shard_id: String,
+    /// Phlo limit for signed deploys.
+    #[arg(
+        long,
+        global = true,
+        env = "RCASH_PHLO_LIMIT",
+        default_value_t = 1_000_000
+    )]
+    phlo_limit: i64,
+    /// Phlo price for signed deploys.
+    #[arg(long, global = true, env = "RCASH_PHLO_PRICE", default_value_t = 1)]
+    phlo_price: i64,
     /// Devnet keys file (plaintext; local tooling only).
     #[arg(long, global = true, default_value = ".devnet/keys.json")]
     keys: PathBuf,
@@ -429,21 +450,21 @@ async fn run(cli: Cli) -> Result<ExitCode> {
             Ok(ExitCode::SUCCESS)
         }
         Command::Status => {
-            let node = rcash_chain::node::NodeClient::new(cli.node.clone())?;
-            let status = node.status().await?;
+            let node = node_client(&cli)?;
+            let status = node.seed_status().await?;
             print_json_or(&cli.json, &status);
             Ok(ExitCode::SUCCESS)
         }
         Command::Deploy {
-            file,
-            term,
+            ref file,
+            ref term,
             no_wait,
-            op,
-            op_cache,
+            ref op,
+            ref op_cache,
         } => {
-            let term = read_term(file, term)?;
+            let term = read_term(file.clone(), term.clone())?;
             let key = load_key_from(&cli.keys, cli.key.as_deref())?;
-            let client = Client::new(cli.node.clone(), key)?;
+            let client = with_network(Client::with_node(node_client(&cli)?, Some(key)), &cli);
             if no_wait && op.is_none() {
                 let id = client.submit_term(&term).await?;
                 if cli.json {
@@ -454,7 +475,7 @@ async fn run(cli: Cli) -> Result<ExitCode> {
                 return Ok(ExitCode::SUCCESS);
             }
             let outcome = match op {
-                Some(op) => client.deploy_term_cached(&term, &op, &op_cache).await?,
+                Some(op) => client.deploy_term_cached(&term, op, op_cache).await?,
                 None => client.deploy_term(&term).await?,
             };
             if cli.json {
@@ -490,9 +511,9 @@ async fn run(cli: Cli) -> Result<ExitCode> {
             }
             Ok(ExitCode::SUCCESS)
         }
-        Command::Explore { file, term } => {
-            let term = read_term(file, term)?;
-            let node = rcash_chain::node::NodeClient::new(cli.node.clone())?;
+        Command::Explore { ref file, ref term } => {
+            let term = read_term(file.clone(), term.clone())?;
+            let node = node_client(&cli)?;
             let response = node.explore(&term).await?;
             let value = serde_json::json!({
                 "expr": response.expr,
@@ -505,9 +526,9 @@ async fn run(cli: Cli) -> Result<ExitCode> {
             print_json_or(&cli.json, &value);
             Ok(ExitCode::SUCCESS)
         }
-        Command::DeployStatus { id } => {
-            let node = rcash_chain::node::NodeClient::new(cli.node.clone())?;
-            let status = node.deploy_status(&id).await?;
+        Command::DeployStatus { ref id } => {
+            let node = node_client(&cli)?;
+            let status = node.deploy_status(id).await?;
             let value = serde_json::json!({
                 "deployId": id,
                 "status": status.status_text(),
@@ -517,9 +538,9 @@ async fn run(cli: Cli) -> Result<ExitCode> {
             print_json_or(&cli.json, &value);
             Ok(ExitCode::SUCCESS)
         }
-        Command::Wait { id } => {
-            let node = rcash_chain::node::NodeClient::new(cli.node.clone())?;
-            let status = node.wait_processed(&id, Default::default()).await?;
+        Command::Wait { ref id } => {
+            let node = node_client(&cli)?;
+            let status = node.wait_processed(id, Default::default()).await?;
             let value = serde_json::json!({
                 "deployId": id,
                 "status": status.status_text(),
@@ -1551,20 +1572,84 @@ async fn run(cli: Cli) -> Result<ExitCode> {
             );
             Ok(ExitCode::SUCCESS)
         }
-        Command::Doctor { manifest } => {
-            let node = rcash_chain::node::NodeClient::new(cli.node.clone())?;
-            let status = node.status().await?;
+        Command::Doctor { ref manifest } => {
+            let node = node_client(&cli)?;
+            let status = node.seed_status().await?;
             let key = load_key_from(&cli.keys, cli.key.as_deref())?;
             let address = key.rev_address()?;
-            println!("node: {}", cli.node);
-            println!("status: {}", status);
-            println!("key: {address}");
+            let discovery =
+                if node.discovery_mode() == rcash_chain::node::pool::DiscoveryMode::Disabled {
+                    Err(ChainError::NoEligibleNode {
+                        reason: "hostlist discovery disabled by --no-hostlist or --nodes".into(),
+                    })
+                } else {
+                    node.discover().await
+                };
+            let report = discovery.as_ref().ok().cloned();
+            let error = discovery.as_ref().err().map(ToString::to_string);
+            if cli.json {
+                let value = serde_json::json!({
+                    "node": cli.node,
+                    "status": status,
+                    "key": address,
+                    "discovery": report,
+                    "error": error,
+                    "nodes": node.nodes(),
+                });
+                println!("{value}");
+            } else {
+                println!("node: {}", cli.node);
+                println!("status: {status}");
+                println!("key: {address}");
+                match (&report, &error) {
+                    (Some(report), _) => {
+                        println!(
+                            "hostlist: published (network {}, shard {})",
+                            report.network_id.as_deref().unwrap_or("-"),
+                            report.primary_shard.as_deref().unwrap_or("-")
+                        );
+                        let accepting = report
+                            .endpoints
+                            .iter()
+                            .filter(|endpoint| endpoint.accepts_deploys)
+                            .count();
+                        println!(
+                            "endpoints: {} verified, {accepting} accepting",
+                            report.endpoints.len()
+                        );
+                        for endpoint in &report.endpoints {
+                            println!(
+                                "  {}  shard={} tip={} minPhloPrice={} accepting={} source={:?}",
+                                endpoint.base,
+                                endpoint.shard_id.as_deref().unwrap_or("-"),
+                                endpoint.latest_block_number,
+                                endpoint.min_phlo_price,
+                                endpoint.accepts_deploys,
+                                endpoint.source
+                            );
+                        }
+                    }
+                    (None, Some(error))
+                        if matches!(
+                            discovery.as_ref().err(),
+                            Some(ChainError::HostlistUnsupported)
+                        ) =>
+                    {
+                        println!("hostlist: not published (GET /api/v1/nodes returned 404)");
+                        println!("error: {error}");
+                    }
+                    (None, Some(error)) => println!("hostlist: unavailable ({error})"),
+                    (None, None) => {}
+                }
+            }
             if let Some(path) = manifest {
-                let text = std::fs::read_to_string(&path)
+                let text = std::fs::read_to_string(path)
                     .map_err(|e| CliError::Usage(format!("{}: {e}", path.display())))?;
                 let manifest = rcash_core::manifest::Manifest::from_json(&text)
                     .map_err(|e| CliError::Usage(e.to_string()))?;
-                println!("manifest: directory {}", manifest.directory_uri);
+                if !cli.json {
+                    println!("manifest: directory {}", manifest.directory_uri);
+                }
             }
             Ok(ExitCode::SUCCESS)
         }
@@ -1778,22 +1863,63 @@ fn load_v4_manifest(path: &std::path::Path) -> Result<rcash_core::manifest::V4Ma
     rcash_core::manifest::V4Manifest::from_json(&text).map_err(|e| CliError::Usage(e.to_string()))
 }
 
+fn with_network(client: Client, cli: &Cli) -> Client {
+    client
+        .with_shard(cli.shard_id.clone())
+        .with_phlo(cli.phlo_limit, cli.phlo_price)
+}
+
+/// Build the pooled node client from the global flags.
+///
+/// Discovery is on by default and runs in the background; `--nodes` adds known endpoints
+/// to it. `--no-hostlist` is the escape hatch that leaves only --node/--nodes.
+fn node_client(cli: &Cli) -> Result<rcash_chain::node::NodeClient> {
+    use rcash_chain::node::pool::{DiscoveryMode, PoolOptions};
+    let discovery = if cli.no_hostlist {
+        DiscoveryMode::Disabled
+    } else {
+        DiscoveryMode::Enabled
+    };
+    let options = PoolOptions {
+        discovery,
+        shard_id: cli.shard_id.clone(),
+        explicit_nodes: cli.nodes.clone(),
+        ..PoolOptions::default()
+    };
+    Ok(rcash_chain::node::NodeClient::new_with_options(
+        cli.node.clone(),
+        options,
+    )?)
+}
+
 fn v4_reader(cli: &Cli) -> Result<Client> {
-    Ok(Client::reader(cli.node.clone())?.with_v4_manifest(load_v4_manifest(&cli.v4_manifest)?))
+    Ok(
+        with_network(Client::with_node(node_client(cli)?, None), cli)
+            .with_v4_manifest(load_v4_manifest(&cli.v4_manifest)?),
+    )
 }
 
 fn v4_signing_client(cli: &Cli) -> Result<Client> {
     let key = load_key_from(&cli.keys, cli.key.as_deref())?;
-    Ok(Client::new(cli.node.clone(), key)?.with_v4_manifest(load_v4_manifest(&cli.v4_manifest)?))
+    Ok(
+        with_network(Client::with_node(node_client(cli)?, Some(key)), cli)
+            .with_v4_manifest(load_v4_manifest(&cli.v4_manifest)?),
+    )
 }
 
 fn reader_client(cli: &Cli) -> Result<Client> {
-    Ok(Client::reader(cli.node.clone())?.with_manifest(load_manifest(&cli.manifest)?))
+    Ok(
+        with_network(Client::with_node(node_client(cli)?, None), cli)
+            .with_manifest(load_manifest(&cli.manifest)?),
+    )
 }
 
 fn signing_client(cli: &Cli) -> Result<Client> {
     let key = load_key_from(&cli.keys, cli.key.as_deref())?;
-    Ok(Client::new(cli.node.clone(), key)?.with_manifest(load_manifest(&cli.manifest)?))
+    Ok(
+        with_network(Client::with_node(node_client(cli)?, Some(key)), cli)
+            .with_manifest(load_manifest(&cli.manifest)?),
+    )
 }
 
 fn read_term(file: Option<PathBuf>, term: Option<String>) -> Result<String> {
@@ -1815,6 +1941,56 @@ fn print_json_or(json: &bool, value: &serde_json::Value) {
         println!(
             "{}",
             serde_json::to_string_pretty(value).unwrap_or_default()
+        );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::Parser;
+    use rcash_chain::node::pool::DiscoveryMode;
+
+    fn parse(args: &[&str]) -> Cli {
+        Cli::try_parse_from(args).expect("cli parses")
+    }
+
+    #[test]
+    fn the_endpoint_pool_flags_choose_discovery() {
+        let default = parse(&["rcash", "status"]);
+        assert_eq!(
+            node_client(&default).unwrap().discovery_mode(),
+            DiscoveryMode::Enabled
+        );
+
+        let explicit = parse(&[
+            "rcash",
+            "--nodes",
+            "http://a:40403,http://b:40403",
+            "status",
+        ]);
+        assert_eq!(explicit.nodes.len(), 2);
+        assert_eq!(
+            node_client(&explicit).unwrap().discovery_mode(),
+            DiscoveryMode::Enabled
+        );
+
+        let off = parse(&["rcash", "--no-hostlist", "status"]);
+        assert_eq!(
+            node_client(&off).unwrap().discovery_mode(),
+            DiscoveryMode::Disabled
+        );
+
+        let both = parse(&[
+            "rcash",
+            "--nodes",
+            "http://a:40403",
+            "--no-hostlist",
+            "status",
+        ]);
+        assert_eq!(
+            node_client(&both).unwrap().discovery_mode(),
+            DiscoveryMode::Disabled
         );
     }
 }

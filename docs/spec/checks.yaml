@@ -161,6 +161,30 @@ campaign:demo:
 campaign:probes:
   kind: campaign
   command: "harness/rcash.py probes"
+static:testnet-profile:
+  kind: static
+  command: "python3 tools/check_mesh.py --config configs/mesh-testnet.json"
+campaign:testnet-preflight:
+  kind: campaign
+  command: "make testnet-preflight"
+campaign:testnet-funding:
+  kind: campaign
+  command: "make testnet-fund"
+campaign:testnet-install:
+  kind: campaign
+  command: "make testnet-install && make testnet-setup"
+campaign:testnet-suites:
+  kind: campaign
+  command: "make testnet-core"
+campaign:testnet-mesh:
+  kind: campaign
+  command: "make testnet-mesh && make testnet-unit-mesh"
+campaign:testnet-clients:
+  kind: campaign
+  command: "make testnet-clients"
+campaign:testnet-demo:
+  kind: campaign
+  command: "make testnet-demo"
 
 platform:ertp:
   kind: platform

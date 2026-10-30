@@ -4,7 +4,7 @@ PY := $(VENV)/bin/python
 RHOLO_DIR ?= $(or $(RCHAIN_RUST_DIR),../rholo)
 export RHOLO_DIR
 
-.PHONY: venv image devnet down status keys build probes deploy logs clean demo client-test web-build check-languages inventory flows check-flows check-trace check-mesh vectors-check model-test offline-test pre-devnet-check lean-build lean-check formal-check mesh-plan mesh-install mesh-pair test-wasm measure measure-check check-arch check-captures spec-check tla-check install install-v3 bootstrap setup unit-v3 unit-feed unit-hub unit-stablecoin unit-liquidation unit-interest unit-savings unit-psm unit-timelock unit-accounts unit-transfer unit-transfer-memo unit-market unit-mesh unit-external unit-buffer unit-pool unit-all
+.PHONY: venv image devnet down status keys build probes deploy logs clean demo client-test web-build check-languages inventory flows check-flows check-trace check-mesh vectors-check model-test offline-test pre-devnet-check lean-build lean-check formal-check mesh-plan mesh-install mesh-pair test-wasm measure measure-check check-arch check-captures spec-check tla-check install install-v3 bootstrap setup unit-v3 unit-feed unit-hub unit-stablecoin unit-liquidation unit-interest unit-savings unit-psm unit-timelock unit-accounts unit-transfer unit-transfer-memo unit-market unit-mesh unit-external unit-buffer unit-pool unit-all testnet-preflight testnet-keys testnet-fund testnet-install testnet-setup testnet-core testnet-mesh testnet-unit-mesh testnet-clients testnet-demo testnet-campaign docs docs-serve docs-check
 
 venv:
 	python3 -m venv $(VENV)
@@ -195,6 +195,58 @@ lean-check:
 
 formal-check: lean-check check-flows check-trace check-mesh
 
+# Public testnet (network id testnet, shard /testnet). All commands are opt-in
+# and read configs/testnet.json; see book/src/guides/testnet.md.
+TESTNET_NODE ?= http://167.99.43.214:40403
+TESTNET_ALLOW = --allow-live
+TESTNET_ENV = RCASH_NET=testnet RCASH_NODE=$(TESTNET_NODE) RCASH_SHARD=/testnet
+
+target/debug/rcash:
+	cargo build -p rcash-cli
+
+testnet-preflight:
+	RCASH_NET=testnet $(PY) harness/testnet_preflight.py --node $(TESTNET_NODE) $(TESTNET_ALLOW)
+
+testnet-keys: target/debug/rcash
+	RCASH_NET=testnet $(PY) harness/testnet_keys.py --fresh
+
+testnet-fund:
+	$(TESTNET_ENV) $(PY) harness/testnet_fund.py
+
+testnet-install: target/debug/rcash
+	$(TESTNET_ENV) $(PY) harness/install_testnet.py --node $(TESTNET_NODE) $(TESTNET_ALLOW) --fresh --min-lock-blocks 10
+
+testnet-setup:
+	$(TESTNET_ENV) $(PY) harness/testnet_setup.py --node $(TESTNET_NODE) $(TESTNET_ALLOW)
+
+testnet-core:
+	@set -e; RCASH_NET=testnet $(PY) harness/ticker.py > .testnet/ticker.log 2>&1 & \
+	tick=$$!; trap 'kill $$tick 2>/dev/null || true' EXIT; \
+	for s in unit_v3 unit_feed unit_hub unit_stablecoin unit_interest unit_liquidation \
+	         unit_savings unit_psm unit_timelock unit_accounts unit_transfer \
+	         unit_transfer_memo unit_market unit_external; do \
+	  echo "== $$s"; $(TESTNET_ENV) $(PY) harness/$$s.py || exit 1; \
+	done
+
+testnet-mesh: target/debug/rcash
+	$(TESTNET_ENV) $(PY) tools/mesh.py --config configs/mesh-testnet.json --allow-live install
+
+testnet-unit-mesh:
+	$(TESTNET_ENV) $(PY) harness/unit_mesh.py
+
+testnet-clients: target/debug/rcash
+	$(TESTNET_ENV) ./target/debug/rcash --node $(TESTNET_NODE) --keys .testnet/keys.json \
+	  --v4-manifest .testnet/testnet-v4.json --shard-id /testnet --json status
+	$(TESTNET_ENV) ./target/debug/rcash --node $(TESTNET_NODE) --keys .testnet/keys.json \
+	  --v4-manifest .testnet/testnet-v4.json --shard-id /testnet --json v4 currencies
+
+testnet-demo: target/debug/rcash
+	$(TESTNET_ENV) ./target/debug/rcash --node $(TESTNET_NODE) --keys .testnet/keys.json \
+	  --key deployer --v4-manifest .testnet/testnet-v4.json --shard-id /testnet \
+	  devnet demo --amount 0.000001
+
+testnet-campaign: testnet-preflight testnet-fund testnet-install testnet-setup testnet-core testnet-mesh testnet-unit-mesh testnet-clients testnet-demo
+
 # The tracked mesh config is the source for the supported currency set.
 mesh-plan:
 	$(PY) tools/mesh.py --config configs/mesh.json plan
@@ -217,3 +269,15 @@ test-wasm:
 
 web-build:
 	cd web && npm ci && npm run wasm:build && npm run typecheck && npm test && npm run build
+
+# The book is the human-facing explanation. The normative specification stays in
+# docs/SPEC.md and docs/spec/; the book links to it rather than copying it.
+docs:
+	mdbook build book
+
+docs-serve:
+	mdbook serve book --open
+
+docs-check:
+	mdbook build book
+	mdbook-linkcheck2 -s book

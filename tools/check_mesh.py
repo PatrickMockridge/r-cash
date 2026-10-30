@@ -27,9 +27,13 @@ LOCALS = {"NGN", "ZAR", "OMR", "AED", "EGP", "MAD", "ETB", "PKR", "INR",
 MAJORS = {"USD", "EUR", "CNY"}
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--config", type=Path, default=CONFIG)
+    args = ap.parse_args(argv)
     errors: list[str] = []
-    config = json.loads(CONFIG.read_text())
+    config = json.loads(args.config.read_text())
     currencies = config.get("currencies") or []
     externals = config.get("externalAssets") or []
     codes = [entry.get("code") for entry in currencies]

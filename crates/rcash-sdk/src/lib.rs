@@ -34,6 +34,10 @@ struct CachedDeploy {
     term: String,
     deploy_id: String,
     body: String,
+    /// The node this deploy was planned for. Legacy entries have no pin and always went
+    /// to the seed; a retry must never move a signed deploy to a different node.
+    #[serde(default)]
+    node: Option<String>,
 }
 
 /// A connected, signing client.
@@ -141,14 +145,32 @@ impl Client {
     }
 
     pub fn with_phlo(mut self, limit: i64, price: i64) -> Self {
-        self.phlo_limit = limit;
-        self.phlo_price = price;
+        self.set_phlo(limit, price);
         self
     }
 
     pub fn with_shard(mut self, shard: impl Into<String>) -> Self {
-        self.shard_id = shard.into();
+        self.set_shard(shard);
         self
+    }
+
+    /// Change the phlo limit and price for later signed writes.
+    pub fn set_phlo(&mut self, limit: i64, price: i64) {
+        self.phlo_limit = limit;
+        self.phlo_price = price;
+    }
+
+    /// Change the deploy shard. The pool invalidates its hostlist snapshot, because the
+    /// entries were filtered for the old shard.
+    pub fn set_shard(&mut self, shard: impl Into<String>) {
+        self.shard_id = shard.into();
+        self.node.set_expected_shard(self.shard_id.clone());
+    }
+
+    /// Set the shard and phlo used by signed writes in one call.
+    pub fn set_network(&mut self, shard: impl Into<String>, limit: i64, price: i64) {
+        self.set_shard(shard);
+        self.set_phlo(limit, price);
     }
 
     pub fn with_poll(mut self, poll: PollPolicy) -> Self {
@@ -183,19 +205,34 @@ impl Client {
         term: &str,
         valid_after_block_number: i64,
     ) -> Result<SignedDeploy, ChainError> {
+        self.sign_term_at(term, valid_after_block_number, self.phlo_price)
+    }
+
+    /// Sign at an explicit anchor and price — the values a `WritePlan` chose.
+    fn sign_term_at(
+        &self,
+        term: &str,
+        valid_after_block_number: i64,
+        phlo_price: i64,
+    ) -> Result<SignedDeploy, ChainError> {
         let data = DeployOptions::new(term)
             .shard_id(self.shard_id.clone())
             .valid_after_block_number(valid_after_block_number)
-            .phlo(self.phlo_limit, self.phlo_price)
+            .phlo(self.phlo_limit, phlo_price)
             .build()?;
         self.signing_key()?.sign_deploy(data)
     }
 
     /// Submit a term and wait until it is processed and its block is final.
     pub async fn deploy_term(&self, term: &str) -> Result<DeployOutcome, ChainError> {
-        let tip = self.node.latest_block_number().await?;
-        let signed = self.sign_term(term, tip)?;
-        let deploy_id = self.node.deploy(&signed).await?;
+        let plan = self.node.plan_write(self.phlo_price).await?;
+        let signed = self.sign_term_at(term, plan.anchor, plan.phlo_price)?;
+        let body = serde_json::to_string(&signed.request_body())?;
+        let deploy_id = signed.deploy_id.clone();
+        self.node.bind_write(&deploy_id, &plan.base);
+        self.node
+            .deploy_body_on(&plan.base, &body, &deploy_id, term.len())
+            .await?;
         let status = self.node.wait_processed(&deploy_id, self.poll).await?;
         let mut finalized = false;
         if let Some(block) = status.block() {
@@ -261,6 +298,12 @@ impl Client {
                         "operation '{op}' was signed for a different term; refusing to reuse it"
                     )));
                 }
+                // Legacy entries have no node pin; old clients always sent to the seed.
+                let base = entry
+                    .node
+                    .clone()
+                    .unwrap_or_else(|| self.node.base_url().to_string());
+                self.node.bind_write(&entry.deploy_id, &base);
                 match self.node.deploy_status(&entry.deploy_id).await {
                     Ok(status) if status.is_processed() => {
                         return self.finish_outcome(entry.deploy_id, status).await;
@@ -268,7 +311,7 @@ impl Client {
                     Ok(_) | Err(ChainError::Decode(_)) => {
                         match self
                             .node
-                            .deploy_body(&entry.body, &entry.deploy_id, entry.term.len())
+                            .deploy_body_on(&base, &entry.body, &entry.deploy_id, entry.term.len())
                             .await
                         {
                             Ok(()) | Err(ChainError::Duplicate { .. }) => {}
@@ -287,13 +330,14 @@ impl Client {
                 entry.deploy_id
             }
             None => {
-                let tip = self.node.latest_block_number().await?;
-                let signed = self.sign_term(term, tip)?;
+                let plan = self.node.plan_write(self.phlo_price).await?;
+                let signed = self.sign_term_at(term, plan.anchor, plan.phlo_price)?;
                 let body = serde_json::to_string(&signed.request_body())?;
                 let entry = CachedDeploy {
                     term: term.to_string(),
                     deploy_id: signed.deploy_id.clone(),
                     body: body.clone(),
+                    node: Some(plan.base.clone()),
                 };
                 let bytes = serde_json::to_vec(&entry)?;
                 let tmp = path.with_extension("json.tmp");
@@ -301,9 +345,10 @@ impl Client {
                     .map_err(|e| ChainError::Transport(format!("op cache: {e}")))?;
                 std::fs::rename(&tmp, &path)
                     .map_err(|e| ChainError::Transport(format!("op cache: {e}")))?;
+                self.node.bind_write(&signed.deploy_id, &plan.base);
                 match self
                     .node
-                    .deploy_body(&body, &signed.deploy_id, term.len())
+                    .deploy_body_on(&plan.base, &body, &signed.deploy_id, term.len())
                     .await
                 {
                     Ok(()) | Err(ChainError::Duplicate { .. }) => {}
@@ -340,9 +385,15 @@ impl Client {
 
     /// Submit a term without waiting.
     pub async fn submit_term(&self, term: &str) -> Result<String, ChainError> {
-        let tip = self.node.latest_block_number().await?;
-        let signed = self.sign_term(term, tip)?;
-        self.node.deploy(&signed).await
+        let plan = self.node.plan_write(self.phlo_price).await?;
+        let signed = self.sign_term_at(term, plan.anchor, plan.phlo_price)?;
+        let body = serde_json::to_string(&signed.request_body())?;
+        let deploy_id = signed.deploy_id.clone();
+        self.node.bind_write(&deploy_id, &plan.base);
+        self.node
+            .deploy_body_on(&plan.base, &body, &deploy_id, term.len())
+            .await?;
+        Ok(deploy_id)
     }
 
     /// Wait for a previously submitted deploy id.

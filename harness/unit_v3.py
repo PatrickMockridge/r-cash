@@ -21,11 +21,13 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 sys.path.insert(0, str(ROOT / "harness"))
 
+import netconfig  # noqa: E402
+
 import deploy as node  # noqa: E402
 import sign_payload  # noqa: E402
 
-STATE = ROOT / ".devnet" / "v3-install.json"
-KEYS = ROOT / ".devnet" / "keys.json"
+STATE = netconfig.STATE_PATH
+KEYS = netconfig.KEYS_PATH
 PHLO = 10_000_000
 
 
@@ -69,6 +71,10 @@ def faucet_top_up(address: str) -> None:
     The faucet is idempotent below 30,000,000 drops; a suite that funds 15-20m
     from a key needs the precharge reservation on top, so top up before it runs.
     """
+    if netconfig.remote():
+        from testnet_fund import ensure
+        ensure(address, 30_000_000)
+        return
     import time
     import urllib.error
     import urllib.request

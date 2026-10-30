@@ -1,0 +1,34 @@
+{
+  "schema": "rcash.testnet/v1",
+  "networkId": "testnet",
+  "shardId": "/testnet",
+  "genesisBlockHash": "133b1d307b1750129cf0cfb69c4c8f950da21c4e8db2a6a076464d0ccfd98d44",
+  "http": "http://167.99.43.214:40403",
+  "httpFallbacks": [
+    "http://164.90.140.144:40403",
+    "http://167.99.43.214:41403",
+    "http://164.90.140.144:41403"
+  ],
+  "https": "https://testnet.rhobot.net",
+  "faucetUrl": "https://testnet.rhobot.net/api/faucet",
+  "faucetUrlsLocal": [
+    "/api/faucet",
+    "/api/v1/faucet"
+  ],
+  "faucetAmount": 30000000,
+  "faucetDripsPerAddress": 1,
+  "phloPrice": 1,
+  "phloLimit": 2000000,
+  "tickerPhloLimit": 200000,
+  "tickerIntervalSeconds": 2.0,
+  "minLockBlocks": 10,
+  "readTimeoutSeconds": 30,
+  "deployTimeoutSeconds": 600,
+  "finalityTimeoutSeconds": 600,
+  "meshConfig": "configs/mesh-testnet.json",
+  "revPriceE8": 10000000000,
+  "faucetObservedPolicy": "one drip per address; a second request returns 400 already funded in finalized state",
+  "faucetBankAddresses": 140,
+  "nodeBuild": "d1af45d1db3f5fe2fa6047ad6c8a72b654d041df",
+  "rebuiltAt": "2026-10-29T13:03:46Z"
+}

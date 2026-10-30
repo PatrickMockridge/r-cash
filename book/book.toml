@@ -1,0 +1,33 @@
+[book]
+title = "R-Cash"
+authors = ["R-Cash contributors"]
+description = "A permissionless multi-currency account and cross-border payments network on rholo."
+language = "en"
+src = "src"
+
+[build]
+build-dir = "book"
+
+[output.html]
+default-theme = "light"
+preferred-dark-theme = "navy"
+git-repository-url = "https://github.com/PatrickMockridge/r-cash"
+edit-url-template = "https://github.com/PatrickMockridge/r-cash/edit/main/book/{path}"
+additional-css = ["theme/custom.css"]
+additional-js = ["mermaid.min.js", "mermaid-init.js"]
+
+[output.html.fold]
+level = 1
+enable = true
+
+[preprocessor]
+
+[preprocessor.mermaid]
+command = "mdbook-mermaid"
+
+[preprocessor.katex]
+command = "mdbook-katex"
+
+[preprocessor.toc]
+command = "mdbook-toc"
+renderer = ["html"]

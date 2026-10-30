@@ -4,6 +4,7 @@
 import { create } from "zustand";
 import { initWasm, Rcash } from "../wasm";
 import * as db from "./db";
+import { networkForNode } from "./network";
 
 const NODE_KEY = "rcash.node";
 const MANIFEST_KEY = "rcash.manifest";
@@ -42,7 +43,7 @@ export const useWallet = create<WalletState>((set, get) => ({
       await initWasm();
       let manifest = localStorage.getItem(MANIFEST_KEY);
       if (!manifest) {
-        const response = await fetch("/devnet.json");
+        const response = await fetch(networkForNode(get().node).manifestPath);
         if (response.ok) manifest = await response.text();
       }
       if (!manifest) {
@@ -54,7 +55,9 @@ export const useWallet = create<WalletState>((set, get) => ({
         return;
       }
       // Validate the manifest by constructing a client; nothing is signed.
-      new Rcash(get().node, manifest);
+      const probe = new Rcash(get().node, manifest);
+      const profile = networkForNode(get().node);
+      probe.set_network(profile.shard, BigInt(profile.phloLimit), BigInt(profile.phloPrice));
       localStorage.setItem(MANIFEST_KEY, manifest);
       set({ manifest, status: "locked" });
     } catch (error) {
@@ -83,6 +86,8 @@ export const useWallet = create<WalletState>((set, get) => ({
     const { node, manifest } = get();
     if (!manifest) throw new Error("no deployment manifest");
     const client = new Rcash(node, manifest);
+    const profile = networkForNode(node);
+    client.set_network(profile.shard, BigInt(profile.phloLimit), BigInt(profile.phloPrice));
     const document = client.create_wallet(password);
     const address = client.address();
     if (!address) throw new Error("wallet creation failed");
@@ -95,6 +100,8 @@ export const useWallet = create<WalletState>((set, get) => ({
     const { node, manifest } = get();
     if (!manifest) throw new Error("no deployment manifest");
     const client = new Rcash(node, manifest);
+    const profile = networkForNode(node);
+    client.set_network(profile.shard, BigInt(profile.phloLimit), BigInt(profile.phloPrice));
     const address = client.unlock(document, password);
     await db.saveKeystore(address, document);
     set({ client, address, status: "unlocked", error: null });

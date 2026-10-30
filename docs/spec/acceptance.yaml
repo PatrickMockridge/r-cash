@@ -3246,13 +3246,31 @@ SPEC-OPS-07:
   level: MUST
   owner: ops
   status: campaign
-  spec_status: planned
+  spec_status: implemented
   criteria:
   - id: AC-SPEC-OPS-07.1
-    given: a public-testnet or merge-gossip arm
-    when: the campaign reports it
-    then: it is marked BLOCKED with the upstream blocker and never reported as conformance
-    checks: *id018
+    given: the public testnet profile and a fresh testnet key file
+    when: the preflight runs
+    then: network id testnet, shard /testnet and genesis c596bef4... are pinned; a mismatch or unsafe key aborts before any deploy
+    checks:
+    - campaign:testnet-preflight
+    - static:testnet-profile
+  - id: AC-SPEC-OPS-07.2
+    given: a declared faucet-only budget
+    when: the funder requests drips and consolidates native REV
+    then: the per-address ten-drip policy is respected and a deficit stops the campaign with the computed amount
+    checks:
+    - campaign:testnet-funding
+  - id: AC-SPEC-OPS-07.3
+    given: the isolated install and the funded key set
+    when: the full campaign runs
+    then: every suite, the 24-pair mesh and the client checks pass on the pinned identity, or the affected AC is BLOCKED with node evidence
+    checks:
+    - campaign:testnet-install
+    - campaign:testnet-suites
+    - campaign:testnet-mesh
+    - campaign:testnet-clients
+    - campaign:testnet-demo
 SPEC-OPS-08:
   level: MUST
   owner: docs

@@ -16,6 +16,8 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 sys.path.insert(0, str(ROOT / "harness"))
 
+import netconfig  # noqa: E402
+
 import deploy as node  # noqa: E402
 import sign_payload  # noqa: E402
 from install_v3 import render  # noqa: E402
@@ -24,8 +26,8 @@ from unit_feed import blake2b256, canonical, deploy_feed  # noqa: E402
 from unit_stablecoin import deploy_system  # noqa: E402
 from unit_v3 import call, check, faucet_top_up, one  # noqa: E402
 
-STATE = ROOT / ".devnet" / "v3-install.json"
-KEYS = ROOT / ".devnet" / "keys.json"
+STATE = netconfig.STATE_PATH
+KEYS = netconfig.KEYS_PATH
 
 
 def load_env() -> tuple[dict, dict]:
@@ -292,6 +294,8 @@ def pair_rate(keys: dict, state: dict, base: str, quote: str, max_age: int = 50)
 
 def feed_price(config: dict, code: str) -> int:
     if code == "REV":
+        if config.get("revPriceE8"):
+            return int(config["revPriceE8"])
         return max(1, config["currencies"][0]["initialPriceE8"] // 20)
     for currency in config["currencies"]:
         if currency["code"] == code:

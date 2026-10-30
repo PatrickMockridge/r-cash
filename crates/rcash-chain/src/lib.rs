@@ -15,6 +15,10 @@ pub mod sign;
 
 pub mod node;
 
+pub use node::pool::{
+    DiscoveryMode, DiscoveryReport, EndpointSource, NodeEndpoint, PoolOptions, WritePlan,
+};
+
 pub use address::{
     eth_address_from_public_key, rev_address_from_eth_address, rev_address_from_public_key,
 };

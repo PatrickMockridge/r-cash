@@ -14,8 +14,8 @@ invariants and install order; this document wins for product behaviour and clien
 requirements. A statement here that contradicts `00-30` is a defect in one of them and
 MUST be resolved before implementation.
 
-The non-normative design note `docs/SAVINGS-AND-PSM.md` is historical; where it differs,
-this specification and `20-INVARIANTS.md` govern.
+The explanatory book in `book/` is non-normative. Where it differs from this document or
+`20-INVARIANTS.md`, this document and `20-INVARIANTS.md` govern.
 
 ## 1. Document control
 
@@ -796,8 +796,9 @@ amount, expiry, opId, recipient and status. Pending entries are reconciled on bo
 - The faucet drips 0.3 REV, is rate-limited and idempotent below the drip. A fresh chain
   funds every non-deployer key before the first suite.
 - `make install FRESH=1` deploys the 17-step kernel and writes the manifest only after
-  every step resolves. `make bootstrap` deploys the demo currencies, feeds and market and
-  writes `deployments/devnet-v4.systems.json`.
+  every step resolves. `make bootstrap` deploys the demo currencies, feeds and market;
+  systems and markets are discovered through `ListingViews`, so no separate systems
+  manifest is written.
 - `deployments/devnet-v4.json` is the component manifest (23 fields, no nulls).
   `testnet-v4.json` is annotated as incomplete until the public testnet completes.
 - `configs/mesh.json` is the tracked source for the supported currency set, majors,
@@ -819,7 +820,7 @@ amount, expiry, opId, recipient and status. Pending entries are reconciled on bo
 | SPEC-OPS-04 | MUST | Manifests contain no nulls on a completed install and no capabilities. | ops | implemented |
 | SPEC-OPS-05 | MUST | Campaigns record source SHA, image digest, prefix, memory and timestamps. | ops | planned |
 | SPEC-OPS-06 | MUST | The faucet and deployer budgets are documented and respected. | ops | implemented |
-| SPEC-OPS-07 | MUST | Public-testnet and merge-gossip arms are reported BLOCKED, never green. | ops | planned |
+| SPEC-OPS-07 | MUST | The public-testnet campaign records the pinned network id, shard and genesis, runs each stage from a declared funding budget, and is PASS only with the evidence bundle or BLOCKED with the upstream blocker. | ops | implemented |
 | SPEC-OPS-08 | MUST | Docs, Makefile and manifests describe the shipped behaviour. | docs | implemented |
 | SPEC-OPS-09 | MUST | `unit-all` is the ordered campaign list. | Makefile | implemented |
 | SPEC-OPS-10 | MUST | The demo journey runs end to end on the bootstrapped devnet. | CLI | implemented |

@@ -56,6 +56,11 @@ pub fn parity_sign(secret_hex: &str, term: &str) -> Result<String, JsValue> {
 #[wasm_bindgen]
 pub struct Rcash {
     node: String,
+    nodes: Vec<String>,
+    hostlist: bool,
+    shard_id: String,
+    phlo_limit: i64,
+    phlo_price: i64,
     manifest: Option<Manifest>,
     v4_manifest: Option<rcash_core::manifest::V4Manifest>,
     client: Option<Client>,
@@ -79,6 +84,11 @@ impl Rcash {
         };
         Ok(Self {
             node: node.to_string(),
+            nodes: Vec::new(),
+            hostlist: true,
+            shard_id: "/root".to_string(),
+            phlo_limit: 1_000_000,
+            phlo_price: 1,
             manifest,
             v4_manifest,
             client: None,
@@ -698,8 +708,27 @@ impl Rcash {
             .ok_or_else(|| ChainError::BadKey("wallet is locked".into()))
     }
 
+    /// The pooled node client for the current network, endpoints and hostlist setting.
+    fn build_node(&self) -> rcash_chain::node::NodeClient {
+        use rcash_chain::node::pool::{DiscoveryMode, PoolOptions};
+        let options = PoolOptions {
+            discovery: if self.hostlist {
+                DiscoveryMode::Enabled
+            } else {
+                DiscoveryMode::Disabled
+            },
+            shard_id: self.shard_id.clone(),
+            explicit_nodes: self.nodes.clone(),
+            ..PoolOptions::default()
+        };
+        rcash_chain::node::NodeClient::new_with_options(self.node.clone(), options)
+            .expect("node URL is valid")
+    }
+
     fn build_client(&self, key: KeyPair) -> Client {
-        let mut client = Client::new(self.node.clone(), key).expect("node URL is valid");
+        let mut client = Client::with_node(self.build_node(), Some(key))
+            .with_shard(self.shard_id.clone())
+            .with_phlo(self.phlo_limit, self.phlo_price);
         if let Some(manifest) = &self.manifest {
             client = client.with_manifest(manifest.clone());
         }
@@ -711,7 +740,9 @@ impl Rcash {
 
     /// A keyless client, for public reads that do not need `deployerId`.
     fn reader(&self) -> Client {
-        let mut client = Client::reader(self.node.clone()).expect("node URL is valid");
+        let mut client = Client::with_node(self.build_node(), None)
+            .with_shard(self.shard_id.clone())
+            .with_phlo(self.phlo_limit, self.phlo_price);
         if let Some(manifest) = &self.manifest {
             client = client.with_manifest(manifest.clone());
         }
@@ -724,6 +755,73 @@ impl Rcash {
 
 #[wasm_bindgen]
 impl Rcash {
+    /// Set the shard and phlo used by signed writes (devnet `/root`, testnet `/testnet`).
+    ///
+    /// An unlocked client is updated in place so a live session switches shards without
+    /// a re-unlock, and the pool drops any hostlist snapshot filtered for the old shard.
+    pub fn set_network(&mut self, shard_id: String, phlo_limit: i64, phlo_price: i64) {
+        self.shard_id = shard_id;
+        self.phlo_limit = phlo_limit;
+        self.phlo_price = phlo_price;
+        if let Some(client) = &mut self.client {
+            client.set_network(self.shard_id.clone(), phlo_limit, phlo_price);
+        }
+    }
+
+    /// Replace the explicit endpoint list. Accepts a JSON array or comma-separated string.
+    pub fn set_nodes(&mut self, nodes: &str) -> Result<(), JsValue> {
+        let parsed: Vec<String> = if nodes.trim_start().starts_with('[') {
+            serde_json::from_str(nodes).map_err(js_err)?
+        } else {
+            nodes
+                .split(',')
+                .map(str::trim)
+                .filter(|node| !node.is_empty())
+                .map(str::to_string)
+                .collect()
+        };
+        for node in &parsed {
+            if rcash_chain::node::pool::normalize_base(node).is_none() {
+                return Err(JsValue::from_str(&format!("invalid node URL: {node}")));
+            }
+        }
+        self.nodes = parsed;
+        if let Some(client) = &self.client {
+            client
+                .node()
+                .set_nodes(self.nodes.clone())
+                .map_err(js_err)?;
+        }
+        Ok(())
+    }
+
+    /// Enable or disable hostlist discovery for later operations.
+    pub fn set_hostlist(&mut self, enabled: bool) {
+        self.hostlist = enabled;
+        if let Some(client) = &self.client {
+            client.node().set_discovery(if enabled {
+                rcash_chain::node::pool::DiscoveryMode::Enabled
+            } else {
+                rcash_chain::node::pool::DiscoveryMode::Disabled
+            });
+        }
+    }
+
+    /// The endpoints currently known to the pool, as JSON.
+    pub fn node_list(&self) -> Result<String, JsValue> {
+        let nodes = match &self.client {
+            Some(client) => client.node().nodes(),
+            None => self.build_node().nodes(),
+        };
+        serde_json::to_string(&nodes).map_err(js_err)
+    }
+
+    /// Force a hostlist refresh and return its report as JSON.
+    pub async fn discover_nodes(&self) -> Result<String, JsValue> {
+        let report = self.build_node().discover().await.map_err(js_err)?;
+        serde_json::to_string(&report).map_err(js_err)
+    }
+
     /// Every listed currency.
     pub async fn v4_currencies(&self) -> Result<String, JsValue> {
         let list = self
@@ -1106,6 +1204,41 @@ fn parse_amount(value: &str) -> Result<i64, JsValue> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const MANIFEST: &str = r#"{
+        "directory_uri": "rho:id:abc",
+        "account_factory_uri": "rho:id:def",
+        "oracle_uri": "rho:id:ghi",
+        "zone_ngn_uri": "rho:id:jkl",
+        "zone_kes_uri": "rho:id:mno",
+        "components_uri": "rho:id:pqr",
+        "pool_installed": true
+    }"#;
+
+    #[test]
+    fn nodes_accept_json_and_csv() {
+        let mut wallet = Rcash::new("http://seed:40403", MANIFEST).unwrap();
+        wallet
+            .set_nodes(r#"["http://a:40403","http://b:40403"]"#)
+            .unwrap();
+        assert_eq!(wallet.nodes, vec!["http://a:40403", "http://b:40403"]);
+        wallet.set_nodes("http://c:40403, http://d:40403").unwrap();
+        assert_eq!(wallet.nodes, vec!["http://c:40403", "http://d:40403"]);
+    }
+
+    #[test]
+    fn the_hostlist_switch_reaches_the_pool() {
+        use rcash_chain::node::pool::DiscoveryMode;
+        let mut wallet = Rcash::new("http://seed:40403", MANIFEST).unwrap();
+        assert_eq!(wallet.build_node().discovery_mode(), DiscoveryMode::Enabled);
+        wallet.set_hostlist(false);
+        assert_eq!(
+            wallet.build_node().discovery_mode(),
+            DiscoveryMode::Disabled
+        );
+        wallet.set_hostlist(true);
+        assert_eq!(wallet.build_node().discovery_mode(), DiscoveryMode::Enabled);
+    }
 
     #[test]
     fn signs_the_r0a_fixture_identically() {

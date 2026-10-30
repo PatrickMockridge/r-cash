@@ -3,6 +3,7 @@ import { useWallet } from "../lib/store";
 import { listKeystores, type StoredKeystore } from "../lib/db";
 import { shortId } from "../lib/format";
 import { enabledCurrencies } from "../lib/mesh";
+import { DEVNET, TESTNET, type NetworkProfile } from "../lib/network";
 import { usePreferences } from "../lib/preferences";
 
 export default function Settings() {
@@ -35,6 +36,23 @@ export default function Settings() {
     }
   };
 
+  const applyPreset = async (profile: NetworkProfile) => {
+    setError(null);
+    setMessage(null);
+    setNodeInput(profile.node);
+    try {
+      const response = await fetch(profile.manifestPath);
+      if (!response.ok) {
+        setMessage(`${profile.name}: ${profile.node} selected; paste the manifest below.`);
+        return;
+      }
+      setManifestInput(await response.text());
+      setMessage(`${profile.name}: node and manifest loaded. Save configuration.`);
+    } catch (cause) {
+      setMessage(`${profile.name}: node selected; manifest not served (${String(cause)}).`);
+    }
+  };
+
   const exportWallet = async () => {
     setError(null);
     setMessage(null);
@@ -58,6 +76,14 @@ export default function Settings() {
     <div className="stack">
       <section className="panel">
         <h2>Settings</h2>
+        <div className="row">
+          <button onClick={() => void applyPreset(DEVNET)}>Use local devnet</button>
+          <button onClick={() => void applyPreset(TESTNET)}>Use public testnet</button>
+        </div>
+        <p className="muted small">
+          Public-testnet writes cost test REV and are signed with shard /testnet. The
+          key stays in this browser's encrypted keystore.
+        </p>
         <label className="field">
           Node public API
           <input

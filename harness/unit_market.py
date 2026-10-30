@@ -22,6 +22,8 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 sys.path.insert(0, str(ROOT / "harness"))
 
+import netconfig  # noqa: E402
+
 import deploy as node  # noqa: E402
 import sign_payload  # noqa: E402
 from feed_refresh import feed_uri, set_price  # noqa: E402
@@ -29,8 +31,8 @@ from minify_rho import minify  # noqa: E402
 from unit_feed import canonical  # noqa: E402
 from unit_v3 import call, check, faucet_top_up, one  # noqa: E402
 
-KEYS = ROOT / ".devnet" / "keys.json"
-STATE = ROOT / ".devnet" / "v3-install.json"
+KEYS = netconfig.KEYS_PATH
+STATE = netconfig.STATE_PATH
 SCENARIOS = ROOT / "harness" / "scenarios"
 MARKET_ID = "REV/V4T:v1"
 BASE = "REV"

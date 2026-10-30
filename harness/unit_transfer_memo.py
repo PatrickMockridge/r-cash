@@ -24,12 +24,14 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 sys.path.insert(0, str(ROOT / "harness"))
 
+import netconfig  # noqa: E402
+
 import deploy as node  # noqa: E402
 from minify_rho import minify  # noqa: E402
 from unit_v3 import call, check, faucet_top_up, one  # noqa: E402
 
-KEYS = ROOT / ".devnet" / "keys.json"
-STATE = ROOT / ".devnet" / "v3-install.json"
+KEYS = netconfig.KEYS_PATH
+STATE = netconfig.STATE_PATH
 SCENARIOS = ROOT / "harness" / "scenarios"
 FUND = 15_000_000
 AMOUNT = 5_000_000

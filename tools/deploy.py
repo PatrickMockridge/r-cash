@@ -18,10 +18,17 @@ from pathlib import Path
 
 import requests
 
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "harness"))
+import netconfig  # noqa: E402
+
+REMOTE = netconfig.remote()
 CONTAINER = "devnet-bootstrap"
-HTTP = "http://localhost:40403"
+HTTP = netconfig.NODE_URL
 ADMIN = "http://localhost:40405"
-SHARD = "/root"
+SHARD = netconfig.SHARD_ID
+PHLO_LIMIT = netconfig.PHLO_LIMIT
+PHLO_PRICE = netconfig.PHLO_PRICE
 DEPLOY_RE = re.compile(r"DeployId is: ([0-9a-fA-F]+)")
 
 
@@ -40,9 +47,15 @@ class Refusal(DevnetError):
 
 def _json(method: str, path: str, body=None, base: str = HTTP, timeout: int = 30,
           attempts: int = 6):
-    url = f"{base}{path}"
+    # Reads may use any configured endpoint; signed/POST work stays on the chosen base.
+    bases = [base]
+    if method == "GET":
+        for endpoint in netconfig.live_endpoints():
+            if endpoint and endpoint not in bases:
+                bases.append(endpoint)
     last = "no attempt"
     for attempt in range(attempts):
+        url = f"{bases[attempt % len(bases)]}{path}"
         retry_after = None
         try:
             if method == "GET":
@@ -92,10 +105,70 @@ def write_term(term: str, container: str = CONTAINER) -> str:
     return path
 
 
+def _remote_deploy(term: str, secret: str, phlo_limit: int, phlo_price: int,
+                   base: str, valid_after: int | None) -> str:
+    """Submit through the Rust CLI over HTTP; the CLI signs and anchors at the tip.
+
+    The key name is resolved from the active keys file, so the secret never
+    appears in an argv. The CLI waits for processing and finality, which is the
+    behaviour the testnet needs on an idle chain.
+    """
+    if not netconfig.CLI_BINARY.is_file():
+        raise DevnetError(f"missing {netconfig.CLI_BINARY}; run cargo build -p rcash-cli")
+    name = netconfig.key_name_for_secret(secret)
+    import tempfile
+    with tempfile.NamedTemporaryFile("w", suffix=".rho", delete=False) as handle:
+        handle.write(term)
+        path = handle.name
+    try:
+        proc = subprocess.run(
+            [
+                str(netconfig.CLI_BINARY),
+                "--node", base,
+                "--keys", str(netconfig.KEYS_PATH),
+                "--key", name,
+                "--shard-id", SHARD,
+                "--phlo-limit", str(phlo_limit),
+                "--phlo-price", str(phlo_price),
+                *netconfig.pool_argument(base),
+                "--json", "deploy", path,
+            ],
+            capture_output=True, text=True, timeout=netconfig.DEPLOY_TIMEOUT,
+        )
+    finally:
+        Path(path).unlink(missing_ok=True)
+    lines = (proc.stdout or "").strip().splitlines()
+    doc = None
+    for line in reversed(lines):
+        if line.strip().startswith("{"):
+            try:
+                doc = json.loads(line)
+                break
+            except json.JSONDecodeError:
+                continue
+    if doc is None:
+        detail = ((proc.stdout or "") + (proc.stderr or "")).strip()[:3000]
+        lowered = detail.lower()
+        if "429" in lowered:
+            raise Refusal("429", detail)
+        if "503" in lowered or "resource_exhausted" in lowered:
+            raise Refusal("503", detail)
+        if "duplicate" in lowered:
+            raise Refusal("duplicate", detail)
+        raise DevnetError(f"remote deploy failed (rc={proc.returncode}): {detail}")
+    if doc.get("error"):
+        raise DevnetError(f"remote deploy failed: {doc['error']}")
+    if "success" not in str(doc.get("status", "")).lower():
+        raise DevnetError(f"remote deploy not successful: {doc}")
+    return doc["deployId"]
+
+
 def deploy(term: str, secret: str, phlo_limit: int = 2_000_000, phlo_price: int = 1,
            container: str = CONTAINER, valid_after: int | None = None,
            base: str = HTTP) -> str:
     """Submit a signed deploy and return its deploy id (the deploy signature, hex)."""
+    if REMOTE:
+        return _remote_deploy(term, secret, phlo_limit, phlo_price, base, valid_after)
     vabn = height(base) if valid_after is None else valid_after
     path = write_term(term, container)
     proc = docker_exec([
@@ -222,11 +295,44 @@ def data_at_name(name: str, block_hash: str = "", base: str = HTTP):
 
 
 def faucet(address: str, base: str = HTTP):
+    if REMOTE:
+        url = netconfig.profile().get("faucetUrl")
+        if not url:
+            raise DevnetError("no faucetUrl in the testnet profile")
+        try:
+            response = requests.post(url, json={"address": address},
+                                     timeout=netconfig.READ_TIMEOUT)
+        except requests.RequestException as error:
+            raise DevnetError(f"faucet: {error}") from error
+        if response.status_code >= 400:
+            raise DevnetError(f"faucet {response.status_code}: {response.text[:500]}")
+        return response.json()
     return _json("POST", "/api/v1/faucet", body={"address": address}, base=base)
 
 
 def propose(base: str = ADMIN):
+    if REMOTE:
+        raise DevnetError("manual propose is disabled on the public testnet")
     return _json("POST", "/api/v1/propose", base=base, timeout=120)
+
+
+_tick_counter = 0
+
+
+def tick(secret: str | None = None) -> str:
+    """Produce one block on an idle chain with a unique cheap deploy.
+
+    Testnet has no autopropose; a block appears only when a deploy arrives.
+    The counter in the term keeps two ticks in the same timestamp second from
+    colliding into one deploy id.
+    """
+    global _tick_counter
+    _tick_counter += 1
+    if secret is None:
+        secret = netconfig.load_keys()["deployer"]["secret"]
+    term = f'new x in {{ x!({_tick_counter}) }}'
+    return deploy(term, secret, phlo_limit=netconfig.TICKER_PHLO_LIMIT,
+                  phlo_price=netconfig.PHLO_PRICE)
 
 
 def extract_strings(value) -> list[str]:

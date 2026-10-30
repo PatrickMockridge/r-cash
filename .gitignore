@@ -23,3 +23,6 @@ web/playwright-report/
 
 # Lean build artifacts
 spec/lean/.lake/
+
+# mdBook output
+book/book/

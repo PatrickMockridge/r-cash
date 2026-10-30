@@ -24,14 +24,15 @@ sys.path.insert(0, str(ROOT / "tools"))
 sys.path.insert(0, str(ROOT / "harness"))
 
 import install_testnet as net  # noqa: E402
+import netconfig  # noqa: E402
 import sign_payload  # noqa: E402
 from unit_feed import blake2b256, canonical  # noqa: E402
 
-TESTNET_KEYS = ROOT / ".testnet" / "keys.json"
+TESTNET_KEYS = netconfig.KEYS_PATH
 DEVNET_KEYS = ROOT / ".devnet" / "keys.json"
-STATE = ROOT / ".testnet" / "install.json"
-MANIFEST = ROOT / "deployments" / "testnet-v4.json"
-NODE = "http://164.90.140.144:40403"
+STATE = netconfig.STATE_PATH
+MANIFEST = netconfig.MANIFEST_PATH
+NODE = netconfig.NODE_URL
 INSTALLER: "net.Installer | None" = None
 CURRENCY = "TUSD"
 REPORTERS = ["reporter1", "reporter2", "reporter3"]
@@ -189,11 +190,11 @@ def deploy_stablecoin(state: dict, sponsor: dict) -> list:
     })
     doc = deploy_term(term)
     found = net.uris(doc)
-    if len(found) < 7:
-        raise SystemExit(f"stablecoin deploy returned {found} (want seven URIs)")
-    sc, custody, params_uri, vault, liq, savings, psm = found[:7]
-    listing = (f"rcash:currency-register:v2|{CURRENCY}|{sc}|{custody}|{params_uri}|"
-               f"{vault}|{liq}|{savings}|{psm}|{params_hash}|{sponsor['public']}")
+    if len(found) < 8:
+        raise SystemExit(f"stablecoin deploy returned {found} (want eight URIs)")
+    sc, custody, params_uri, vault, liq, savings, buffer, psm = found[:8]
+    listing = (f"rcash:currency-register:v3|{CURRENCY}|{sc}|{custody}|{params_uri}|"
+               f"{vault}|{liq}|{savings}|{psm}|{buffer}|{params_hash}|{sponsor['public']}")
     listing_sig = sign_payload.sign_payload(
         sponsor["secret"], listing.encode())["signature"]
     register = (
@@ -202,8 +203,8 @@ def deploy_stablecoin(state: dict, sponsor: dict) -> list:
         f"  rl!(`{state['currency_registry_uri']}`, *ch) |\n"
         f"  for (Registry <- ch) {{\n"
         f'    Registry!("register", "{CURRENCY}", "{sc}", "{custody}", "{params_uri}", '
-        f'"{vault}", "{liq}", "{savings}", "{psm}", "{params_hash}", "{sponsor["public"]}", '
-        f'"{listing_sig}".hexToBytes(), *r) |\n'
+        f'"{vault}", "{liq}", "{savings}", "{psm}", "{buffer}", "{params_hash}", '
+        f'"{sponsor["public"]}", "{listing_sig}".hexToBytes(), *r) |\n'
         f"    for (@x <- r) {{ deployId!(x) }}\n"
         f"  }}\n"
         f"}}"
@@ -211,20 +212,24 @@ def deploy_stablecoin(state: dict, sponsor: dict) -> list:
     listed = deploy_term(register)
     if "true" not in json.dumps(listed.get("result")).lower():
         raise SystemExit(f"currency listing refused: {listed.get('result')}")
-    return [sc, custody, params_uri, vault, liq, params_hash, savings, psm]
+    return [sc, custody, params_uri, vault, liq, params_hash, savings, psm, buffer]
 
 
 def main(argv: list[str] | None = None) -> int:
-    global NODE, INSTALLER
+    global NODE, INSTALLER, MANIFEST
     ap = argparse.ArgumentParser()
     ap.add_argument("--node", default=NODE)
     ap.add_argument("--allow-live", action="store_true")
     ap.add_argument("--keys", type=Path, default=TESTNET_KEYS)
     ap.add_argument("--state", type=Path, default=STATE)
     ap.add_argument("--ops", type=Path, default=ROOT / ".testnet" / "ops")
-    ap.add_argument("--admin-keys", type=Path, default=DEVNET_KEYS)
+    ap.add_argument("--admin-keys", type=Path,
+                    default=(netconfig.KEYS_PATH if netconfig.is_testnet()
+                             else DEVNET_KEYS))
+    ap.add_argument("--manifest", type=Path, default=MANIFEST)
     args = ap.parse_args(argv)
     NODE = args.node
+    MANIFEST = args.manifest
     INSTALLER = net.Installer(
         args.node, args.allow_live, args.keys, args.state, args.ops, args.admin_keys
     )
