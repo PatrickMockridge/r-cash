@@ -93,6 +93,9 @@ platform behaviour:
 - A failed deploy rolls back tuple space and native state.
 - An unmatched `for` is silent, so every arm must reply or be deliberately fire-and-forget.
 - BigInt intermediates need `.toInt()` at fixed-point boundaries.
+- Rholang has no built-in decimal type: the exact decimal added in October 2026 was removed
+  before mainnet (issue #527). R-Cash never used it; every amount is an 8-decimal integer count
+  of base units, and decimal strings are only an input format at the client edge.
 - `explore-deploy` has no block context, so freshness-gated reads must be signed deploys.
 
 These are not incidental trivia. They explain why the stablecoin system is one deploy, why

@@ -32,4 +32,4 @@ pub fn sign_payload_hex(key: &KeyPair, payload: &[u8]) -> Result<String, ChainEr
 }
 
 /// The pinned node crate revision.
-pub const NODE_COMMIT: &str = "e2d073dcd02f1e560ccb84749937138a1e184b0b";
+pub const NODE_COMMIT: &str = "841cb842876369deaa63e3b3e26c20d60e6c74c6";

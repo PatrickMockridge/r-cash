@@ -30,7 +30,7 @@ pub fn claim_hash(secret_hex: &str) -> Result<String, JsValue> {
 
 #[wasm_bindgen]
 pub fn node_commit() -> String {
-    "e2d073dcd02f1e560ccb84749937138a1e184b0b".to_string()
+    "841cb842876369deaa63e3b3e26c20d60e6c74c6".to_string()
 }
 
 /// Sign the R0a parity fixture (test-only).
