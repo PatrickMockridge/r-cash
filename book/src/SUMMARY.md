@@ -5,6 +5,7 @@
 # Part I — Orientation
 
 - [What is R-Cash?](orientation/what-is-rcash.md)
+- [The north star](orientation/north-star.md)
 - [Who it is for](orientation/who-it-is-for.md)
 - [Design principles](orientation/principles.md)
 - [Why rholo?](orientation/why-rholo.md)

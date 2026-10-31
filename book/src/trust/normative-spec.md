@@ -16,6 +16,10 @@ a change flows through the repository.
 
 The [repository map](repository-map.md) lists where each layer lives.
 
+The [north star](../orientation/north-star.md) and the [design principles](../orientation/principles.md)
+are explanatory. They can rule a proposal out, but they are not a source of requirements. Normative
+behaviour still lives in `docs/SPEC.md` and the flows.
+
 ## How to read SPEC.md
 
 `docs/SPEC.md` is a product specification written in RFC 2119 language: MUST, MUST NOT,
