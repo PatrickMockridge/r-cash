@@ -16,7 +16,10 @@ convert → pay → get paid**.
 ## Documentation
 
 The book is the human-readable explanation: start with
-[**What is R-Cash?**](book/src/index.md), then follow the parts in order.
+[**What is R-Cash?**](book/src/index.md), then follow the parts in order. The
+[north star](book/src/orientation/north-star.md) explains why the protocol exists, the boundary
+between the settlement core and the business-logic repos built on it, and the tests used to resolve
+qualitative product decisions.
 
 ```sh
 make docs        # build to book/book

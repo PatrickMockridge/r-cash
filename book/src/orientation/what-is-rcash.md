@@ -8,6 +8,9 @@ plus clients that expose them.
 The one-sentence version: **hold local-currency balances, receive as if local, convert
 directly, and pay anyone — with a wallet or a claim link.**
 
+The [north star](north-star.md) explains why the protocol exists and fixes the boundary between
+the settlement core and the business-logic repositories built on top of it.
+
 ## The problem
 
 Cross-border payments into and across under-served markets are expensive, slow and
@@ -60,6 +63,9 @@ oracle cross-rate. The settlement asset is always local.
 - **Not a general DeFi suite.** There is no lending market for arbitrary assets, no yield
   farm, no governance token and no leveraged trading. The economic machinery exists to make
   a payments currency credible, not to maximise speculative surface.
+- **Not a business-logic suite.** Invoicing, payroll, logistics and trade finance belong in
+  other repositories that build on the settlement core; R-Cash supplies the rail, not the
+  applications.
 - **Not custodial.** The user's key controls the account. The protocol never holds user keys
   and never needs a custodian to move on-chain value.
 - **Not a fiat ramp.** Local fiat on/off-ramp and payout are partner-dependent and happen
@@ -97,7 +103,7 @@ central-bank digital currency. The Lean formal-specification package is called `
 that name is not a separate product. The protocol is not affiliated with a central bank, a
 mobile-money operator or an existing stablecoin issuer.
 
-> **Where to go deeper.** The product intent is in
+> **Where to go deeper.** The product scope is in
 > [`docs/SPEC.md` §2](https://github.com/PatrickMockridge/r-cash/blob/main/docs/SPEC.md#2-scope-actors-and-units).
 > The competitive framing and actor list are in [Who it is for](who-it-is-for.md); the
 > principles that constrain the design are in [Design principles](principles.md).

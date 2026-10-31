@@ -12,6 +12,20 @@ stablecoin per currency, runs a DAI-shaped issuer to keep it credible, provides 
 markets between currencies, and lets people pay with a wallet or a claim link. The loop is
 hold → receive → convert → pay → get paid.
 
+### Is R-Cash decentralised?
+
+Settlement is non-custodial and permissionless, but governance is not decentralised today. A 2-of-3
+admin multisig with a timelock can change risk parameters and pause a currency; the oracle is a
+three-reporter committee; there is no token vote or DAO. The direction is fewer required
+intermediaries and more replaceable trust, not a claim that the destination has been reached. See
+[The north star](../orientation/north-star.md).
+
+### Where do payroll, invoicing and logistics live?
+
+In other repositories that consume R-Cash. R-Cash is the settlement and market core — stablecoins,
+stablecoin pairs, the mesh DEX and the payment primitives — not the business-logic suite. Those
+applications end in a payment that R-Cash supplies. See [The north star](../orientation/north-star.md).
+
 ### Is the currency a USD stablecoin?
 
 No. Each currency has its own native stablecoin (rNGN, rKES, …). USD is the default display

@@ -34,6 +34,9 @@ trace a claim to a source, do not write it.
 ## Read first
 
 - `book/src/index.md` — what the product is.
+- `book/src/orientation/north-star.md` — why the product exists, the settlement-core boundary, and
+  how qualitative decisions are resolved.
+- `book/src/orientation/principles.md` — the eight design principles and their consequences.
 - `book/src/trust/normative-spec.md` — how the spec layers fit together.
 - `docs/SPEC.md` §1 and §18 — requirement ids, statuses, invariants and refusals.
 - `docs/spec/README.md` and `docs/spec/flows/README.md` — the formal core and flow method.
@@ -161,6 +164,37 @@ tools and native artifacts. Do not add a native dependency or a C/C++ toolchain.
   presented as done.
 - Update the book and `README.md` for user-visible changes; run `make docs-check`.
 - Links to normative files use GitHub URLs; internal book links are relative Markdown.
+
+### Qualitative decisions
+
+When the specification and evidence do not settle a product choice, apply the north star's tests
+in order:
+
+1. **Evidence and status honesty** — every claim traces to code, `docs/SPEC.md` or evidence, with
+   its status stated.
+2. **Named trust boundaries** — oracle, governor, ramp, bootstrap and chain trust stay explicit and
+   isolatable.
+3. **Layer discipline** — the change is stablecoin issuance, a stablecoin pair, the mesh DEX, or an
+   account/transfer/claim/settlement primitive. Business logic belongs in other repos; do not pull
+   it into the core.
+4. **Settlement-path and intermediary removal** — local-to-local, direct and non-custodial; no
+   mandatory dollar hop or new trust premium.
+5. **Local-currency credibility** — strengthen the local issuer, liquidity or unit of account.
+6. **Access without a bank or wallet** — a key, a claim link or a permissionless pair is enough;
+   ramp and KYC stay partner boundaries.
+7. **Universal-dependency quality** — reusable primitives, stable interfaces, no vertical-specific
+   assumptions.
+8. **Speculative-surface refusal** — no leverage, yield farming, gambling, governance token or
+   trading for its own sake.
+
+Tests 1–3 are vetoes. Among 4–7 the earlier test wins. Test 8 is a default no that needs a direct,
+evidenced payment or credibility justification. Record the decision and any deliberate trade-off in
+the pull request, naming the test that was failed.
+
+These tests are explanatory, not normative. They do not override the authority order, do not create
+requirements, and never justify inventing a behaviour, parameter, address or status. A decision that
+creates or changes a requirement must be encoded in `docs/SPEC.md` and the contract/flow layers
+first.
 
 ### Secrets and safety
 

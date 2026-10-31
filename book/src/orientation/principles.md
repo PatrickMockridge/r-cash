@@ -3,6 +3,13 @@
 Eight principles shape every contract and client decision. They are not marketing copy:
 each one has a consequence you can see in the code, and each one rules something out.
 
+The [north star](north-star.md) states why the protocol exists and fixes its boundary: R-Cash is
+the settlement and market core — local stablecoins, stablecoin pairs, the mesh DEX and the
+payment primitives — not the business-logic suite built on top. These eight principles are its
+operational consequences. They are explanatory, not normative; a decision that creates or changes
+a requirement must be encoded in
+[`docs/SPEC.md`](https://github.com/PatrickMockridge/r-cash/blob/main/docs/SPEC.md).
+
 ## 1. Non-custodial
 
 The user's key controls the account. The protocol never holds user keys and never needs a
@@ -112,8 +119,8 @@ The status page separates what passed, what is blocked and what was never attemp
 **What it rules out:** a "decentralised" claim over an off-chain payout, and a green check
 where the evidence is a blocked testnet.
 
-> **Where to go deeper.** The principles are stated in the project intent and encoded as
-> requirements in [`docs/SPEC.md`](https://github.com/PatrickMockridge/r-cash/blob/main/docs/SPEC.md).
+> **Where to go deeper.** The principles follow from the [north star](north-star.md) and are
+> encoded as requirements in [`docs/SPEC.md`](https://github.com/PatrickMockridge/r-cash/blob/main/docs/SPEC.md).
 > The capability rules are in
 > [`docs/SPEC.md` §3](https://github.com/PatrickMockridge/r-cash/blob/main/docs/SPEC.md#3-system-model-and-authority);
 > the exclusions are in

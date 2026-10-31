@@ -7,7 +7,8 @@ local currencies, receive money as if they had a local account, convert directly
 currencies, and pay anyone — with a wallet or with a claim link. Liquidity providers, not
 correspondent banks, earn the FX spread.
 
-The protocol is built from four ideas that reinforce one another:
+The protocol is built from four ideas that reinforce one another, under a single
+[north star](orientation/north-star.md):
 
 1. **Local-currency stablecoins** give each currency a native on-chain unit that can be held
    and moved.
@@ -58,13 +59,18 @@ market between the two local units price the conversion, and let a claim link re
 recipient who does not yet have a wallet. The dollar is a reference price, not a required
 stop.
 
+The [north star](orientation/north-star.md) sets out the wider thesis: why payments come first,
+where the settlement core ends and other business-logic repos begin, and the tests used to resolve
+qualitative product decisions.
+
 ## What is in this book
 
-The book is written to be read in order, but each part stands on its own.
+The book is written to be read in order — starting with [What is R-Cash?](orientation/what-is-rcash.md),
+then [The north star](orientation/north-star.md) — but each part stands on its own.
 
 | Part | What it answers |
 |---|---|
-| [Orientation](orientation/what-is-rcash.md) | What R-Cash is, who it serves, what it believes, and where the honest limits are |
+| [Orientation](orientation/what-is-rcash.md) | What R-Cash is, why it exists, what it deliberately leaves to other repos, who it serves, and where the honest limits are |
 | [The mental model](concepts/architecture.md) | The layered architecture, accounts and purses, deploys and authority |
 | [Mechanisms](mechanisms/oracles.md) | Oracles, the stablecoin issuer, vaults, liquidation, the buffer, savings, the PSM, markets, the mesh, payments, governance and registries |
 | [Using R-Cash](guides/quickstart.md) | Devnet quickstart, CLI, web app, adding a currency, the public testnet, operations |
