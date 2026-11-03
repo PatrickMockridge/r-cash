@@ -56,7 +56,7 @@ fn hostlist_body() -> String {
              "shardId": "/root", "nodeVersion": "0.1.0", "latestBlockNumber": 100,
              "proposer": true, "acceptsDeploys": true, "self": false},
             {"nodeId": "bb", "httpUrl": "http://b:40403", "networkId": "testnet",
-             "shardId": "/root", "nodeVersion": "0.1.0", "latestBlockNumber": 90,
+             "shardId": "/root", "nodeVersion": "0.1.0", "latestBlockNumber": 95,
              "proposer": true, "acceptsDeploys": true, "self": false}
         ]
     })
@@ -128,7 +128,7 @@ async fn a_deploy_is_signed_at_the_planned_anchor_and_price() {
         } else if request.url == "http://a:40403/api/v1/status" {
             Ok(response(200, status_body("aa", 100, 1)))
         } else if request.url == "http://b:40403/api/v1/status" {
-            Ok(response(200, status_body("bb", 90, 7)))
+            Ok(response(200, status_body("bb", 95, 7)))
         } else if request.url.ends_with("/api/v1/deploy") {
             captured
                 .lock()
@@ -148,7 +148,7 @@ async fn a_deploy_is_signed_at_the_planned_anchor_and_price() {
     assert!(outcome.is_success());
     let bodies = bodies.lock().unwrap();
     assert_eq!(bodies.len(), 1);
-    assert_eq!(bodies[0]["data"]["validAfterBlockNumber"], 90);
+    assert_eq!(bodies[0]["data"]["validAfterBlockNumber"], 92);
     assert_eq!(bodies[0]["data"]["phloPrice"], 1);
     assert_eq!(post_urls(&log), vec!["http://a:40403/api/v1/deploy"]);
 }
@@ -161,7 +161,7 @@ async fn distinct_deploys_rotate_across_nodes() {
         } else if request.url == "http://a:40403/api/v1/status" {
             Ok(response(200, status_body("aa", 100, 1)))
         } else if request.url == "http://b:40403/api/v1/status" {
-            Ok(response(200, status_body("bb", 90, 1)))
+            Ok(response(200, status_body("bb", 95, 1)))
         } else if request.url.ends_with("/api/v1/deploy") {
             Ok(response(200, "Deployed"))
         } else if request.url.contains("/deploy-status/") {
@@ -185,6 +185,37 @@ async fn distinct_deploys_rotate_across_nodes() {
 }
 
 #[tokio::test]
+async fn a_batch_deploys_across_nodes() {
+    let (client, log) = client(move |request| {
+        if request.url == "http://seed:40403/api/v1/nodes" {
+            Ok(response(200, hostlist_body()))
+        } else if request.url.starts_with("http://a:40403/api/v1/status") {
+            Ok(response(200, status_body("aa", 100, 1)))
+        } else if request.url.starts_with("http://b:40403/api/v1/status") {
+            Ok(response(200, status_body("bb", 95, 1)))
+        } else if request.url.ends_with("/api/v1/deploy") {
+            Ok(response(200, "Deployed"))
+        } else if request.url.contains("/deploy-status/") {
+            Ok(response(200, processed_body()))
+        } else if request.url.contains("/api/is-finalized/") {
+            Ok(response(200, "true"))
+        } else {
+            panic!("unexpected URL {}", request.url)
+        }
+    });
+
+    let outcomes = client.deploy_terms(&["Nil", "Nil"], 2).await;
+    assert_eq!(outcomes.len(), 2);
+    assert!(outcomes
+        .iter()
+        .all(|outcome| outcome.as_ref().is_ok_and(|outcome| outcome.is_success())));
+    let urls = post_urls(&log);
+    assert_eq!(urls.len(), 2);
+    assert!(urls.iter().any(|url| url.starts_with("http://a:40403")));
+    assert!(urls.iter().any(|url| url.starts_with("http://b:40403")));
+}
+
+#[tokio::test]
 async fn a_cached_retry_stays_on_its_pinned_node() {
     let posts = Arc::new(AtomicUsize::new(0));
     let counter = posts.clone();
@@ -195,7 +226,7 @@ async fn a_cached_retry_stays_on_its_pinned_node() {
             if request.url.starts_with("http://a:") {
                 Ok(response(200, status_body("aa", 100, 1)))
             } else {
-                Ok(response(200, status_body("bb", 90, 1)))
+                Ok(response(200, status_body("bb", 95, 1)))
             }
         } else if request.url.ends_with("/api/v1/deploy") {
             let attempt = counter.fetch_add(1, Ordering::SeqCst);

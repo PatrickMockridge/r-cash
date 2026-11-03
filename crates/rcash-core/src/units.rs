@@ -2,7 +2,9 @@
 //!
 //! Every protocol amount is an integer count of base units, 1 whole unit = 1e8. Nothing
 //! in the client performs floating-point arithmetic on money: decimal strings are parsed
-//! exactly and rendered exactly.
+//! exactly and rendered exactly. These strings are R-Cash's own input format; they are not
+//! Rholang's removed built-in decimal type (rholo issue #527), and no amount is ever
+//! serialized as a decimal value.
 
 use serde::{Deserialize, Serialize};
 

@@ -3,6 +3,7 @@
 //! R0a establishes the client and the deploy lifecycle; the typed protocol operations
 //! (account, vault, pool, transfer, oracle) are added in R1/R2 on top of this core.
 
+use futures_util::stream::{self, StreamExt};
 use rcash_chain::deploy::DeployOptions;
 use rcash_chain::node::{DeployStatus, NodeClient};
 use rcash_chain::poll::PollPolicy;
@@ -247,6 +248,41 @@ impl Client {
             status,
             finalized,
         })
+    }
+
+    /// Deploy independent terms with bounded concurrency, preserving input order.
+    ///
+    /// Each term is planned, signed and submitted independently, so concurrent
+    /// calls rotate across the pool's eligible nodes. The result is in input
+    /// order; a failed term does not cancel the others.
+    pub async fn deploy_terms(
+        &self,
+        terms: &[&str],
+        concurrency: usize,
+    ) -> Vec<Result<DeployOutcome, ChainError>> {
+        let futures = terms
+            .iter()
+            .map(|term| async move { self.deploy_term(term).await });
+        stream::iter(futures)
+            .buffered(concurrency.max(1))
+            .collect()
+            .await
+    }
+
+    /// Submit independent terms with bounded concurrency, preserving input order.
+    /// Use `wait` on the returned ids to await finality.
+    pub async fn submit_terms(
+        &self,
+        terms: &[&str],
+        concurrency: usize,
+    ) -> Vec<Result<String, ChainError>> {
+        let futures = terms
+            .iter()
+            .map(|term| async move { self.submit_term(term).await });
+        stream::iter(futures)
+            .buffered(concurrency.max(1))
+            .collect()
+            .await
     }
 
     /// Submit a term under an operation id, reusing the exact signed bytes on retry.

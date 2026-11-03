@@ -11,6 +11,8 @@ required build; `make tla-check` runs it when it is on `PATH`.
 | `PoolConservation.tla` | reserves equal custody; `totalShares = minted − burned` |
 | `CapabilityProvenance.tla` | a caller-supplied capability never enters authoritative storage |
 | `AdminNonce.tla` | no nonce replay; every executed nonce is at or below the governor nonce |
+| `MarketCreateAtomicity.tla` | a committed sealed market slot always has a staged index record |
+| `PoolCriticalSection.tla` | a pool cell is never held across an external read phase |
 
 Each `.tla` has a `.cfg` with the invariants TLC should check. The models use small bounded
 domains (2 actors, 2 transfers, reserves up to 12) so TLC terminates.
@@ -44,11 +46,13 @@ Run all models:
 make tla-check
 ```
 
-All five models were checked with TLC 2.19 (tla2tools 1.7.4) on 2026-10-23:
+The five original models were checked with TLC 2.19 (tla2tools 1.7.4) on 2026-10-23:
 `AdminNonce` 64 states, `CapabilityProvenance` 13, `CellLinearity` 5,
-`PoolConservation` 60586, `TransferExclusivity` 13. The finite bounds are
-deliberately small; the models check the protocol shape, not production-scale
-state spaces. The v0.4 stablecoin issuer model is added with the issuer in Phase 1.
+`PoolConservation` 60586, `TransferExclusivity` 13. `MarketCreateAtomicity` and
+`PoolCriticalSection` were added with the 2026-11-03 HAZOP and have not yet been run under
+TLC in this checkout. The finite bounds are deliberately small; the models check the
+protocol shape, not production-scale state spaces. The v0.4 stablecoin issuer model is
+added with the issuer in Phase 1.
 
 The models are abstractions. They do not model phlo, the node scheduler or the Rholang
 parser; those are covered by `tools/measure_contracts.py` and the devnet scenarios.

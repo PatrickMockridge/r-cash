@@ -49,9 +49,9 @@ wasm-bindgen-futures = "0.4"
 serde-wasm-bindgen = "0.6"
 getrandom = { version = "0.4", features = ["wasm_js"] }
 
-# Pinned to the node commit the v0.1 protocol was measured against. The crates are
-# AGPL-3.0-only; see THIRD_PARTY_NOTICES.md. Path dependencies cannot read an env var, so
-# local hacking against ../rholo uses the documented `--config patch` invocation in
-# book/src/guides/cli.md rather than a path in this file.
-rchain-crypto = { git = "https://github.com/rhovision-org/rholo", rev = "e2d073dcd02f1e560ccb84749937138a1e184b0b", default-features = false }
-rchain-shared = { git = "https://github.com/rhovision-org/rholo", rev = "e2d073dcd02f1e560ccb84749937138a1e184b0b", default-features = false }
+# Pinned to the rholo dev revision that includes the built-in Decimal removal (issue #527).
+# The crates are AGPL-3.0-only; see THIRD_PARTY_NOTICES.md. Path dependencies cannot read an
+# env var, so local hacking against ../rholo uses the documented `--config patch` invocation
+# in book/src/guides/cli.md rather than a path in this file.
+rchain-crypto = { git = "https://github.com/rhovision-org/rholo", rev = "841cb842876369deaa63e3b3e26c20d60e6c74c6", default-features = false }
+rchain-shared = { git = "https://github.com/rhovision-org/rholo", rev = "841cb842876369deaa63e3b3e26c20d60e6c74c6", default-features = false }

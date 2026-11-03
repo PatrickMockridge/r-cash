@@ -43,6 +43,45 @@ struct Cli {
     /// Phlo price for signed deploys.
     #[arg(long, global = true, env = "RCASH_PHLO_PRICE", default_value_t = 1)]
     phlo_price: i64,
+    /// Write routing: `balanced` (default), `cost-first` or `utilization`.
+    #[arg(long, global = true, env = "RCASH_ROUTING", default_value = "balanced")]
+    routing: String,
+    /// Balanced mode: fee premium over the cheapest accepting floor, in bps.
+    #[arg(
+        long,
+        global = true,
+        env = "RCASH_FEE_PREMIUM_BPS",
+        default_value_t = 500
+    )]
+    fee_premium_bps: u32,
+    /// Balanced mode: minimum absolute fee premium over the cheapest floor.
+    #[arg(
+        long,
+        global = true,
+        env = "RCASH_FEE_PREMIUM_ABS",
+        default_value_t = 1
+    )]
+    fee_premium_abs: i64,
+    /// Utilization mode: absolute per-deploy fee ceiling.
+    #[arg(long, global = true, env = "RCASH_FEE_CEILING")]
+    fee_ceiling: Option<i64>,
+    /// Maximum cached tip skew when choosing a write target.
+    #[arg(long, global = true, env = "RCASH_MAX_TIP_SKEW", default_value_t = 8)]
+    max_tip_skew: i64,
+    /// Maximum verified nodes kept in the write pool.
+    #[arg(long, global = true, env = "RCASH_MAX_NODES", default_value_t = 64)]
+    max_nodes: usize,
+    /// Concurrent status probes during discovery and write planning.
+    #[arg(
+        long,
+        global = true,
+        env = "RCASH_PROBE_CONCURRENCY",
+        default_value_t = 8
+    )]
+    probe_concurrency: usize,
+    /// Seconds to wait for a deploy to be processed and finalized.
+    #[arg(long, global = true, env = "RCASH_POLL_TIMEOUT", default_value_t = 120)]
+    poll_timeout_secs: u64,
     /// Devnet keys file (plaintext; local tooling only).
     #[arg(long, global = true, default_value = ".devnet/keys.json")]
     keys: PathBuf,
@@ -741,6 +780,13 @@ async fn run(cli: Cli) -> Result<ExitCode> {
                     op_id,
                     stipend,
                 } => {
+                    // An empty opId disables the on-chain idempotency ledger.
+                    // Generate one by default and print it so a retry can reuse it.
+                    let op_id = if op_id.is_empty() {
+                        default_op_id()
+                    } else {
+                        op_id.clone()
+                    };
                     let sent = v4_signing_client(&cli)?
                         .v4_send_transfer(
                             to_pub,
@@ -749,14 +795,14 @@ async fn run(cli: Cli) -> Result<ExitCode> {
                             secret_hash,
                             *expiry,
                             memo,
-                            op_id,
+                            &op_id,
                             parse_amount(stipend)?,
                         )
                         .await?;
                     print_json_or(
                         &cli.json,
                         &serde_json::json!({
-                            "id": sent.id, "transfer": sent.uri,
+                            "id": sent.id, "transfer": sent.uri, "opId": op_id,
                         }),
                     );
                 }
@@ -1595,6 +1641,7 @@ async fn run(cli: Cli) -> Result<ExitCode> {
                     "discovery": report,
                     "error": error,
                     "nodes": node.nodes(),
+                    "stats": node.stats(),
                 });
                 println!("{value}");
             } else {
@@ -1695,6 +1742,8 @@ enum V4Cmd {
         expiry: i64,
         #[arg(long, default_value = "")]
         memo: String,
+        /// Operation id for idempotent retry. Generated and printed if omitted;
+        /// pass it again on retry to avoid a second debit.
         #[arg(long, default_value = "")]
         op_id: String,
         #[arg(long, default_value = "0")]
@@ -1845,6 +1894,20 @@ fn load_key_from(path: &std::path::Path, name: Option<&str>) -> Result<rcash_cha
     }
 }
 
+/// A process-unique operation id for a transfer. Not a secret; the on-chain
+/// ledger only needs uniqueness per owner so a retry can be recognized.
+fn default_op_id() -> String {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::time::{SystemTime, UNIX_EPOCH};
+    static SEQ: AtomicU64 = AtomicU64::new(0);
+    let seq = SEQ.fetch_add(1, Ordering::Relaxed);
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    format!("cli-{}-{}-{}", std::process::id(), nanos, seq)
+}
+
 fn parse_amount(value: &str) -> Result<i64> {
     Ok(rcash_core::Amount::parse(value)
         .map_err(|e| CliError::Usage(e.to_string()))?
@@ -1864,9 +1927,14 @@ fn load_v4_manifest(path: &std::path::Path) -> Result<rcash_core::manifest::V4Ma
 }
 
 fn with_network(client: Client, cli: &Cli) -> Client {
+    use rcash_chain::poll::PollPolicy;
     client
         .with_shard(cli.shard_id.clone())
         .with_phlo(cli.phlo_limit, cli.phlo_price)
+        .with_poll(PollPolicy {
+            timeout: std::time::Duration::from_secs(cli.poll_timeout_secs),
+            ..PollPolicy::default()
+        })
 }
 
 /// Build the pooled node client from the global flags.
@@ -1874,16 +1942,36 @@ fn with_network(client: Client, cli: &Cli) -> Client {
 /// Discovery is on by default and runs in the background; `--nodes` adds known endpoints
 /// to it. `--no-hostlist` is the escape hatch that leaves only --node/--nodes.
 fn node_client(cli: &Cli) -> Result<rcash_chain::node::NodeClient> {
-    use rcash_chain::node::pool::{DiscoveryMode, PoolOptions};
+    use rcash_chain::node::pool::{DiscoveryMode, PoolOptions, RoutingPolicy};
     let discovery = if cli.no_hostlist {
         DiscoveryMode::Disabled
     } else {
         DiscoveryMode::Enabled
     };
+    let routing = match cli.routing.as_str() {
+        "cost-first" | "cost_first" => RoutingPolicy::CostFirst,
+        "utilization" => RoutingPolicy::Utilization {
+            fee_ceiling: cli.fee_ceiling.unwrap_or(i64::MAX),
+            max_tip_skew: cli.max_tip_skew,
+        },
+        "balanced" | "" => RoutingPolicy::Balanced {
+            fee_premium_bps: cli.fee_premium_bps,
+            fee_premium_abs: cli.fee_premium_abs,
+            max_tip_skew: cli.max_tip_skew,
+        },
+        other => {
+            return Err(CliError::Usage(format!(
+                "unknown --routing '{other}'; use balanced, cost-first or utilization"
+            )))
+        }
+    };
     let options = PoolOptions {
         discovery,
         shard_id: cli.shard_id.clone(),
         explicit_nodes: cli.nodes.clone(),
+        max_verified_nodes: cli.max_nodes.max(1),
+        probe_concurrency: cli.probe_concurrency.max(1),
+        routing,
         ..PoolOptions::default()
     };
     Ok(rcash_chain::node::NodeClient::new_with_options(

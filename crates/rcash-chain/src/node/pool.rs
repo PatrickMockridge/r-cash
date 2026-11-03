@@ -27,10 +27,60 @@ pub const DEPLOY_LIFESPAN_BLOCKS: i64 = 50;
 
 pub const DEFAULT_HOSTLIST_TTL: Duration = Duration::from_secs(30);
 pub const DEFAULT_NEGATIVE_TTL: Duration = Duration::from_secs(60);
-pub const DEFAULT_MAX_VERIFIED_NODES: usize = 16;
+/// The verified pool is filled from the verified peers, not truncated before probing.
+pub const DEFAULT_MAX_VERIFIED_NODES: usize = 64;
+/// Cap on hostlist entries we are willing to probe in one cycle.
+pub const DEFAULT_MAX_HOSTLIST_ENTRIES: usize = 256;
 pub const DEFAULT_PROBE_TIMEOUT: Duration = Duration::from_secs(3);
+pub const DEFAULT_PROBE_CONCURRENCY: usize = 8;
+/// Bound the deploy-id pin map; a long-lived client must not grow without limit.
+pub const DEFAULT_MAX_BINDINGS: usize = 4096;
 /// A hostlist this old is not evidence of a live peer set.
 pub const MAX_HOSTLIST_AGE_MS: i64 = 10 * 60 * 1000;
+/// A `generatedAt` further in the future than this is treated as a bad clock.
+pub const MAX_HOSTLIST_FUTURE_SKEW_MS: i64 = 60 * 1000;
+
+/// How write targets are chosen.
+///
+/// `CostFirst` is the original exact-cheapest-tier policy. `Balanced` uses every
+/// accepting proposer within a configurable premium of the cheapest floor, so a
+/// healthy node one unit more expensive is still used. `Utilization` uses every
+/// accepting proposer under an absolute ceiling. All variants bound the tip skew
+/// so a deploy is not anchored near the end of its 50-block lifespan.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", tag = "kind")]
+pub enum RoutingPolicy {
+    CostFirst,
+    Balanced {
+        fee_premium_bps: u32,
+        fee_premium_abs: i64,
+        max_tip_skew: i64,
+    },
+    Utilization {
+        fee_ceiling: i64,
+        max_tip_skew: i64,
+    },
+}
+
+impl Default for RoutingPolicy {
+    fn default() -> Self {
+        Self::Balanced {
+            fee_premium_bps: 500,
+            fee_premium_abs: 1,
+            max_tip_skew: 8,
+        }
+    }
+}
+
+impl RoutingPolicy {
+    pub fn max_tip_skew(&self) -> i64 {
+        match self {
+            RoutingPolicy::CostFirst => 8,
+            RoutingPolicy::Balanced { max_tip_skew, .. }
+            | RoutingPolicy::Utilization { max_tip_skew, .. } => (*max_tip_skew).max(0),
+        }
+    }
+}
 
 /// Whether `NodeClient` may ask its seed for a hostlist.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -61,7 +111,10 @@ pub struct PoolOptions {
     pub hostlist_ttl: Duration,
     pub negative_ttl: Duration,
     pub max_verified_nodes: usize,
+    pub max_hostlist_entries: usize,
     pub probe_timeout: Duration,
+    pub probe_concurrency: usize,
+    pub routing: RoutingPolicy,
 }
 
 impl Default for PoolOptions {
@@ -74,7 +127,10 @@ impl Default for PoolOptions {
             hostlist_ttl: DEFAULT_HOSTLIST_TTL,
             negative_ttl: DEFAULT_NEGATIVE_TTL,
             max_verified_nodes: DEFAULT_MAX_VERIFIED_NODES,
+            max_hostlist_entries: DEFAULT_MAX_HOSTLIST_ENTRIES,
             probe_timeout: DEFAULT_PROBE_TIMEOUT,
+            probe_concurrency: DEFAULT_PROBE_CONCURRENCY,
+            routing: RoutingPolicy::default(),
         }
     }
 }
@@ -205,13 +261,32 @@ pub struct NodeStatusView {
     pub accepts_deploys: Option<bool>,
 }
 
+/// Per-endpoint counters for `doctor --json` and the load harness.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EndpointStats {
+    pub planned: u64,
+    pub submitted: u64,
+    pub rate_limited: u64,
+    pub unavailable: u64,
+    pub errors: u64,
+}
+
+/// A deploy-to-node pin, timestamped so the map can be bounded.
+#[derive(Clone, Debug)]
+pub(crate) struct Binding {
+    pub base: String,
+    pub at: Instant,
+}
+
 /// Mutable pool state. Guarded by a `std::sync::Mutex`; never held across an `await`.
 pub(crate) struct PoolState {
     pub options: PoolOptions,
     pub endpoints: Vec<NodeEndpoint>,
     pub read_cursor: usize,
     pub write_cursor: usize,
-    pub bindings: BTreeMap<String, String>,
+    pub bindings: BTreeMap<String, Binding>,
+    pub stats: BTreeMap<String, EndpointStats>,
     pub fetched_at: Option<Instant>,
     pub negative_until: Option<Instant>,
     pub unsupported: bool,
@@ -231,6 +306,7 @@ impl PoolState {
             read_cursor: 0,
             write_cursor: 0,
             bindings: BTreeMap::new(),
+            stats: BTreeMap::new(),
             fetched_at: None,
             negative_until: None,
             unsupported: false,
@@ -495,7 +571,80 @@ pub fn best_write_tier(ranked: &[NodeEndpoint]) -> &[NodeEndpoint] {
     &ranked[..len]
 }
 
-/// The lowest observed tip — the conservative `validAfterBlockNumber` anchor.
+/// The freshest observed tip.
+pub fn newest_tip(endpoints: &[NodeEndpoint]) -> Option<i64> {
+    endpoints.iter().filter_map(NodeEndpoint::known_tip).max()
+}
+
+/// Keep endpoints whose cached tip is within `max_tip_skew` of the freshest.
+/// An endpoint with no observed tip is kept for the live probe.
+pub fn filter_write_tip_window(endpoints: &[NodeEndpoint], max_tip_skew: i64) -> Vec<NodeEndpoint> {
+    let Some(max) = newest_tip(endpoints) else {
+        return endpoints.to_vec();
+    };
+    let floor = max.saturating_sub(max_tip_skew.max(0));
+    endpoints
+        .iter()
+        .filter(|endpoint| match endpoint.known_tip() {
+            Some(tip) => tip >= floor,
+            None => true,
+        })
+        .cloned()
+        .collect()
+}
+
+/// The fee ceiling for a routing policy.
+pub fn fee_limit(policy: &RoutingPolicy, configured_phlo_price: i64, best_fee: i64) -> i64 {
+    let base = configured_phlo_price.max(best_fee).max(0);
+    match policy {
+        RoutingPolicy::CostFirst => best_fee.max(0),
+        RoutingPolicy::Balanced {
+            fee_premium_bps,
+            fee_premium_abs,
+            ..
+        } => {
+            let pct = (i128::from(base) * i128::from(*fee_premium_bps) / 10_000) as i64;
+            base.saturating_add(pct.max(*fee_premium_abs).max(0))
+        }
+        RoutingPolicy::Utilization { fee_ceiling, .. } => (*fee_ceiling).max(0),
+    }
+}
+
+/// The proposers a policy would use, ordered by accepting, fee, tip and id.
+/// The caller keeps the remaining proposers as fallbacks.
+pub fn eligible_write_targets(
+    endpoints: &[NodeEndpoint],
+    policy: &RoutingPolicy,
+    configured_phlo_price: i64,
+) -> Vec<NodeEndpoint> {
+    let proposers: Vec<_> = endpoints
+        .iter()
+        .filter(|endpoint| endpoint.proposer)
+        .cloned()
+        .collect();
+    let fresh = filter_write_tip_window(&proposers, policy.max_tip_skew());
+    let best_fee = fresh
+        .iter()
+        .filter(|endpoint| endpoint.accepts_deploys)
+        .map(|endpoint| endpoint.min_phlo_price)
+        .min()
+        .unwrap_or(0);
+    let limit = fee_limit(policy, configured_phlo_price, best_fee);
+    let mut out: Vec<_> = fresh
+        .into_iter()
+        .filter(|endpoint| endpoint.accepts_deploys && endpoint.min_phlo_price <= limit)
+        .collect();
+    out.sort_by(|a, b| {
+        a.min_phlo_price
+            .cmp(&b.min_phlo_price)
+            .then(b.latest_block_number.cmp(&a.latest_block_number))
+            .then(a.node_id.cmp(&b.node_id))
+            .then(a.base.cmp(&b.base))
+    });
+    out
+}
+
+/// The lowest observed tip — kept for relay-aware callers and unit tests.
 pub fn compute_anchor(endpoints: &[NodeEndpoint]) -> Option<i64> {
     endpoints.iter().filter_map(NodeEndpoint::known_tip).min()
 }
@@ -682,5 +831,93 @@ mod tests {
         assert!(normalize_base("http://u:p@a:40403").is_none());
         assert!(normalize_base("ftp://a").is_none());
         assert!(normalize_base("http://").is_none());
+    }
+
+    fn writable(base: &str, fee: i64, tip: i64, accepts: bool) -> NodeEndpoint {
+        NodeEndpoint {
+            base: base.into(),
+            node_id: Some(base.into()),
+            latest_block_number: tip,
+            min_phlo_price: fee,
+            accepts_deploys: accepts,
+            proposer: true,
+            ..NodeEndpoint::seed(base)
+        }
+    }
+
+    #[test]
+    fn a_balanced_band_uses_a_slightly_more_expensive_node() {
+        let endpoints = vec![
+            writable("a", 1, 100, true),
+            writable("b", 2, 99, true),
+            writable("c", 10, 98, true),
+        ];
+        let balanced = RoutingPolicy::Balanced {
+            fee_premium_bps: 500,
+            fee_premium_abs: 1,
+            max_tip_skew: 8,
+        };
+        let eligible = eligible_write_targets(&endpoints, &balanced, 1);
+        let bases: Vec<_> = eligible.iter().map(|e| e.base.as_str()).collect();
+        assert_eq!(bases, vec!["a", "b"]);
+
+        let cost_first = RoutingPolicy::CostFirst;
+        let eligible = eligible_write_targets(&endpoints, &cost_first, 1);
+        let bases: Vec<_> = eligible.iter().map(|e| e.base.as_str()).collect();
+        assert_eq!(bases, vec!["a"]);
+    }
+
+    #[test]
+    fn the_tip_window_drops_a_stale_target() {
+        let endpoints = vec![writable("a", 1, 100, true), writable("b", 1, 90, true)];
+        let policy = RoutingPolicy::Balanced {
+            fee_premium_bps: 500,
+            fee_premium_abs: 1,
+            max_tip_skew: 8,
+        };
+        let eligible = eligible_write_targets(&endpoints, &policy, 1);
+        let bases: Vec<_> = eligible.iter().map(|e| e.base.as_str()).collect();
+        assert_eq!(bases, vec!["a"]);
+    }
+
+    #[test]
+    fn closed_nodes_are_not_eligible() {
+        let endpoints = vec![writable("a", 1, 100, false), writable("b", 1, 99, true)];
+        let policy = RoutingPolicy::Balanced {
+            fee_premium_bps: 500,
+            fee_premium_abs: 1,
+            max_tip_skew: 8,
+        };
+        let eligible = eligible_write_targets(&endpoints, &policy, 1);
+        let bases: Vec<_> = eligible.iter().map(|e| e.base.as_str()).collect();
+        assert_eq!(bases, vec!["b"]);
+    }
+
+    #[test]
+    fn the_fee_limit_is_bounded_by_the_policy() {
+        assert_eq!(fee_limit(&RoutingPolicy::CostFirst, 1, 3), 3);
+        assert_eq!(
+            fee_limit(
+                &RoutingPolicy::Balanced {
+                    fee_premium_bps: 500,
+                    fee_premium_abs: 1,
+                    max_tip_skew: 8
+                },
+                1,
+                10
+            ),
+            11
+        );
+        assert_eq!(
+            fee_limit(
+                &RoutingPolicy::Utilization {
+                    fee_ceiling: 7,
+                    max_tip_skew: 8
+                },
+                1,
+                10
+            ),
+            7
+        );
     }
 }

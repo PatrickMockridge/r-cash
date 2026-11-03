@@ -1361,6 +1361,7 @@ name = "rcash-sdk"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "futures-util",
  "rcash-chain",
  "rcash-core",
  "serde",
@@ -1392,7 +1393,7 @@ dependencies = [
 [[package]]
 name = "rchain-crypto"
 version = "0.1.0"
-source = "git+https://github.com/rhovision-org/rholo?rev=e2d073dcd02f1e560ccb84749937138a1e184b0b#e2d073dcd02f1e560ccb84749937138a1e184b0b"
+source = "git+https://github.com/rhovision-org/rholo?rev=841cb842876369deaa63e3b3e26c20d60e6c74c6#841cb842876369deaa63e3b3e26c20d60e6c74c6"
 dependencies = [
  "blake2",
  "crypto_box",
@@ -1416,7 +1417,7 @@ dependencies = [
 [[package]]
 name = "rchain-shared"
 version = "0.1.0"
-source = "git+https://github.com/rhovision-org/rholo?rev=e2d073dcd02f1e560ccb84749937138a1e184b0b#e2d073dcd02f1e560ccb84749937138a1e184b0b"
+source = "git+https://github.com/rhovision-org/rholo?rev=841cb842876369deaa63e3b3e26c20d60e6c74c6#841cb842876369deaa63e3b3e26c20d60e6c74c6"
 dependencies = [
  "async-trait",
  "lz4_flex",

@@ -8,7 +8,7 @@ new
   MarketIndex, indexState,
   MarketDirectory, directoryState,
   MarketFactory, TradabilityGate, ListingViews,
-  marketNow, marketVerifier, marketOracle, stageMarket, stagePriorCheck, stagePairCheck,
+  marketNow, marketVerifier, marketOracle, stageCheck, stageMarket, createMarketPool,
   activatePool, marketTransition, pauseAssetMarkets,
   marketOwner, marketOwnerCheck,
   marketAuth,
@@ -16,6 +16,7 @@ new
   revAddress(`rho:rev:address`),
   rs(`rho:registry:insertArbitrary`),
   deployerId(`rho:rchain:deployerId`),
+  deployerIdOps(`rho:rchain:deployerId:ops`),
   deployId(`rho:rchain:deployId`),
   ertpCh, rootCh, Root, uTerms, uIndex, uDirectory, uFactory,
   uGate, uViews, ack
@@ -70,21 +71,32 @@ in {
     revAddress!("fromPublicKey", pubHex.hexToBytes(), *ret)
   } |
 
-  // Sponsor identity checks: the signer owns the named sponsor address and is
-  // also the seed-lock beneficiary; the lock length meets the factory floor.
-  contract marketOwnerCheck(@terms, @sponsorHex, ret) = {
-    if (terms.get("lockBeneficiaryPubKey") != sponsorHex) {
-      ret!((false, "lock beneficiary"))
-    } else {
-      if (terms.get("lockMinBlocks") < __MIN_LOCK_BLOCKS__) {
-        ret!((false, "lock too short"))
-      } else {
-        new oCh in {
-          marketOwner!(sponsorHex, *oCh) |
-          for (@ownerId <- oCh) {
-            if (ownerId != terms.get("sponsorOwnerId")) {
-              ret!((false, "sponsor owner"))
-            } else { ret!((true, Nil)) }
+  // Sponsor identity checks: the submitter is the sponsor key, the sponsor
+  // owns the named address and is the seed-lock beneficiary, and the lock
+  // length meets the factory floor. Requiring the submitter removes
+  // third-party replay of a signed create payload.
+  contract marketOwnerCheck(@terms, @sponsorHex, dId, ret) = {
+    new pkCh in {
+      deployerIdOps!("pubKeyBytes", *dId, *pkCh) |
+      for (@pk <- pkCh) {
+        if (pk != sponsorHex.hexToBytes()) {
+          ret!((false, "bad sponsor"))
+        } else {
+          if (terms.get("lockBeneficiaryPubKey") != sponsorHex) {
+            ret!((false, "lock beneficiary"))
+          } else {
+            if (terms.get("lockMinBlocks") < __MIN_LOCK_BLOCKS__) {
+              ret!((false, "lock too short"))
+            } else {
+              new oCh in {
+                marketOwner!(sponsorHex, *oCh) |
+                for (@ownerId <- oCh) {
+                  if (ownerId != terms.get("sponsorOwnerId")) {
+                    ret!((false, "sponsor owner"))
+                  } else { ret!((true, Nil)) }
+                }
+              }
+            }
           }
         }
       }
@@ -99,7 +111,11 @@ in {
       if (from == "paused") {
         if (to == "active" || to == "delisted") { ret!(true) }
         else { ret!(false) }
-      } else { ret!(false) }
+      } else {
+        if (from == "draft") {
+          if (to == "delisted") { ret!(true) } else { ret!(false) }
+        } else { ret!(false) }
+      }
     }
   } |
 
@@ -164,12 +180,15 @@ in {
             ret!((true, Nil))
           }
           existing => {
-            if (existing.get("sealed")) {
-              directoryState!(s) | ret!((false, "sealed"))
+            // Create-only, with an exact retry idempotent. Never overwrite a
+            // different slot: a duplicate create must not replace a pool that
+            // the sponsor may already have seeded.
+            if (existing.get("termsHash") == slot.get("termsHash")
+                && existing.get("poolUri") == slot.get("poolUri")
+                && existing.get("lockUri") == slot.get("lockUri")) {
+              directoryState!(s) | ret!((true, Nil))
             } else {
-              directoryState!(s.set("slots", s.get("slots").set(marketId, slot))
-                               .set("rev", s.get("rev") + 1)) |
-              ret!((true, Nil))
+              directoryState!(s) | ret!((false, "exists", existing))
             }
           }
         }
@@ -253,11 +272,40 @@ in {
                                                 r2 => {
                                                   if (r2.get("status") != "draft") { ret!(1 / 0) }
                                                   else {
-                                                    indexState!(s2.set("markets",
-                                                      s2.get("markets").set(marketId,
-                                                        r2.set("status", "active")))
-                                                      .set("rev", s2.get("rev") + 1)) |
-                                                    ret!((true, "active"))
+                                                    new goCh in {
+                                                      match s2.get("byPair").get(record.get("pairKey")) {
+                                                        Nil => { goCh!(true) }
+                                                        owner => {
+                                                          if (owner == marketId) { goCh!(true) }
+                                                          else {
+                                                            match s2.get("markets").get(owner) {
+                                                              Nil => { goCh!(true) }
+                                                              p => {
+                                                                if (p.get("status") == "delisted"
+                                                                    && record.get("version") > p.get("version")) {
+                                                                  goCh!(true)
+                                                                } else { goCh!(false) }
+                                                              }
+                                                            }
+                                                          }
+                                                        }
+                                                      } |
+                                                      for (@ok <- goCh) {
+                                                        if (ok) {
+                                                          indexState!(s2.set("markets",
+                                                            s2.get("markets").set(marketId,
+                                                              r2.set("status", "active")))
+                                                            .set("byPair",
+                                                              s2.get("byPair").set(record.get("pairKey"), marketId)
+                                                                .set("market:" ++ record.get("quote")
+                                                                      ++ "/" ++ record.get("base"), marketId))
+                                                            .set("rev", s2.get("rev") + 1)) |
+                                                          ret!((true, "active"))
+                                                        } else {
+                                                          indexState!(s2) | ret!((false, "pair active"))
+                                                        }
+                                                      }
+                                                    }
                                                   }
                                                 }
                                               }
@@ -275,32 +323,57 @@ in {
                         }
   } |
 
-  // A prior market in either orientation owns the unordered pair.
-  contract stagePriorCheck(@s, @record, @prior, ret) = {
-    match s.get("markets").get(prior) {
-      Nil => { stageMarket!(s, record, *ret) }
-      p => {
-        if (p.get("status") == "active" || p.get("status") == "paused") {
-          indexState!(s) | ret!((false, "pair active"))
-        } else {
-          if (record.get("version") <= p.get("version")) {
-            indexState!(s) | ret!((false, "version"))
-          } else { stageMarket!(s, record, *ret) }
-        }
-      }
-    }
-  } |
-
-  contract stagePairCheck(@s, @record, ret) = {
-    match s.get("byPair").get(record.get("pairKey")) {
+  // Pure stage guard: the same checks as `MarketIndex.stage`, without writing.
+  // `stage` uses it after the take; `checkStage` uses it before the factory
+  // creates a pool or touches the directory, so a refused create cannot leave
+  // a bound or sealed slot behind. The prior-market check is inlined for both
+  // pair orientations to stay inside the contract budget.
+  contract stageCheck(@s, @record, ret) = {
+    match s.get("markets").get(record.get("marketId")) {
       Nil => {
-        match s.get("byPair").get(
-                "market:" ++ record.get("quote") ++ "/" ++ record.get("base")) {
-          Nil => { stageMarket!(s, record, *ret) }
-          prior => { stagePriorCheck!(s, record, prior, *ret) }
+        match s.get("bySlug").get(record.get("slug")) {
+          Nil => {
+            match s.get("byPair").get(record.get("pairKey")) {
+              Nil => {
+                match s.get("byPair").get(
+                        "market:" ++ record.get("quote") ++ "/" ++ record.get("base")) {
+                  Nil => { ret!((true, Nil)) }
+                  prior => {
+                    match s.get("markets").get(prior) {
+                      Nil => { ret!((true, Nil)) }
+                      p => {
+                        if (p.get("status") == "active" || p.get("status") == "paused") {
+                          ret!((false, "pair active"))
+                        } else {
+                          if (record.get("version") <= p.get("version")) {
+                            ret!((false, "version"))
+                          } else { ret!((true, Nil)) }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+              prior => {
+                match s.get("markets").get(prior) {
+                  Nil => { ret!((true, Nil)) }
+                  p => {
+                    if (p.get("status") == "active" || p.get("status") == "paused") {
+                      ret!((false, "pair active"))
+                    } else {
+                      if (record.get("version") <= p.get("version")) {
+                        ret!((false, "version"))
+                      } else { ret!((true, Nil)) }
+                    }
+                  }
+                }
+              }
+            }
+          }
+          _ => { ret!((false, "slug")) }
         }
       }
-      prior => { stagePriorCheck!(s, record, prior, *ret) }
+      _ => { ret!((false, "exists")) }
     }
   } |
 
@@ -331,17 +404,23 @@ in {
     if (auth != *marketAuth) { ret!((false, "bad index authority")) }
     else {
       for (@s <- indexState) {
-        match s.get("markets").get(record.get("marketId")) {
-          Nil => {
-            match s.get("bySlug").get(record.get("slug")) {
-              Nil => { stagePairCheck!(s, record, *ret) }
-              _ => { indexState!(s) | ret!((false, "slug")) }
+        new gCh in {
+          stageCheck!(s, record, *gCh) |
+          for (@g <- gCh) {
+            match g {
+              (true, Nil) => { stageMarket!(s, record, *ret) }
+              _ => { indexState!(s) | ret!(g) }
             }
           }
-          _ => { indexState!(s) | ret!((false, "exists")) }
         }
       }
     }
+  } |
+
+  // Read-only pre-check used by the factory before it creates a pool or writes
+  // the directory. A refusal here leaves the index and directory untouched.
+  contract MarketIndex(@"checkStage", @record, ret) = {
+    for (@s <<- indexState) { stageCheck!(s, record, *ret) }
   } |
 
   contract MarketIndex(@"activate", @marketId, ret) = {
@@ -639,8 +718,74 @@ in {
     }
   } |
 
-  contract MarketFactory(@"createMarket", @terms, @values, @sponsorHex, @sig, ret) = {
-    new vCh, hCh, regCh, oCh, bpCh, qpCh, lpCh, dataCh, spCh in {
+  // Create the pool, bind and seal the directory slot, then stage the index.
+  // The stage pre-check has already passed in the caller. Any refusal after
+  // bind/seal fails the deploy so the directory write rolls back.
+  contract createMarketPool(@terms, @termsHash, @record, ret) = {
+    new tCh, trCh, tc, pcCh, bindCh, sealCh, stageCh in {
+      rl!(`__ROOT_URI__`, *tCh) |
+      for (Root <- tCh) {
+        Root!("resolve", "component:pool-template", 1, *trCh) |
+        for (@(true, tplUri, _) <- trCh) {
+          rl!(tplUri, *tc) |
+          for (PoolTemplate <- tc) {
+            PoolTemplate!("create", terms, termsHash, *pcCh) |
+            for (@pc <- pcCh) {
+              match pc {
+                (true, poolUri, lockUri) => {
+                  MarketDirectory!("bind", terms.get("marketId"),
+                    {"poolUri": poolUri, "lockUri": lockUri,
+                     "termsHash": termsHash, "sealed": false},
+                    *marketAuth, *bindCh) |
+                  for (@bound <- bindCh) {
+                    match bound {
+                      (true, Nil) => {
+                        MarketDirectory!("seal", terms.get("marketId"),
+                                         *marketAuth, *sealCh) |
+                        for (@sealed <- sealCh) {
+                          match sealed {
+                            (true, Nil) => {
+                              MarketIndex!("stage", record, *marketAuth, *stageCh) |
+                              for (@staged <- stageCh) {
+                                match staged {
+                                  (true, _) => {
+                                    ret!((true, terms.get("marketId"),
+                                          poolUri, lockUri, termsHash))
+                                  }
+                                  _ => { ret!(1 / 0) }
+                                }
+                              }
+                            }
+                            _ => { ret!(1 / 0) }
+                          }
+                        }
+                      }
+                      (false, "exists", existing) => {
+                        // A concurrent create won the slot. Same terms is an
+                        // idempotent success; a different slot is refused
+                        // without touching the winner.
+                        if (existing.get("termsHash") == termsHash) {
+                          ret!((true, terms.get("marketId"),
+                                existing.get("poolUri"),
+                                existing.get("lockUri"), termsHash))
+                        } else { ret!((false, "exists", existing)) }
+                      }
+                      _ => { ret!(bound) }
+                    }
+                  }
+                }
+                _ => { ret!(pc) }
+              }
+            }
+          }
+        }
+      }
+    }
+  } |
+
+  contract MarketFactory(@"createMarket", @terms, @values, @sponsorHex, @sig, dId, ret) = {
+    new vCh, hCh, regCh, oCh, bpCh, qpCh, dataCh, spCh,
+        slotCh, idxCh, ckCh, stCh, recCh in {
       marketVerifier!(*vCh) |
       for (Verifier <- vCh) {
         MarketTerms!("put", terms, values, *hCh) |
@@ -658,104 +803,112 @@ in {
                     if (terms.get("sponsorPubKey") != sponsorHex) {
                       ret!((false, "sponsor mismatch"))
                     } else {
-                      marketOwnerCheck!(terms, sponsorHex, *spCh) |
+                      marketOwnerCheck!(terms, sponsorHex, *dId, *spCh) |
                       for (@sp <- spCh) {
                         match sp {
                           (true, Nil) => {
-                      marketOracle!(*regCh) |
-                      for (Registry <- regCh) {
-                        Registry!("feedEntry", terms.get("base"), *bpCh) |
-                        Registry!("feedEntry", terms.get("quote"), *qpCh) |
-                        for (@bf <- bpCh; @qf <- qpCh) {
-                          match bf {
-                            (true, bfeed) => {
-                              match qf {
-                                (true, qfeed) => {
-                                  if (bfeed.get("policyHash") != terms.get("baseFeedPolicyHash")) {
-                                    ret!((false, "base feed policy"))
-                                  } else {
-                                    if (qfeed.get("policyHash") != terms.get("quoteFeedPolicyHash")) {
-                                      ret!((false, "quote feed policy"))
-                                    } else {
-                                      if (bfeed.get("status") != "active"
-                                          || qfeed.get("status") != "active") {
-                                        ret!((false, "feed inactive"))
-                                      } else {
-                                        new tCh, trCh, tc, pcCh, bindCh, sealCh, stageCh in {
-                                          rl!(`__ROOT_URI__`, *tCh) |
-                                          for (Root <- tCh) {
-                                            Root!("resolve", "component:pool-template", 1, *trCh) |
-                                            for (@(true, tplUri, _) <- trCh) {
-                                              rl!(tplUri, *tc) |
-                                              for (PoolTemplate <- tc) {
-                                                PoolTemplate!("create", terms, termsHash, *pcCh) |
-                                                for (@pc <- pcCh) {
-                                                  match pc {
-                                                    (true, poolUri, lockUri) => {
-                                                      MarketDirectory!("bind", terms.get("marketId"),
-                                                        {"poolUri": poolUri, "lockUri": lockUri,
-                                                         "termsHash": termsHash, "sealed": false},
-                                                        *marketAuth, *bindCh) |
-                                                      for (@bound <- bindCh) {
-                                                        match bound {
-                                                          (true, Nil) => {
-                                                            MarketDirectory!("seal", terms.get("marketId"),
-                                                                             *marketAuth, *sealCh) |
-                                                            for (@sealed <- sealCh) {
-                                                              match sealed {
-                                                                (true, Nil) => {
-                                                                  MarketIndex!("stage",
-                                                                    {"marketId": terms.get("marketId"),
-                                                                     "slug": terms.get("slug"),
-                                                                     "pairKey": "market:" ++ terms.get("base")
-                                                                                ++ "/" ++ terms.get("quote"),
-                                                                     "base": terms.get("base"),
-                                                                     "quote": terms.get("quote"),
-                                                                     "version": terms.get("version"),
-                                                                     "termsHash": termsHash,
-                                                                     "status": "draft"},
-                                                                    *marketAuth, *stageCh) |
-                                                                  for (@staged <- stageCh) {
-                                                                    match staged {
-                                                                      (true, _) => {
-                                                                        ret!((true, terms.get("marketId"),
-                                                                              poolUri, lockUri,
-                                                                              termsHash))
+                                  marketOracle!(*regCh) |
+                                  for (Registry <- regCh) {
+                                    Registry!("feedEntry", terms.get("base"), *bpCh) |
+                                    Registry!("feedEntry", terms.get("quote"), *qpCh) |
+                                    for (@bf <- bpCh; @qf <- qpCh) {
+                                      match bf {
+                                        (true, bfeed) => {
+                                          match qf {
+                                            (true, qfeed) => {
+                                              if (bfeed.get("policyHash") != terms.get("baseFeedPolicyHash")) {
+                                                ret!((false, "base feed policy"))
+                                              } else {
+                                                if (qfeed.get("policyHash") != terms.get("quoteFeedPolicyHash")) {
+                                                  ret!((false, "quote feed policy"))
+                                                } else {
+                                                  if (bfeed.get("status") != "active"
+                                                      || qfeed.get("status") != "active") {
+                                                    ret!((false, "feed inactive"))
+                                                  } else {
+                                                    recCh!({"marketId": terms.get("marketId"),
+                                                            "slug": terms.get("slug"),
+                                                            "pairKey": "market:" ++ terms.get("base")
+                                                                       ++ "/" ++ terms.get("quote"),
+                                                            "base": terms.get("base"),
+                                                            "quote": terms.get("quote"),
+                                                            "version": terms.get("version"),
+                                                            "termsHash": termsHash,
+                                                            "status": "draft"}) |
+                                                    for (@record <- recCh) {
+                                                      MarketDirectory!("slot", terms.get("marketId"), *slotCh) |
+                                                      for (@slot <- slotCh) {
+                                                        match slot {
+                                                          (true, existing) => {
+                                                            if (existing.get("termsHash") != termsHash) {
+                                                              ret!((false, "exists", existing))
+                                                            } else {
+                                                              MarketIndex!("market", terms.get("marketId"), *idxCh) |
+                                                              for (@idx <- idxCh) {
+                                                                match idx {
+                                                                  (true, _) => {
+                                                                    ret!((true, terms.get("marketId"),
+                                                                          existing.get("poolUri"),
+                                                                          existing.get("lockUri"),
+                                                                          termsHash))
+                                                                  }
+                                                                  (false, "no market") => {
+                                                                    MarketIndex!("checkStage", record, *ckCh) |
+                                                                    for (@ck <- ckCh) {
+                                                                      match ck {
+                                                                        (true, Nil) => {
+                                                                          MarketIndex!("stage", record, *stCh) |
+                                                                          for (@st <- stCh) {
+                                                                            match st {
+                                                                              (true, _) => {
+                                                                                ret!((true, terms.get("marketId"),
+                                                                                      existing.get("poolUri"),
+                                                                                      existing.get("lockUri"),
+                                                                                      termsHash))
+                                                                              }
+                                                                              _ => { ret!(st) }
+                                                                            }
+                                                                          }
+                                                                        }
+                                                                        _ => { ret!(ck) }
                                                                       }
-                                                                      _ => { ret!(staged) }
                                                                     }
                                                                   }
+                                                                  _ => { ret!(idx) }
                                                                 }
-                                                                _ => { ret!(sealed) }
                                                               }
                                                             }
                                                           }
-                                                          _ => { ret!(bound) }
+                                                          (false, "no slot") => {
+                                                            MarketIndex!("checkStage", record, *ckCh) |
+                                                            for (@ck <- ckCh) {
+                                                              match ck {
+                                                                (true, Nil) => {
+                                                                  createMarketPool!(terms, termsHash, record, *ret)
+                                                                }
+                                                                _ => { ret!(ck) }
+                                                              }
+                                                            }
+                                                          }
+                                                          _ => { ret!(slot) }
                                                         }
                                                       }
                                                     }
-                                                    _ => { ret!(pc) }
                                                   }
                                                 }
                                               }
                                             }
+                                            _ => { ret!(qf) }
                                           }
                                         }
+                                        _ => { ret!(bf) }
                                       }
                                     }
                                   }
                                 }
-                                _ => { ret!(qf) }
+                                _ => { ret!(sp) }
                               }
                             }
-                            _ => { ret!(bf) }
-                          }
-                        }
-                      }
-                          }
-                          _ => { ret!(sp) }
-                        }
-                      }
                     }
                   }
                 }

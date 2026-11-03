@@ -149,20 +149,25 @@ def main() -> int:
         f'"{key}": {json.dumps(new_terms[key])}' for key in TERM_KEYS) + "}"
     values_literal = "[" + ", ".join(json.dumps(v) for v in new_values) + "]"
     body = (
-        "new rl(`rho:registry:lookup`), ch, r, deployId(`rho:rchain:deployId`) in {\n"
+        "new rl(`rho:registry:lookup`), ch, r, deployId(`rho:rchain:deployId`), "
+        "deployerId(`rho:rchain:deployerId`) in {\n"
         f"  rl!(`{state['market_factory_uri']}`, *ch) |\n"
         "  for (MarketFactory <- ch) {\n"
         f"    MarketFactory!(\"createMarket\", {terms_literal}, {values_literal}, "
-        f"\"{sponsor}\", \"{sig}\".hexToBytes(), *r) |\n"
+        f"\"{sponsor}\", \"{sig}\".hexToBytes(), *deployerId, *r) |\n"
         "    for (@x <- r) { deployId!(x) }\n"
         "  }\n"
         "}"
     )
-    refused = one(minify(body), secret)
+    refused = one(minify(body), keys[sponsor_key]["secret"])
     check("reverse staging refused", refused[0], False)
     check("reverse staging reason", refused[1], "pair active")
     absent = market(state, secret, new_values[0])
     check("reverse staging created no market", absent, (False, "no market"))
+    slot = one(call(state["market_directory_uri"], "MarketDirectory",
+                    f'MarketDirectory!("slot", "{new_values[0]}", *r) | '
+                    "for (@x <- r) { deployId!(x) }"), secret)
+    check("reverse staging left no sealed slot", slot[0], False)
 
     # pauseAsset(code) is a state transition over every active market that
     # contains the code; all other records must be unchanged.

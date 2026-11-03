@@ -233,7 +233,7 @@ in {
               }
             }
           }
-          _ => { ret2!((false, "burn", *payment)) }
+          _ => { ret2!(1 / 0) }
         }
       }
     }
@@ -274,7 +274,7 @@ in {
               }
             }
           }
-          _ => { ret2!((false, "deposit", *payment)) }
+          _ => { ret2!(1 / 0) }
         }
       }
     }
@@ -1418,8 +1418,17 @@ in {
             match v {
               (true, Nil) => {
                 for (@s2 <- vaultState) {
-                  vaultState!(s2.set("paused", paused).set("rev", s2.get("rev") + 1)) |
-                  ret2!((true, Nil))
+                  new revCh in {
+                    match s2.get("pausedRev") {
+                      Nil => { revCh!(1) }
+                      r => { revCh!(r + 1) }
+                    } |
+                    for (@pr <- revCh) {
+                      vaultState!(s2.set("paused", paused).set("pausedRev", pr)
+                                    .set("rev", s2.get("rev") + 1)) |
+                      ret2!((true, pr))
+                    }
+                  }
                 }
               }
               _ => { ret2!(v) }
@@ -1498,12 +1507,13 @@ in {
                               for (@held <- hCh) {
                                 savingsState!(s.set("totalShares", s.get("totalShares") + shares)
                                   .set("totalAssets", s.get("totalAssets") + amount)
-                                  .set("shares", s.get("shares").set(ownerId, held + shares))) |
+                                  .set("shares", s.get("shares").set(ownerId, held + shares))
+                                  .set("rev", s.get("rev") + 1)) |
                                 ret2!((true, shares))
                               }
                             }
                           }
-                          _ => { savingsState!(s) | ret2!((false, "deposit", *payment)) }
+                          _ => { ret2!(1 / 0) }
                         }
                       }
                     }
@@ -1538,7 +1548,8 @@ in {
                       (true, payment) => {
                         savingsState!(s.set("totalShares", s.get("totalShares") - shares)
                           .set("totalAssets", s.get("totalAssets") - amount)
-                          .set("shares", s.get("shares").set(ownerId, held - shares))) |
+                          .set("shares", s.get("shares").set(ownerId, held - shares))
+                          .set("rev", s.get("rev") + 1)) |
                         ret2!((true, payment, amount))
                       }
                       _ => { savingsState!(s) | ret2!((false, "payment")) }
@@ -1561,16 +1572,23 @@ in {
         for (@a <- amtCh) {
           match a {
             (true, amount) => {
-              @savingsPurse!("deposit", *payment, *dCh) |
-              for (@d <- dCh) {
-                match d {
-                  (true, _) => {
-                    for (@s <- savingsState) {
-                      savingsState!(s.set("totalAssets", s.get("totalAssets") + amount).set("rev", s.get("rev") + 1)) |
-                      ret2!((true, amount))
+              // Refuse a zero-share pool before touching the purse: the
+              // caller must keep the interest in the buffer.
+              for (@s <- savingsState) {
+                if (s.get("totalShares") <= 0) {
+                  savingsState!(s) | ret2!((false, "no shares", *payment))
+                } else {
+                  @savingsPurse!("deposit", *payment, *dCh) |
+                  for (@d <- dCh) {
+                    match d {
+                      (true, _) => {
+                        savingsState!(s.set("totalAssets", s.get("totalAssets") + amount)
+                                       .set("rev", s.get("rev") + 1)) |
+                        ret2!((true, amount))
+                      }
+                      _ => { ret2!(1 / 0) }
                     }
                   }
-                  _ => { ret2!((false, "deposit", *payment)) }
                 }
               }
             }
@@ -1624,7 +1642,7 @@ in {
                       ret2!((true, amount))
                     }
                   }
-                  _ => { ret2!((false, "deposit", *payment)) }
+                  _ => { ret2!(1 / 0) }
                 }
               }
             }
@@ -1638,36 +1656,42 @@ in {
   contract SurplusBuffer(@"paySavings", @auth, ret2) = {
     if (auth != *bufferPayAuth) { ret2!((false, "bad buffer authority")) }
     else {
-      for (@s <- bufferState) {
+      for (@s <<- bufferState) {
         match ((s.get("surplus") * s.get("savingsShareBps")) / 10000).toInt() {
           move => {
-            if (move <= 0) { bufferState!(s) | ret2!((true, 0, s.get("surplus"))) }
+            if (move <= 0) { ret2!((true, 0, s.get("surplus"))) }
             else {
-              new ssCh in {
-                for (@ss <<- savingsState) {
-                  if (ss.get("totalShares") <= 0) {
-                    bufferState!(s) | ret2!((true, 0, s.get("surplus")))
-                  } else {
-                    new wCh, nCh in {
-                      @bufferPurse!("withdraw", (brand, move), *wCh) |
-                      for (@w <- wCh) {
-                        match w {
-                          (true, payment) => {
-                            SavingsPool!("notify", payment, *savingsNotifyAuth, *nCh) |
-                            for (@n <- nCh) {
-                              match n {
-                                (true, _) => {
-                                  bufferState!(s.set("surplus", s.get("surplus") - move).set("rev", s.get("rev") + 1)) |
-                                  ret2!((true, move, s.get("surplus") - move))
-                                }
-                                _ => { ret2!(1 / 0) }
+              new wCh, nCh, backCh in {
+                @bufferPurse!("withdraw", (brand, move), *wCh) |
+                for (@w <- wCh) {
+                  match w {
+                    (true, payment) => {
+                      SavingsPool!("notify", payment, *savingsNotifyAuth, *nCh) |
+                      for (@n <- nCh) {
+                        match n {
+                          (true, _) => {
+                            for (@s2 <- bufferState) {
+                              if (s2.get("rev") != s.get("rev")) { ret2!(1 / 0) }
+                              else {
+                                bufferState!(s2.set("surplus", s2.get("surplus") - move)
+                                              .set("rev", s2.get("rev") + 1)) |
+                                ret2!((true, move, s2.get("surplus") - move))
                               }
                             }
                           }
-                          _ => { bufferState!(s) | ret2!((false, "payment")) }
+                          (false, "no shares", returned) => {
+                            // The pool gained no shares; put the interest
+                            // back in the buffer purse and leave surplus.
+                            @bufferPurse!("deposit", returned, *backCh) |
+                            for (@_ <- backCh) {
+                              ret2!((true, 0, s.get("surplus")))
+                            }
+                          }
+                          _ => { ret2!(1 / 0) }
                         }
                       }
                     }
+                    _ => { ret2!((false, "payment")) }
                   }
                 }
               }
@@ -1801,7 +1825,7 @@ in {
             for (@d <- dCh) {
               match d {
                 (true, _) => { ret2!((true, amount)) }
-                _ => { ret2!((false, "deposit", *payment)) }
+                _ => { ret2!(1 / 0) }
               }
             }
           }
@@ -2027,6 +2051,7 @@ in {
                       "totalCollateral": 0,
                       "badDebt": 0,
                       "paused": false,
+                      "pausedRev": 0,
                       "rev": 0
                     }) |
                     rs!(bundle+{*Stablecoin}, *uSC) |

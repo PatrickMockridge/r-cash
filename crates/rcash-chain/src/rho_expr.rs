@@ -14,6 +14,8 @@ use crate::error::ChainError;
 
 /// A decoded Rholang value.
 #[derive(Clone, Debug, PartialEq)]
+/// The node's `RhoExpr` has no decimal arm: rholo removed the built-in Decimal type
+/// (issue #527). R-Cash amounts arrive as `ExprInt` base-unit counts.
 pub enum RhoValue {
     Par(Vec<RhoValue>),
     Tuple(Vec<RhoValue>),

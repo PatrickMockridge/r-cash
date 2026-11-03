@@ -38,8 +38,8 @@ stateDiagram-v2
 | `VaultBook@"vaults"` | `vault.VaultBook.vaults` | read | — | reply = (true, keys(vaults)) | peek vaultState (arm) | — | — | verified | contracts/src/deploy/v3/31_stablecoin.rho:1387 |
 | `VaultBook@"totals"` | `vault.VaultBook.totals` | read | — | reply = (true, {totalDebt, totalAccruedInterest, totalCollateral, badDebt, sin, psmDebt, paused, rev}) | peek bufferState (arm)<br>peek psmState (arm)<br>peek vaultState (arm) | — | S3 | verified | contracts/src/deploy/v3/31_stablecoin.rho:1391 |
 | `VaultBook@"params"` | `vault.VaultBook.params` | read | — | reply = (true, params) | peek paramsState (arm) | — | — | verified | contracts/src/deploy/v3/31_stablecoin.rho:1406 |
-| `VaultBook@"pause"` | `vault.VaultBook.pause` | mutate | Governor.authorize(setPaused, paused.toString()) → authorize | vaultState.paused = paused<br>vaultState.rev = rev + 1 | peek vaultState (arm)<br>consume vaultState (arm)<br>post vaultState (arm) | — | S12 | verified | contracts/src/deploy/v3/31_stablecoin.rho:1410 |
-| `VaultBook@"attest"` | `vault.VaultBook.attest` | read | — | reply = (true, {currency, paramsHash, sponsor, template}) | — | — | — | verified | contracts/src/deploy/v3/31_stablecoin.rho:1433 |
+| `VaultBook@"pause"` | `vault.VaultBook.pause` | mutate | Governor.authorize(setPaused, paused.toString()) → authorize | vaultState.paused = paused<br>vaultState.pausedRev = pausedRev + 1<br>vaultState.rev = rev + 1 | peek vaultState (arm)<br>consume vaultState (arm)<br>post vaultState (arm) | — | S12 | verified | contracts/src/deploy/v3/31_stablecoin.rho:1410 |
+| `VaultBook@"attest"` | `vault.VaultBook.attest` | read | — | reply = (true, {currency, paramsHash, sponsor, template}) | — | — | — | verified | contracts/src/deploy/v3/31_stablecoin.rho:1442 |
 
 ### LiquidationEngine
 
@@ -54,5 +54,5 @@ stateDiagram-v2
 
 | arm | transition | kind | guards | effects | access | refusals | invariants | status | source |
 |---|---|---|---|---|---|---|---|---|---|
-| `LiquidationEngine@"liquidate"` | `vault.LiquidationEngine.liquidate` | mutate | — | delegate = VaultBook.liquidate(ownerId, liquidationAuth, payment, minCollateral) | — | — | S5<br>S7 | verified | contracts/src/deploy/v3/31_stablecoin.rho:1444 |
-| `LiquidationEngine@"attest"` | `vault.LiquidationEngine.attest` | read | — | reply = (true, {currency, template}) | — | — | — | verified | contracts/src/deploy/v3/31_stablecoin.rho:1448 |
+| `LiquidationEngine@"liquidate"` | `vault.LiquidationEngine.liquidate` | mutate | — | delegate = VaultBook.liquidate(ownerId, liquidationAuth, payment, minCollateral) | — | — | S5<br>S7 | verified | contracts/src/deploy/v3/31_stablecoin.rho:1453 |
+| `LiquidationEngine@"attest"` | `vault.LiquidationEngine.attest` | read | — | reply = (true, {currency, template}) | — | — | — | verified | contracts/src/deploy/v3/31_stablecoin.rho:1457 |

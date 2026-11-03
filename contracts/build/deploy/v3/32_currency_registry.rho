@@ -70,16 +70,49 @@ in {
 
   // Commit one status change to the registry cell. The caller has already
   // authorised the change; this helper takes, rechecks the code and reposts.
-  contract registrySetStatus(@code, @status, ret) = {
+  // Commit one status change to the registry cell. A stablecoin message carries
+  // the `pausedRev` returned by VaultBook.pause; a lower rev than the mirror
+  // already holds is stale and is refused, so an out-of-order mirror cannot
+  // overwrite a newer one. External assets have no VaultBook; the governor
+  // nonce is their authority.
+  contract registrySetStatus(@code, @status, @pausedRev, ret) = {
     for (@s <- currencyState) {
       match s.get("currencies").get(code) {
         Nil => { currencyState!(s) | ret!((false, "no currency")) }
         entry => {
-          currencyState!(
-            s.set("currencies",
-              s.get("currencies").set(code, entry.set("status", status)))
-              .set("rev", s.get("rev") + 1)) |
-          ret!((true, status))
+          match entry.get("kind") {
+            "external" => {
+              currencyState!(
+                s.set("currencies",
+                  s.get("currencies").set(code, entry.set("status", status)))
+                  .set("rev", s.get("rev") + 1)) |
+              ret!((true, status))
+            }
+            _ => {
+              match entry.get("pausedRev") {
+                Nil => {
+                  currencyState!(
+                    s.set("currencies",
+                      s.get("currencies").set(code,
+                        entry.set("status", status).set("pausedRev", pausedRev)))
+                      .set("rev", s.get("rev") + 1)) |
+                  ret!((true, status))
+                }
+                current => {
+                  if (current > pausedRev) {
+                    currencyState!(s) | ret!((false, "stale"))
+                  } else {
+                    currencyState!(
+                      s.set("currencies",
+                        s.get("currencies").set(code,
+                          entry.set("status", status).set("pausedRev", pausedRev)))
+                        .set("rev", s.get("rev") + 1)) |
+                    ret!((true, status))
+                  }
+                }
+              }
+            }
+          }
         }
       }
     }
@@ -322,7 +355,7 @@ in {
                       (true, Nil) => {
                         registryStatus!(paused, *stCh) |
                         for (@status <- stCh) {
-                          registrySetStatus!(code, status, *ret)
+                          registrySetStatus!(code, status, 0, *ret)
                         }
                       }
                       _ => { ret!(v) }
@@ -338,10 +371,10 @@ in {
                   VaultBook!("pause", paused, nonce, sigs, *pCh) |
                   for (@v <- pCh) {
                     match v {
-                      (true, Nil) => {
+                      (true, pausedRev) => {
                         registryStatus!(paused, *stCh) |
                         for (@status <- stCh) {
-                          registrySetStatus!(code, status, *ret)
+                          registrySetStatus!(code, status, pausedRev, *ret)
                         }
                       }
                       _ => { ret!(v) }

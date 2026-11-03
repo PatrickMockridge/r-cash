@@ -521,13 +521,20 @@ Every field is enforced:
 
 ### 12.2 Lifecycle
 
-`MarketFactory.createMarket(terms, values, sponsor, sig)` verifies the signature, the
-terms and the feeds; `PoolTemplate.create` builds the pool and lock; `MarketDirectory.bind`
-and `seal`; `MarketIndex.stage` creates a `draft`. `MarketIndex.activate` requires the
-sealed slot, a funded lock with `untilHeight >= lockUntilHeight`, and a pool attestation
-with `seeded`, matching `termsHash`, `rb >= seedBase`,
-`rq >= max(seedQuote, depthFloorQuote)` and `totalShares >= seedInitialShares`. Status is
-`draft → active → paused/active → delisted`, governed and immediate.
+`MarketFactory.createMarket(terms, values, sponsor, sig, deployer)` verifies the signature,
+the terms and the feeds; the submitter's `deployerId` public key MUST equal `sponsor` (a
+third party cannot replay a signed create). `MarketIndex.checkStage` runs the stage guards
+before any write; `PoolTemplate.create` builds the pool and lock; `MarketDirectory.bind` is
+create-only (an exact retry is idempotent, a different slot refuses `"exists"`) and `seal`
+marks the slot; `MarketIndex.stage` creates a `draft`. A refusal after the directory write
+fails the deploy so no sealed slot survives without an index record. `MarketIndex.activate`
+requires the sealed slot, a funded lock with `untilHeight >= lockUntilHeight`, a pool
+attestation with `seeded`, matching `termsHash`, `rb >= seedBase`,
+`rq >= max(seedQuote, depthFloorQuote)` and `totalShares >= seedInitialShares`, and pair
+ownership (the pair is absent, owned by this market, or owned by a delisted lower version).
+Activation writes both `byPair` orientations in the same `indexState` commit. Status is
+`draft → active → paused/active → delisted`; a draft may be abandoned by `draft → delisted`,
+governed and immediate.
 
 ### 12.3 Pool
 
@@ -858,13 +865,13 @@ bad index authority  bad liquidation authority  bad mint authority  bad savings 
 bad secret  bad settlement authority  bad signature  bad sponsor  bad sponsor signature
 bad vault auth  bad version  balance  band  base feed  base feed policy  base spread  below MCR
 below threshold  bonus  book expiry  bps  buffer  burn  ceiling  changed  close  close factor
-closed  currency mismatch  custody  default expiry  deposit  depth  depth floor  duplicate  early
+closed  conflict  currency mismatch  custody  default expiry  deposit  depth  depth floor  duplicate  early
 exists  expired  expiry  external attestation  external decimals  external kind  feed attestation
 feed inactive  feed info  first deposit balance  frozen  funded  future price  healthy  height
 height not monotonic  lock beneficiary  lock height  lock too short  lock unfunded  locked  max debt
 max expiry  max memo  max op id  max stipend  max supply  max trade  mcr  memo  min amount  min debt
 min liquidity  min rev  min stable  min ticket  minimum  no account  no attestation  no currency
-no feed  no lock  no market  no purse  no rate  no slot  no system  no terms  no vault  not LP
+no feed  no lock  no market  no purse  no rate  no shares  no slot  no system  no terms  no vault  not LP
 not a REV payment  not a stablecoin payment  not active  not an LP payment  not base
 not beneficiary  not draft  not expired  not funder  not installer  not owner  not quote
 not reporter  not sealed  not seeded  not sender  not this asset  opId  oracle age  output  pair
