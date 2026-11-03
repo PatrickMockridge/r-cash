@@ -148,7 +148,7 @@ blocker. A blocked stage is never reported as conformance. This is a normative o
 requirement, not a style preference.
 
 > **Where to go deeper.** The install order and lifecycle are in
-> [`docs/spec/30-WIRING.md`](https://github.com/PatrickMockridge/r-cash/blob/main/docs/spec/30-WIRING.md).
+> [`docs/spec/30-WIRING.md`](https://github.com/rhovision-org/r-cash/blob/main/docs/spec/30-WIRING.md).
 > The operations requirements are in
-> [`docs/SPEC.md` §17](https://github.com/PatrickMockridge/r-cash/blob/main/docs/SPEC.md#17-operations).
+> [`docs/SPEC.md` §17](https://github.com/rhovision-org/r-cash/blob/main/docs/SPEC.md#17-operations).
 > The testnet procedure is in [The public testnet](testnet.md).

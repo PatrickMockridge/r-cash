@@ -169,8 +169,8 @@ malicious installer could register the wrong URI. The window is trusted by desig
 freeze ends it. Production deployments should use signed URI-bound registration.
 
 > **Where to go deeper.** Registry requirements are in
-> [`docs/SPEC.md` §14](https://github.com/PatrickMockridge/r-cash/blob/main/docs/SPEC.md#14-registries-and-wiring).
+> [`docs/SPEC.md` §14](https://github.com/rhovision-org/r-cash/blob/main/docs/SPEC.md#14-registries-and-wiring).
 > The wiring and install order are in
-> [`docs/spec/30-WIRING.md`](https://github.com/PatrickMockridge/r-cash/blob/main/docs/spec/30-WIRING.md).
+> [`docs/spec/30-WIRING.md`](https://github.com/rhovision-org/r-cash/blob/main/docs/spec/30-WIRING.md).
 > The transition table is
-> [`docs/spec/flows/05-registry.yaml`](https://github.com/PatrickMockridge/r-cash/blob/main/docs/spec/flows/05-registry.yaml).
+> [`docs/spec/flows/05-registry.yaml`](https://github.com/rhovision-org/r-cash/blob/main/docs/spec/flows/05-registry.yaml).

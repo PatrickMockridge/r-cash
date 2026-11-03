@@ -13,7 +13,7 @@ pre-testnet, there has been no external audit, and no mainnet deployment exists.
 |---|---|---|
 | Contracts, clients and web UI implemented | Source tree and component catalogue | v0.5 |
 | Static gates green | `make spec-check`, `make formal-check`, Rust/CI gates | 2026-10-27 onward |
-| 13 behavioural suites + CLI demo passed on a fresh devnet | [`docs/spec/flows/CAMPAIGN.md`](https://github.com/PatrickMockridge/r-cash/blob/main/docs/spec/flows/CAMPAIGN.md) | 2026-10-27 |
+| 13 behavioural suites + CLI demo passed on a fresh devnet | [`docs/spec/flows/CAMPAIGN.md`](https://github.com/rhovision-org/r-cash/blob/main/docs/spec/flows/CAMPAIGN.md) | 2026-10-27 |
 | Mesh and external-asset suites added | `harness/unit_mesh.py`, `harness/unit_external.py` | after the 13-suite campaign |
 | Public testnet campaign blocked by operator resource admission | [The public testnet](../guides/testnet.md) | 2026-10-28 |
 | Public testnet rebuilt with a new genesis and binary | [The public testnet](../guides/testnet.md) | 2026-10-29 |
@@ -69,7 +69,7 @@ runs on a disposable chain with a pinned node and one validator. None of this is
 ## What is explicitly excluded
 
 The following are not missing by accident. They are product decisions recorded in
-[`docs/SPEC.md` §19](https://github.com/PatrickMockridge/r-cash/blob/main/docs/SPEC.md#19-exclusions):
+[`docs/SPEC.md` §19](https://github.com/rhovision-org/r-cash/blob/main/docs/SPEC.md#19-exclusions):
 
 | Excluded | Reason |
 |---|---|
@@ -117,8 +117,8 @@ for each corridor, and a governance and incident-response process that is more t
 key. None of those is claimed here.
 
 > **Where to go deeper.** The exclusions are normative in
-> [`docs/SPEC.md` §19](https://github.com/PatrickMockridge/r-cash/blob/main/docs/SPEC.md#19-exclusions).
+> [`docs/SPEC.md` §19](https://github.com/rhovision-org/r-cash/blob/main/docs/SPEC.md#19-exclusions).
 > The testing evidence and its limits are described in
 > [Testing and the acceptance campaign](../trust/testing.md), and the recorded devnet
 > campaign is in
-> [`docs/spec/flows/CAMPAIGN.md`](https://github.com/PatrickMockridge/r-cash/blob/main/docs/spec/flows/CAMPAIGN.md).
+> [`docs/spec/flows/CAMPAIGN.md`](https://github.com/rhovision-org/r-cash/blob/main/docs/spec/flows/CAMPAIGN.md).

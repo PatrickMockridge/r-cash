@@ -174,13 +174,13 @@ where the user has paid but not received.
 ## The component catalogue
 
 The machine-readable list is
-[`contracts/components.json`](https://github.com/PatrickMockridge/r-cash/blob/main/contracts/components.json),
+[`contracts/components.json`](https://github.com/rhovision-org/r-cash/blob/main/contracts/components.json),
 with 40 components grouped into kernel, authority, registry, domain, view, account and
 factory kinds. The catalogue is checked against the built terms and arm inventory, so it
 cannot drift silently from the contracts.
 
 > **Where to go deeper.** Install order, factories and freeze are in
-> [`docs/spec/30-WIRING.md`](https://github.com/PatrickMockridge/r-cash/blob/main/docs/spec/30-WIRING.md).
+> [`docs/spec/30-WIRING.md`](https://github.com/rhovision-org/r-cash/blob/main/docs/spec/30-WIRING.md).
 > The component catalogue is in
-> [`docs/spec/10-COMPONENTS.md`](https://github.com/PatrickMockridge/r-cash/blob/main/docs/spec/10-COMPONENTS.md).
+> [`docs/spec/10-COMPONENTS.md`](https://github.com/rhovision-org/r-cash/blob/main/docs/spec/10-COMPONENTS.md).
 > The account and purse details are in [Money, accounts and purses](money-accounts-purses.md).

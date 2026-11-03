@@ -76,7 +76,7 @@ oracle committee for prices and the governor for parameter changes. The
 [security model](../trust/security-model.md) examines what that means and what can go wrong.
 
 > **Where to go deeper.** Actors and units are listed in
-> [`docs/SPEC.md` §2](https://github.com/PatrickMockridge/r-cash/blob/main/docs/SPEC.md#2-scope-actors-and-units).
+> [`docs/SPEC.md` §2](https://github.com/rhovision-org/r-cash/blob/main/docs/SPEC.md#2-scope-actors-and-units).
 > The product framing is in
-> [`docs/SPEC.md` §19](https://github.com/PatrickMockridge/r-cash/blob/main/docs/SPEC.md#19-exclusions)
+> [`docs/SPEC.md` §19](https://github.com/rhovision-org/r-cash/blob/main/docs/SPEC.md#19-exclusions)
 > for what is deliberately out of scope.

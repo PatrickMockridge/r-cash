@@ -139,8 +139,8 @@ explains and links can stay correct.
 | `contracts/components.json` | Machine-readable component catalogue |
 
 > **Where to go deeper.** Start with
-> [`docs/SPEC.md` §1](https://github.com/PatrickMockridge/r-cash/blob/main/docs/SPEC.md#1-document-control)
+> [`docs/SPEC.md` §1](https://github.com/rhovision-org/r-cash/blob/main/docs/SPEC.md#1-document-control)
 > and
-> [`docs/spec/README.md`](https://github.com/PatrickMockridge/r-cash/blob/main/docs/spec/README.md).
+> [`docs/spec/README.md`](https://github.com/rhovision-org/r-cash/blob/main/docs/spec/README.md).
 > The flow method is in
-> [`docs/spec/flows/README.md`](https://github.com/PatrickMockridge/r-cash/blob/main/docs/spec/flows/README.md).
+> [`docs/spec/flows/README.md`](https://github.com/rhovision-org/r-cash/blob/main/docs/spec/flows/README.md).

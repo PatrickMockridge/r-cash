@@ -141,8 +141,8 @@ for the pair. It cannot be minted, saved or redeemed through an R-Cash issuer.
 - [ ] `make check-mesh` passes if the currency is in the tracked config.
 
 > **Where to go deeper.** The currency listing flow is in
-> [`docs/spec/30-WIRING.md`](https://github.com/PatrickMockridge/r-cash/blob/main/docs/spec/30-WIRING.md).
+> [`docs/spec/30-WIRING.md`](https://github.com/rhovision-org/r-cash/blob/main/docs/spec/30-WIRING.md).
 > The market terms are in
-> [`docs/SPEC.md` §12.1](https://github.com/PatrickMockridge/r-cash/blob/main/docs/SPEC.md#121-terms).
+> [`docs/SPEC.md` §12.1](https://github.com/rhovision-org/r-cash/blob/main/docs/SPEC.md#121-terms).
 > The mesh config is `configs/mesh.json`; the external adapter interface is
-> [`docs/spec/EXTERNAL-ASSETS.md`](https://github.com/PatrickMockridge/r-cash/blob/main/docs/spec/EXTERNAL-ASSETS.md).
+> [`docs/spec/EXTERNAL-ASSETS.md`](https://github.com/rhovision-org/r-cash/blob/main/docs/spec/EXTERNAL-ASSETS.md).

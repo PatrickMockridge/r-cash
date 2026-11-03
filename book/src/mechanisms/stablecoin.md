@@ -146,8 +146,8 @@ The next six chapters take the loop apart: vaults and interest, liquidation, the
 savings, the PSM, and then the markets where the stablecoin trades.
 
 > **Where to go deeper.** Issuance requirements are in
-> [`docs/SPEC.md` §7](https://github.com/PatrickMockridge/r-cash/blob/main/docs/SPEC.md#7-stablecoin-issuance).
+> [`docs/SPEC.md` §7](https://github.com/rhovision-org/r-cash/blob/main/docs/SPEC.md#7-stablecoin-issuance).
 > The creation and listing flow is in
-> [`docs/spec/flows/01-issuer.yaml`](https://github.com/PatrickMockridge/r-cash/blob/main/docs/spec/flows/01-issuer.yaml).
+> [`docs/spec/flows/01-issuer.yaml`](https://github.com/rhovision-org/r-cash/blob/main/docs/spec/flows/01-issuer.yaml).
 > The component split is in
-> [`docs/spec/10-COMPONENTS.md`](https://github.com/PatrickMockridge/r-cash/blob/main/docs/spec/10-COMPONENTS.md).
+> [`docs/spec/10-COMPONENTS.md`](https://github.com/rhovision-org/r-cash/blob/main/docs/spec/10-COMPONENTS.md).

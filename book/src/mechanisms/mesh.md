@@ -153,8 +153,8 @@ price. The [public testnet chapter](../guides/testnet.md) explains the funding c
 - It does not guarantee liquidity. An unseeded pair is unavailable until someone provides it.
 
 > **Where to go deeper.** Mesh requirements are in
-> [`docs/SPEC.md` §12.4](https://github.com/PatrickMockridge/r-cash/blob/main/docs/SPEC.md#124-currency-mesh-usd-default-and-external-assets).
+> [`docs/SPEC.md` §12.4](https://github.com/rhovision-org/r-cash/blob/main/docs/SPEC.md#124-currency-mesh-usd-default-and-external-assets).
 > The transition table is
-> [`docs/spec/flows/13-mesh.yaml`](https://github.com/PatrickMockridge/r-cash/blob/main/docs/spec/flows/13-mesh.yaml).
+> [`docs/spec/flows/13-mesh.yaml`](https://github.com/rhovision-org/r-cash/blob/main/docs/spec/flows/13-mesh.yaml).
 > External assets are specified in
-> [`docs/spec/EXTERNAL-ASSETS.md`](https://github.com/PatrickMockridge/r-cash/blob/main/docs/spec/EXTERNAL-ASSETS.md).
+> [`docs/spec/EXTERNAL-ASSETS.md`](https://github.com/rhovision-org/r-cash/blob/main/docs/spec/EXTERNAL-ASSETS.md).

@@ -118,7 +118,7 @@ capability rather than an allowance, and the account is created lazily on first 
 than registered in a database.
 
 > **Where to go deeper.** The normative account and purse requirements are in
-> [`docs/SPEC.md` §4](https://github.com/PatrickMockridge/r-cash/blob/main/docs/SPEC.md#4-identity-accounts-and-purses).
+> [`docs/SPEC.md` §4](https://github.com/rhovision-org/r-cash/blob/main/docs/SPEC.md#4-identity-accounts-and-purses).
 > The identity flow is specified in
-> [`docs/spec/flows/11-identity.yaml`](https://github.com/PatrickMockridge/r-cash/blob/main/docs/spec/flows/11-identity.yaml).
+> [`docs/spec/flows/11-identity.yaml`](https://github.com/rhovision-org/r-cash/blob/main/docs/spec/flows/11-identity.yaml).
 > The payment flow is in [Payments and claim links](../mechanisms/payments.md).

@@ -104,8 +104,8 @@ height. The [repository map](../trust/repository-map.md) lists the languages and
 kind of code lives.
 
 > **Where to go deeper.** The deploy and authority rules are in
-> [`docs/SPEC.md` §3](https://github.com/PatrickMockridge/r-cash/blob/main/docs/SPEC.md#3-system-model-and-authority).
+> [`docs/SPEC.md` §3](https://github.com/rhovision-org/r-cash/blob/main/docs/SPEC.md#3-system-model-and-authority).
 > The component calculus is in
-> [`docs/spec/00-CALCULUS.md`](https://github.com/PatrickMockridge/r-cash/blob/main/docs/spec/00-CALCULUS.md).
+> [`docs/spec/00-CALCULUS.md`](https://github.com/rhovision-org/r-cash/blob/main/docs/spec/00-CALCULUS.md).
 > Platform limits and measured costs are summarised in
 > [Repository and implementation map](../trust/repository-map.md).

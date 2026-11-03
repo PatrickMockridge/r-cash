@@ -157,7 +157,7 @@ boot, so a user can see a send that has not yet finalized.
   the opId.
 
 > **Where to go deeper.** Payment requirements are in
-> [`docs/SPEC.md` §5](https://github.com/PatrickMockridge/r-cash/blob/main/docs/SPEC.md#5-payments).
+> [`docs/SPEC.md` §5](https://github.com/rhovision-org/r-cash/blob/main/docs/SPEC.md#5-payments).
 > The transfer transition table is
-> [`docs/spec/flows/06-transfer.yaml`](https://github.com/PatrickMockridge/r-cash/blob/main/docs/spec/flows/06-transfer.yaml).
+> [`docs/spec/flows/06-transfer.yaml`](https://github.com/rhovision-org/r-cash/blob/main/docs/spec/flows/06-transfer.yaml).
 > The account and purse model is in [Money, accounts and purses](../concepts/money-accounts-purses.md).

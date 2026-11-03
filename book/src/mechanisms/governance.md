@@ -133,7 +133,7 @@ user funds.
 - A frozen root refuses registration.
 
 > **Where to go deeper.** Governance requirements are in
-> [`docs/SPEC.md` §13](https://github.com/PatrickMockridge/r-cash/blob/main/docs/SPEC.md#13-governance-timelock-and-pause).
+> [`docs/SPEC.md` §13](https://github.com/rhovision-org/r-cash/blob/main/docs/SPEC.md#13-governance-timelock-and-pause).
 > The transition table is
-> [`docs/spec/flows/09-governance.yaml`](https://github.com/PatrickMockridge/r-cash/blob/main/docs/spec/flows/09-governance.yaml).
+> [`docs/spec/flows/09-governance.yaml`](https://github.com/rhovision-org/r-cash/blob/main/docs/spec/flows/09-governance.yaml).
 > The Lean timelock model is `spec/lean/Rholphin/Model/Governance.lean`.

@@ -163,9 +163,9 @@ block's `deploys[].cost` is the authority when a campaign records them.
 - To understand the product: [What is R-Cash?](../orientation/what-is-rcash.md).
 - To understand the code: [Architecture at a glance](../concepts/architecture.md).
 - To change behaviour: [The normative specification](normative-spec.md) and
-  [`AGENTS.md`](https://github.com/PatrickMockridge/r-cash/blob/main/AGENTS.md).
+  [`AGENTS.md`](https://github.com/rhovision-org/r-cash/blob/main/AGENTS.md).
 - To run it: [Quickstart on the devnet](../guides/quickstart.md).
 
 > **Where to go deeper.** The component catalogue is `contracts/components.json`; the language
 > policy is enforced by `tools/check_languages.py`; the install order is in
-> [`docs/spec/30-WIRING.md`](https://github.com/PatrickMockridge/r-cash/blob/main/docs/spec/30-WIRING.md).
+> [`docs/spec/30-WIRING.md`](https://github.com/rhovision-org/r-cash/blob/main/docs/spec/30-WIRING.md).

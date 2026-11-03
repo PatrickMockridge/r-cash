@@ -48,7 +48,7 @@ Every field is enforced. The important ones for a trader:
 | `lockMinBlocks`, `lockUntilHeight` | The seed lock |
 
 The full field table and its enforcement points are in
-[`docs/SPEC.md` §12.1](https://github.com/PatrickMockridge/r-cash/blob/main/docs/SPEC.md#121-terms).
+[`docs/SPEC.md` §12.1](https://github.com/rhovision-org/r-cash/blob/main/docs/SPEC.md#121-terms).
 
 ## Pricing
 
@@ -195,8 +195,8 @@ fails after the deposit, the deploy fails and the whole swap rolls back.
   spread and the max trade size bound the damage, but they do not eliminate it.
 
 > **Where to go deeper.** Market and pool requirements are in
-> [`docs/SPEC.md` §12](https://github.com/PatrickMockridge/r-cash/blob/main/docs/SPEC.md#12-amm-markets).
+> [`docs/SPEC.md` §12](https://github.com/rhovision-org/r-cash/blob/main/docs/SPEC.md#12-amm-markets).
 > The transition tables are
-> [`07-market.yaml`](https://github.com/PatrickMockridge/r-cash/blob/main/docs/spec/flows/07-market.yaml)
-> and [`08-pool.yaml`](https://github.com/PatrickMockridge/r-cash/blob/main/docs/spec/flows/08-pool.yaml).
+> [`07-market.yaml`](https://github.com/rhovision-org/r-cash/blob/main/docs/spec/flows/07-market.yaml)
+> and [`08-pool.yaml`](https://github.com/rhovision-org/r-cash/blob/main/docs/spec/flows/08-pool.yaml).
 > The mesh layer above the markets is in [The currency mesh](mesh.md).

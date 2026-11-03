@@ -260,6 +260,6 @@ until a signing spike proves otherwise. The web wallet keeps the key inside WASM
 encrypted keystore in IndexedDB.
 
 > **Where to go deeper.** Client requirements are in
-> [`docs/SPEC.md` §15](https://github.com/PatrickMockridge/r-cash/blob/main/docs/SPEC.md#15-clients-rust-sdk-cli-wasm).
+> [`docs/SPEC.md` §15](https://github.com/rhovision-org/r-cash/blob/main/docs/SPEC.md#15-clients-rust-sdk-cli-wasm).
 > The deploy format and signing path are in
 > `crates/rcash-chain/src/deploy.rs`. The web journey is in [The web app](web-app.md).

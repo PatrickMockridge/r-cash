@@ -109,7 +109,7 @@ shares, there is no one to own the assets. When the first saver deposits, they r
 - A withdrawal of all shares leaves the pool empty; the next deposit is 1:1 again.
 
 > **Where to go deeper.** Savings requirements are in
-> [`docs/SPEC.md` §10](https://github.com/PatrickMockridge/r-cash/blob/main/docs/SPEC.md#10-savings).
+> [`docs/SPEC.md` §10](https://github.com/rhovision-org/r-cash/blob/main/docs/SPEC.md#10-savings).
 > The transition table is
-> [`docs/spec/flows/03-buffer-savings.yaml`](https://github.com/PatrickMockridge/r-cash/blob/main/docs/spec/flows/03-buffer-savings.yaml).
+> [`docs/spec/flows/03-buffer-savings.yaml`](https://github.com/rhovision-org/r-cash/blob/main/docs/spec/flows/03-buffer-savings.yaml).
 > The buffer's role is in [The surplus buffer](surplus-buffer.md).
