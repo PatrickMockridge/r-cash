@@ -111,7 +111,9 @@ rcash oracle submit --currency NGN --price 0.00066666 --index 0 --key reporter1
 `transfer send` prints the claim secret and a `#/claim/<id>/<secret>` fragment. The secret is
 bearer authority; it is printed once and never persisted. The optional `--memo`, `--op-id`
 and `--stipend` flags map to the payment features described in
-[Payments and claim links](../mechanisms/payments.md).
+[Payments and claim links](../mechanisms/payments.md). `v4 send` generates an opId when
+`--op-id` is omitted and prints it in the result; pass that value again on a retry so the
+on-chain ledger recognizes the second attempt and never debits twice.
 
 ## The `v4` group
 
@@ -186,18 +188,20 @@ Routing follows the node's guidance:
 - **Reads** round-robin over verified endpoints and fail over on transport errors, 429, 503,
   5xx and decode errors. The seed is the last resort. `deploy-status` tries the deploy's
   bound node first.
-- **Writes** are signed for exactly one node and sent there once. The client ranks targets for
-  cost and speed — accepting nodes first, then the lowest `minPhloPrice`, then the freshest
-  tip — and round-robins inside the cheapest accepting tier so concurrent deploys spread
-  without paying more. It fetches the chosen node's live status, anchors
-  `validAfterBlockNumber` at the lowest relevant tip (so relayed copies stay inside every
-  peer's 50-block window), and prices at `max(configured, target.minPhloPrice)` — the floor of
-  the one node that receives it, so choosing a cheaper node actually pays less. On 429, 503, a
-  timeout or any transport error it **does not re-submit the same signed bytes elsewhere**.
-  The caller either retries the same node or proves the effect absent and re-signs under a new
-  operation id.
+- **Writes** are signed for exactly one node and sent there once. The default `balanced`
+  policy uses every accepting proposer within a configurable premium of the cheapest fee
+  floor (`--fee-premium-bps`, default 500, or `--fee-premium-abs`, default 1), with a
+  `--max-tip-skew` window (default 8 blocks). `cost-first` keeps the exact cheapest tier;
+  `utilization` uses every accepting proposer under `--fee-ceiling`. The client probes
+  statuses in parallel (`--probe-concurrency`, default 8), keeps up to `--max-nodes`
+  verified peers (default 64), skips a node whose live status says `acceptsDeploys=false`,
+  and prices at `max(configured, target.minPhloPrice)`. It anchors
+  `validAfterBlockNumber` within the tip window, so a deploy always has most of its
+  50-block lifespan left. On 429, 503, a timeout or any transport error it **does not
+  re-submit the same signed bytes elsewhere**. The caller either retries the same node or
+  proves the effect absent and re-signs under a new operation id.
 - The op cache records the chosen node. A cached retry is pinned to it, including across a
-  restart.
+  restart. `--poll-timeout` (default 120 s) bounds the wait for processed/final.
 
 The node-side relay (`RNODE_DEPLOY_RELAY`) is operator-only: each admitted deploy is copied
 to connected peers over gRPC. It is a copy, not a move; clients do not enable or depend on it.

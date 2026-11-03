@@ -22,17 +22,15 @@ components:
     transition: psm.PegStabilityModule.fundRev
     lean: Rholphin.Model.Psm.pegStabilityModule_fundRev
     kind: read
-    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1794}
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1818}
     guards:
     - {id: payment_asset, expr: isRevPayment(payment), refusal: {reason: asset, phase: pre}}
-    - {id: deposit_ok, expr: psmRevPurse.deposit ok, refusal: {reason: deposit, phase: pre}}
     effects:
     - {target: psmRev, formula: psmRev + amount}
     access: []
     nested_calls: []
     refusals:
     - {reason: asset, phase: pre, reposts: false, fail: false}
-    - {reason: deposit, phase: pre, reposts: false, fail: false}
     invariants: []
     status: verified
     to: Active
@@ -42,7 +40,7 @@ components:
     transition: psm.PegStabilityModule.sellStable
     lean: Rholphin.Model.Psm.pegStabilityModule_sellStable
     kind: mutate
-    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1814}
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1838}
     guards:
     - {id: payment_asset, expr: isStablecoinPayment(payment), refusal: {reason: asset, phase: pre}}
     - {id: fresh, expr: fresh and rate > 0, refusal: {reason: stale feed, phase: pre}}
@@ -71,7 +69,6 @@ components:
     - {reason: asset, phase: pre, reposts: false, fail: false}
     - {reason: balance, phase: pre, reposts: false, fail: false}
     - {reason: buffer, phase: pre, reposts: false, fail: false}
-    - {reason: burn, phase: pre, reposts: false, fail: false}
     - {reason: min rev, phase: pre, reposts: false, fail: false}
     - {reason: stale feed, phase: pre, reposts: false, fail: false}
     - {reason: psm floor, phase: pre, reposts: false, fail: false}
@@ -87,7 +84,7 @@ components:
     transition: psm.PegStabilityModule.buyStable
     lean: Rholphin.Model.Psm.pegStabilityModule_buyStable
     kind: mutate
-    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1869}
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1893}
     guards:
     - {id: payment_asset, expr: isRevPayment(payment), refusal: {reason: asset, phase: pre}}
     - {id: not_paused, expr: not vault.paused, refusal: {reason: paused, phase: pre}}
@@ -115,7 +112,6 @@ components:
     refusals:
     - {reason: asset, phase: pre, reposts: false, fail: false}
     - {reason: ceiling, phase: pre, reposts: false, fail: false}
-    - {reason: deposit, phase: pre, reposts: false, fail: false}
     - {reason: min stable, phase: pre, reposts: false, fail: false}
     - {reason: paused, phase: pre, reposts: false, fail: false}
     - {reason: stale feed, phase: pre, reposts: false, fail: false}
@@ -132,7 +128,7 @@ components:
     transition: psm.PegStabilityModule.schedulePolicy
     lean: Rholphin.Model.Psm.pegStabilityModule_schedulePolicy
     kind: create
-    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1919}
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1943}
     guards:
     - {id: fee_range, expr: 0 <= feeBps <= 1000, refusal: {reason: psm fee, phase: pre}}
     - {id: ceiling_nonneg, expr: ceiling >= 0, refusal: {reason: ceiling, phase: pre}}
@@ -154,7 +150,7 @@ components:
     transition: psm.PegStabilityModule.applyPolicy
     lean: Rholphin.Model.Psm.pegStabilityModule_applyPolicy
     kind: mutate
-    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1942}
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1966}
     guards:
     - {id: action, expr: action = "setPsmPolicy", refusal: {reason: action, phase: pre}}
     - {id: fee_range, expr: 0 <= feeBps <= 1000, refusal: {reason: psm fee, phase: pre}}
@@ -184,7 +180,7 @@ components:
     transition: psm.PegStabilityModule.info
     lean: Rholphin.Model.Psm.pegStabilityModule_info
     kind: read
-    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1989}
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 2013}
     guards: []
     effects:
     - {target: reply, formula: '(true, {stableDebt, feeBps, ceiling, revBalance, rev})'}
@@ -202,7 +198,7 @@ components:
     transition: psm.PegStabilityModule.debt
     lean: Rholphin.Model.Psm.pegStabilityModule_debt
     kind: read
-    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 2007}
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 2031}
     guards: []
     effects:
     - {target: reply, formula: '(true, stableDebt)'}

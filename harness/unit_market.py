@@ -135,11 +135,12 @@ def main() -> int:
     sig = sign_payload.sign_payload(sponsor["secret"], payload.encode())["signature"]
 
     create_term = (
-        "new rl(`rho:registry:lookup`), ch, r, deployId(`rho:rchain:deployId`) in {\n"
+        "new rl(`rho:registry:lookup`), ch, r, deployId(`rho:rchain:deployId`), "
+        "deployerId(`rho:rchain:deployerId`) in {\n"
         f"  rl!(`{factory}`, *ch) |\n"
         "  for (MarketFactory <- ch) {\n"
         f'    MarketFactory!("createMarket", {terms_literal}, {values_literal}, '
-        f'"{sponsor["public"]}", "{sig}".hexToBytes(), *r) |\n'
+        f'"{sponsor["public"]}", "{sig}".hexToBytes(), *deployerId, *r) |\n'
         "    for (@x <- r) {\n"
         "      match x {\n"
         '        (true, mid, poolUri, lockUri, hash) => deployId!([mid, poolUri, lockUri, hash])\n'
@@ -149,7 +150,7 @@ def main() -> int:
         "  }\n"
         "}"
     )
-    created = one(create_term, keys["deployer"]["secret"])
+    created = one(create_term, sponsor["secret"])
     if created[0] is True:
         check("market created", created[0], MARKET_ID)
         pool_uri, lock_uri = created[1], created[2]
@@ -343,11 +344,12 @@ def main() -> int:
     payload2 = f"rcash:market-create:v1|REV/V4T:v2|{hash2}|{sponsor['public']}"
     sig2 = sign_payload.sign_payload(sponsor["secret"], payload2.encode())["signature"]
     create2 = (
-        "new rl(`rho:registry:lookup`), ch, r, deployId(`rho:rchain:deployId`) in {\n"
+        "new rl(`rho:registry:lookup`), ch, r, deployId(`rho:rchain:deployId`), "
+        "deployerId(`rho:rchain:deployerId`) in {\n"
         f"  rl!(`{factory}`, *ch) |\n"
         "  for (MarketFactory <- ch) {\n"
         f'    MarketFactory!("createMarket", {literal2}, {values2_literal}, '
-        f'"{sponsor["public"]}", "{sig2}".hexToBytes(), *r) |\n'
+        f'"{sponsor["public"]}", "{sig2}".hexToBytes(), *deployerId, *r) |\n'
         "    for (@x <- r) {\n"
         "      match x {\n"
         '        (true, mid, poolUri, lockUri, hash) => deployId!([mid, poolUri, lockUri, hash])\n'
@@ -357,7 +359,7 @@ def main() -> int:
         "  }\n"
         "}"
     )
-    created2 = one(create2, keys["deployer"]["secret"])
+    created2 = one(create2, sponsor["secret"])
     check("version 2 staged", created2[0], "REV/V4T:v2")
     v2_record = one(call(index, "MarketIndex",
                          'MarketIndex!("market", "REV/V4T:v2", *r) | '

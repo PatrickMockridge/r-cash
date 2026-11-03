@@ -1354,10 +1354,11 @@ impl Client {
         let factory = self.require_v4()?.market_factory_uri.as_str().to_string();
         let term = format!(
             "new rl(`rho:registry:lookup`), fCh, rCh, \
-             deployId(`rho:rchain:deployId`) in {{ \
+             deployId(`rho:rchain:deployId`), \
+             deployerId(`rho:rchain:deployerId`) in {{ \
              rl!(`{factory}`, *fCh) | for (MarketFactory <- fCh) {{ \
              MarketFactory!(\"createMarket\", {map}, {values}, {sponsor_lit}, \
-                            \"{sig}\".hexToBytes(), *rCh) | \
+                            \"{sig}\".hexToBytes(), *deployerId, *rCh) | \
              for (@r <- rCh) {{ deployId!(r) }} }} }}",
             sponsor_lit = terms::s(&sponsor)?,
         );

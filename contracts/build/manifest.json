@@ -130,46 +130,46 @@
       "brace_depth": 40,
       "contracts": 68,
       "grammar_depth": 65,
-      "minified_bytes": 45434,
+      "minified_bytes": 45660,
       "operator_run": 5,
-      "sha256": "36636fbc42ddc76ee98e2b557940dc8247f710a3746ee8d8792daedbf2523352",
-      "source_bytes": 82418
+      "sha256": "2c02eaf8dbd4eee7952c7b069c683ad237e83a2abb0a146f0e9d72b88d8ef758",
+      "source_bytes": 83456
     },
     "contracts/build/deploy/v3/32_currency_registry.rho": {
       "brace_depth": 32,
       "contracts": 11,
       "grammar_depth": 53,
-      "minified_bytes": 7685,
+      "minified_bytes": 8268,
       "operator_run": 6,
-      "sha256": "0acc29976feebbc86b05c79a5d3b9a828406298cf4e7f20a160f99f8d5309ab4",
-      "source_bytes": 16382
+      "sha256": "696ae2d81ede66a39692b35c90d7e162cb8358e7b98d9e5c458f73cf6f515206",
+      "source_bytes": 17822
     },
     "contracts/build/deploy/v3/40_transfer.rho": {
-      "brace_depth": 31,
+      "brace_depth": 36,
       "contracts": 7,
-      "grammar_depth": 54,
-      "minified_bytes": 4948,
+      "grammar_depth": 62,
+      "minified_bytes": 5162,
       "operator_run": 4,
-      "sha256": "343de9fc81eac4a5270cdbe6868ae56e23201be57e76d2857a53d77c3348b973",
-      "source_bytes": 10377
+      "sha256": "254cc33a2905cfa8ca068b2ef80a5ccd6e781b6a83b1734f29a85bdc6eb5f071",
+      "source_bytes": 12309
     },
     "contracts/build/deploy/v3/50_market.rho": {
-      "brace_depth": 42,
-      "contracts": 33,
-      "grammar_depth": 68,
-      "minified_bytes": 18351,
+      "brace_depth": 40,
+      "contracts": 34,
+      "grammar_depth": 63,
+      "minified_bytes": 20945,
       "operator_run": 4,
-      "sha256": "bf8d41bd50eae37e0b57f4faf15d2a3dcb0a5129802c66f4f2cfac84f971d9cf",
-      "source_bytes": 32108
+      "sha256": "b4dd7a35293ccdbd1523ccc2c90535614d576954f9fc71e2692457ec4b4b7717",
+      "source_bytes": 40949
     },
     "contracts/build/deploy/v3/51_pool.rho": {
-      "brace_depth": 39,
+      "brace_depth": 41,
       "contracts": 24,
-      "grammar_depth": 67,
-      "minified_bytes": 16707,
+      "grammar_depth": 70,
+      "minified_bytes": 17007,
       "operator_run": 3,
-      "sha256": "d2d0a6a59c4a2d3b66d0da23cde73160d6eb8c94933940f97b85d21923b01e4f",
-      "source_bytes": 30176
+      "sha256": "e2b2c76d2838164ec18d3bffe4a269a87bfc0b6ebf99c592873982098f9ca71c",
+      "source_bytes": 31612
     }
   },
   "schema": "rcash:contract-metrics:v1"

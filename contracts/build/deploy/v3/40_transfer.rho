@@ -103,11 +103,11 @@ in {
                       new nowCh in {
                       transferNow!(*nowCh) |
                       for (@now <- nowCh) {
-                      for (@ts <- transferState) {
+                      for (@ts <<- transferState) {
                         match ts.get("status") {
                           "open" => {
                             if (now >= expiry) {
-                              transferState!(ts) | ret2!((false, "expired"))
+                              ret2!((false, "expired"))
                             } else {
                             new rCh, ccCh, hCh in {
                               rl!(`__ROOT_URI__`, *rCh) |
@@ -120,16 +120,30 @@ in {
                                       ClaimCode!("hash", secret, *hCh) |
                                       for (@h <- hCh) {
                                         if (h != secretHash) {
-                                          transferState!(ts) |
                                           ret2!((false, "bad secret"))
                                         } else {
+                                          // Deposit first, then take and revalidate.
+                                          // A refused deposit must not close the
+                                          // transfer: match it and fail the deploy.
                                           new dCh in {
                                             recipientFacet!("deposit", *payment, *dCh) |
                                             for (@d <- dCh) {
-                                              transferState!({"status": "claimed",
-                                                "memo": memo, "opId": opId,
-                                                "stipend": stipend}) |
-                                              ret2!(d)
+                                              match d {
+                                                (true, _) => {
+                                                  for (@ts2 <- transferState) {
+                                                    match ts2.get("status") {
+                                                      "open" => {
+                                                        transferState!({"status": "claimed",
+                                                          "memo": memo, "opId": opId,
+                                                          "stipend": stipend}) |
+                                                        ret2!(d)
+                                                      }
+                                                      _ => { transferState!(ts2) | ret2!(1 / 0) }
+                                                    }
+                                                  }
+                                                }
+                                                _ => { ret2!(1 / 0) }
+                                              }
                                             }
                                           }
                                         }
@@ -141,14 +155,14 @@ in {
                             }
                           }
                             }
-                          _ => { transferState!(ts) | ret2!((false, "closed")) }
+                          _ => { ret2!((false, "closed")) }
                         }
                       }
                       }
                       } } |
 
                     contract TransferContract(@"refund", dId, ret2) = {
-                      for (@ts <- transferState) {
+                      for (@ts <<- transferState) {
                         match ts.get("status") {
                           "open" => {
                             new rCh, cCh, nowCh2, pkCh, aCh in {
@@ -162,7 +176,6 @@ in {
                                       Clock!("now", *nowCh2) |
                                       for (@now2 <- nowCh2) {
                                         if (now2 < expiry) {
-                                          transferState!(ts) |
                                           ret2!((false, "not expired"))
                                         } else {
                                           deployerIdOps!("pubKeyBytes", *dId, *pkCh) |
@@ -170,16 +183,30 @@ in {
                                             revAddress!("fromPublicKey", pk, *aCh) |
                                             for (@addr <- aCh) {
                                               if (addr != senderId) {
-                                                transferState!(ts) |
                                                 ret2!((false, "not sender"))
                                               } else {
+                                                // Deposit first, then take and
+                                                // revalidate. A refused refund
+                                                // must leave the transfer open.
                                                 new dCh in {
                                                   refundFacet!("deposit", *payment, *dCh) |
                                                   for (@d <- dCh) {
-                                                    transferState!({"status": "refunded",
-                                                      "memo": memo, "opId": opId,
-                                                      "stipend": stipend}) |
-                                                    ret2!(d)
+                                                    match d {
+                                                      (true, _) => {
+                                                        for (@ts2 <- transferState) {
+                                                          match ts2.get("status") {
+                                                            "open" => {
+                                                              transferState!({"status": "refunded",
+                                                                "memo": memo, "opId": opId,
+                                                                "stipend": stipend}) |
+                                                              ret2!(d)
+                                                            }
+                                                            _ => { transferState!(ts2) | ret2!(1 / 0) }
+                                                          }
+                                                        }
+                                                      }
+                                                      _ => { ret2!(1 / 0) }
+                                                    }
                                                   }
                                                 }
                                               }
@@ -193,7 +220,7 @@ in {
                               }
                             }
                           }
-                          _ => { transferState!(ts) | ret2!((false, "closed")) }
+                          _ => { ret2!((false, "closed")) }
                         }
                       }
                     } |

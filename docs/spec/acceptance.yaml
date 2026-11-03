@@ -2322,8 +2322,8 @@ SPEC-DEX-01:
   - id: AC-SPEC-DEX-01.1
     given: a supported currency set and an active market for a pair in one orientation
     when: the pair is looked up in the reverse orientation and a second orientation is staged
-    then: both lookups resolve to one marketId; staging the second orientation refuses "pair active" and creates no second
-      market record
+    then: both lookups resolve to one marketId; staging the second orientation refuses "pair active", creates no second
+      market record and leaves the market directory unchanged (no sealed slot)
     checks: &id013
     - static:mesh
     - model:mesh

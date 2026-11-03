@@ -85,8 +85,8 @@
 | `AssetResolver@"issuer"` | `registry.AssetResolver.issuer` | — | OK | yes | `Rholphin.Model.Registry.assetResolver_issuer` | verified |  |
 | `AssetResolver@"kind"` | `registry.AssetResolver.kind` | — | OK | yes | `Rholphin.Model.Registry.assetResolver_kind` | verified |  |
 | `TransferBook@"send"` | `transfer.TransferBook.send` | peek:1, post:1 | OK | yes | `Rholphin.Model.Transfer.transferBook_send` | verified |  |
-| `TransferContract@"claim"` | `transfer.TransferContract.claim` | consume:1, post:1 | OK | yes | `Rholphin.Model.Transfer.transferContract_claim` | verified |  |
-| `TransferContract@"refund"` | `transfer.TransferContract.refund` | consume:1, post:1 | OK | yes | `Rholphin.Model.Transfer.transferContract_refund` | verified |  |
+| `TransferContract@"claim"` | `transfer.TransferContract.claim` | peek:1, consume:1, post:1 | OK | yes | `Rholphin.Model.Transfer.transferContract_claim` | verified |  |
+| `TransferContract@"refund"` | `transfer.TransferContract.refund` | peek:1, consume:1, post:1 | OK | yes | `Rholphin.Model.Transfer.transferContract_refund` | verified |  |
 | `TransferContract@"info"` | `transfer.TransferContract.info` | peek:1 | OK | yes | `Rholphin.Model.Transfer.transferContract_info` | verified |  |
 | `MarketTerms@"put"` | `market.MarketTerms.put` | consume:1, post:1 | OK | yes | `Rholphin.Model.Market.marketTerms_put` | verified |  |
 | `MarketTerms@"get"` | `market.MarketTerms.get` | peek:1 | OK | yes | `Rholphin.Model.Market.marketTerms_get` | verified |  |
@@ -95,7 +95,8 @@
 | `MarketDirectory@"byId"` | `market.MarketDirectory.byId` | peek:1 | OK | yes | `Rholphin.Model.Market.marketDirectory_byId` | verified |  |
 | `MarketDirectory@"slot"` | `market.MarketDirectory.slot` | peek:1 | OK | yes | `Rholphin.Model.Market.marketDirectory_slot` | verified |  |
 | `MarketIndex@"stage"` | `market.MarketIndex.stage` | consume:1, post:1 | OK | yes | `Rholphin.Model.Market.marketIndex_stage` | verified |  |
-| `MarketIndex@"activate"` | `market.MarketIndex.activate` | peek:1, consume:1, post:1 | OK | yes | `Rholphin.Model.Market.marketIndex_activate` | verified |  |
+| `MarketIndex@"checkStage"` | `market.MarketIndex.checkStage` | peek:1 | OK | yes | `Rholphin.Model.Market.marketIndex_checkStage` | verified |  |
+| `MarketIndex@"activate"` | `market.MarketIndex.activate` | peek:1, consume:1, post:1 | OK | yes | `Rholphin.Model.Market.marketIndex_activateChecked` | verified |  |
 | `MarketIndex@"market"` | `market.MarketIndex.market` | peek:1 | OK | yes | `Rholphin.Model.Market.marketIndex_market` | verified |  |
 | `MarketIndex@"markets"` | `market.MarketIndex.markets` | peek:1 | OK | yes | `Rholphin.Model.Market.marketIndex_markets` | verified |  |
 | `MarketIndex@"marketFor"` | `market.MarketIndex.marketFor` | peek:1 | OK | yes | `Rholphin.Model.Market.marketIndex_marketFor` | verified |  |
@@ -116,9 +117,9 @@
 | `FxPool@"balances"` | `pool.FxPool.balances` | — | OK | yes | `Rholphin.Model.Pool.fxPool_balances` | verified |  |
 | `FxPool@"attest"` | `pool.FxPool.attest` | peek:1 | OK | yes | `Rholphin.Model.Pool.fxPool_attest` | verified |  |
 | `FxPool@"quote"` | `pool.FxPool.quote` | peek:1 | OK | yes | `Rholphin.Model.Pool.fxPool_quote` | verified |  |
-| `FxPool@"swap"` | `pool.FxPool.swap` | consume:1, post:1 | OK | yes | `Rholphin.Model.Pool.fxPool_swap` | verified |  |
-| `FxPool@"addLiquidity"` | `pool.FxPool.addLiquidity` | consume:1, post:1 | OK | yes | `Rholphin.Model.Pool.fxPool_addLiquidity` | verified |  |
-| `FxPool@"removeLiquidity"` | `pool.FxPool.removeLiquidity` | consume:1, post:1 | OK | yes | `Rholphin.Model.Pool.fxPool_removeLiquidity` | verified |  |
+| `FxPool@"swap"` | `pool.FxPool.swap` | peek:1, consume:1, post:1 | OK | yes | `Rholphin.Model.Pool.fxPool_swap` | verified |  |
+| `FxPool@"addLiquidity"` | `pool.FxPool.addLiquidity` | peek:1, consume:1, post:1 | OK | yes | `Rholphin.Model.Pool.fxPool_addLiquidity` | verified |  |
+| `FxPool@"removeLiquidity"` | `pool.FxPool.removeLiquidity` | peek:1, consume:1, post:1 | OK | yes | `Rholphin.Model.Pool.fxPool_removeLiquidity` | verified |  |
 | `LiquidityLock@"fund"` | `pool.LiquidityLock.fund` | consume:1, post:1 | OK | yes | `Rholphin.Model.Pool.liquidityLock_fund` | verified |  |
 | `LiquidityLock@"release"` | `pool.LiquidityLock.release` | consume:1, post:1 | OK | yes | `Rholphin.Model.Pool.liquidityLock_release` | verified |  |
 | `LiquidityLock@"cancel"` | `pool.LiquidityLock.cancel` | consume:1, post:1 | OK | yes | `Rholphin.Model.Pool.liquidityLock_cancel` | verified |  |

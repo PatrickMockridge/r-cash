@@ -64,7 +64,7 @@ async fn discovery_and_status_work_over_http() {
     let node = NodeClient::new_with_options(format!("http://127.0.0.1:{port}"), options).unwrap();
     let plan = node.plan_write(1).await.unwrap();
     assert_eq!(plan.base, format!("http://127.0.0.1:{port}"));
-    assert_eq!(plan.anchor, 7);
+    assert_eq!(plan.anchor, 1);
     assert_eq!(plan.phlo_price, 2);
     assert_eq!(node.nodes().len(), 1);
 }

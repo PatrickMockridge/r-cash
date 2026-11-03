@@ -71,6 +71,7 @@ components:
     - {target: status, formula: claimed}
     - {target: recipient, formula: payment amount}
     access:
+    - {cell: transferState, mode: peek, actor: arm, phase: pre}
     - {cell: transferState, mode: consume, actor: arm, phase: commit}
     - {cell: transferState, mode: post, actor: arm, phase: commit}
     nested_calls:
@@ -91,7 +92,7 @@ components:
     transition: transfer.TransferContract.refund
     lean: Rholphin.Model.Transfer.transferContract_refund
     kind: mutate
-    source: {file: contracts/src/deploy/v3/40_transfer.rho, line: 150}
+    source: {file: contracts/src/deploy/v3/40_transfer.rho, line: 164}
     guards:
     - {id: open, expr: status = "open", refusal: {reason: closed, phase: pre}}
     - {id: expired, expr: now >= expiry, refusal: {reason: not expired, phase: pre}}
@@ -100,6 +101,7 @@ components:
     - {target: status, formula: refunded}
     - {target: refund, formula: payment amount}
     access:
+    - {cell: transferState, mode: peek, actor: arm, phase: pre}
     - {cell: transferState, mode: consume, actor: arm, phase: commit}
     - {cell: transferState, mode: post, actor: arm, phase: commit}
     nested_calls: []
@@ -119,7 +121,7 @@ components:
     transition: transfer.TransferContract.info
     lean: Rholphin.Model.Transfer.transferContract_info
     kind: read
-    source: {file: contracts/src/deploy/v3/40_transfer.rho, line: 201}
+    source: {file: contracts/src/deploy/v3/40_transfer.rho, line: 228}
     guards: []
     effects:
     - {target: reply, formula: '(true, {sender, asset, amount, secretHash, expiry, status, memo, opId, stipend})'}

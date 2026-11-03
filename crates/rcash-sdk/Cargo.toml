@@ -20,6 +20,7 @@ rcash-chain = { path = "../rcash-chain", default-features = false }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+futures-util.workspace = true
 
 [dev-dependencies]
 async-trait.workspace = true

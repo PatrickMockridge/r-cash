@@ -201,11 +201,15 @@ evidence-first:
    The pool must be seeded with `rb >= seedBase`, `rq >= max(seedQuote, depthFloorQuote)`
    and `totalShares >= seedInitialShares`; the lock must be funded, unreleased and have
    `untilHeight >= lockUntilHeight`.
-6. `MarketDirectory.seal(marketId, termsHash, stageNonce, sponsorSig)` is one cell commit;
-   it refuses a missing or mismatched slot.
-7. `MarketIndex.activate` consumes `marketState`, rechecks `draft`, `stageNonce` and
-   `termsHash`, sets `active` and `byPair[pairKey] = marketId`, posts and replies. If the
-   recheck fails after the seal, `fail()` reverts the seal.
+6. `MarketDirectory.bind` is create-only: an exact retry of the same
+   `{poolUri, lockUri, termsHash}` is idempotent, any different slot refuses `"exists"`.
+   `MarketDirectory.seal(marketId, auth)` is one cell commit at creation; it refuses a
+   missing slot.
+7. `MarketIndex.activate` consumes `marketState`, rechecks `draft` and `termsHash`, checks
+   pair ownership (the pair is absent, owned by this market, or owned by a delisted lower
+   version), sets `active`, and writes both `byPair` orientations to `marketId` in the same
+   `indexState` commit, then posts and replies. A refusal after the directory write fails
+   the deploy; a recheck failure fails it too.
 
 No `marketState` cell is held while an external component is awaited. The activation
 decision is a snapshot; the `active` transition is the linearization point.

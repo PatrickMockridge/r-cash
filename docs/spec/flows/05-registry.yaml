@@ -297,7 +297,7 @@ components:
     transition: registry.CurrencyRegistry.register
     lean: Rholphin.Model.Registry.currencyRegistry_register
     kind: mutate
-    source: {file: contracts/src/deploy/v3/32_currency_registry.rho, line: 88}
+    source: {file: contracts/src/deploy/v3/32_currency_registry.rho, line: 121}
     guards:
     - {id: new, expr: 'currencies[code] = Nil', refusal: {reason: exists, phase: pre}}
     - {id: sponsor_sig, expr: 'Verifier.sigOk(H(rcash:currency-register:v3|...), sig, sponsor)', refusal: {reason: bad sponsor signature,
@@ -333,7 +333,7 @@ components:
     transition: registry.CurrencyRegistry.currency
     lean: Rholphin.Model.Registry.currencyRegistry_currency
     kind: read
-    source: {file: contracts/src/deploy/v3/32_currency_registry.rho, line: 293}
+    source: {file: contracts/src/deploy/v3/32_currency_registry.rho, line: 326}
     guards:
     - {id: exists, expr: 'currencies[code] != Nil', refusal: {reason: no currency, phase: pre}}
     effects:
@@ -352,7 +352,7 @@ components:
     transition: registry.CurrencyRegistry.currencies
     lean: Rholphin.Model.Registry.currencyRegistry_currencies
     kind: read
-    source: {file: contracts/src/deploy/v3/32_currency_registry.rho, line: 302}
+    source: {file: contracts/src/deploy/v3/32_currency_registry.rho, line: 335}
     guards: []
     effects:
     - {target: reply, formula: '(true, keys(currencies))'}
@@ -369,7 +369,7 @@ components:
     transition: registry.CurrencyRegistry.setPaused
     lean: Rholphin.Model.Registry.currencyRegistry_setPaused
     kind: mutate
-    source: {file: contracts/src/deploy/v3/32_currency_registry.rho, line: 308}
+    source: {file: contracts/src/deploy/v3/32_currency_registry.rho, line: 341}
     guards:
     - {id: exists, expr: 'currencies[code] != Nil', refusal: {reason: no currency, phase: pre}}
     - {id: external_pause, expr: 'entry.kind != external implies VaultBook.pause(paused, nonce, sigs) ok', refusal: {reason: authorize,
@@ -379,6 +379,7 @@ components:
     - {id: recheck, expr: 'currencies[code] != Nil', refusal: {reason: no currency, phase: pre}}
     effects:
     - {target: 'currencies[code].status', formula: 'paused ? paused : active'}
+    - {target: 'currencies[code].pausedRev', formula: pausedRev}
     - {target: rev, formula: rev + 1}
     access:
     - {cell: currencyState, mode: peek, actor: arm, phase: pre}
@@ -390,6 +391,7 @@ components:
     - {callee: registrySetStatus, protocol: H2b, takes: [currencyState], puts: [currencyState], post_owner: helper}
     refusals:
     - {reason: no currency, phase: pre, reposts: false, fail: false}
+    - {reason: stale, phase: pre, reposts: false, fail: false}
     invariants:
     - S12
     - I23
@@ -401,7 +403,7 @@ components:
     transition: registry.CurrencyRegistry.registerExternal
     lean: Rholphin.Model.Registry.currencyRegistry_registerExternal
     kind: mutate
-    source: {file: contracts/src/deploy/v3/32_currency_registry.rho, line: 198}
+    source: {file: contracts/src/deploy/v3/32_currency_registry.rho, line: 231}
     guards:
     - {id: new, expr: 'currencies[code] = Nil', refusal: {reason: exists, phase: pre}}
     - {id: sponsor_sig, expr: 'Verifier.sigOk(H(rcash:external-asset-register:v1|code|assetUri|sponsor), sig, sponsor)', refusal: {

@@ -13,7 +13,7 @@
 //! is sent to exactly one node. A node that returns 404 for the hostlist leaves the
 //! client behaving exactly as the old single-endpoint one.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -33,11 +33,30 @@ pub mod pool;
 pub mod transport;
 
 use pool::{
-    best_write_tier, compute_anchor, dedupe_endpoints, explicit_endpoints, filter_node_list,
-    filter_stale_targets, is_read_retryable, parse_node_list, rank_write_targets, verify_node,
-    DiscoveryMode, DiscoveryReport, EndpointSource, NodeEndpoint, NodeStatusView, PoolOptions,
-    PoolState, RejectedEntry, WritePlan, DEPLOY_LIFESPAN_BLOCKS, MAX_HOSTLIST_AGE_MS,
+    dedupe_endpoints, eligible_write_targets, explicit_endpoints, filter_node_list,
+    is_read_retryable, parse_node_list, verify_node, DiscoveryMode, DiscoveryReport,
+    EndpointSource, NodeEndpoint, NodeStatusView, PoolOptions, PoolState, RejectedEntry, WritePlan,
+    DEPLOY_LIFESPAN_BLOCKS, MAX_HOSTLIST_AGE_MS,
 };
+
+/// A write is rejected if its anchor leaves less than this many blocks of the
+/// 50-block lifespan.
+const ANCHOR_SAFETY_MARGIN: i64 = 5;
+
+/// Clears the single-flight discovery flag when the refresh future ends for any
+/// reason, including cancellation or panic.
+struct RefreshGuard<'a> {
+    pool: &'a Arc<Mutex<PoolState>>,
+}
+
+impl Drop for RefreshGuard<'_> {
+    fn drop(&mut self) {
+        self.pool
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .refreshing = false;
+    }
+}
 use transport::{HttpRequest, Method, Transport};
 
 /// Map a non-2xx response to the retry class the caller must act on.
@@ -247,6 +266,11 @@ impl NodeClient {
         self.lock().options.discovery
     }
 
+    /// Per-endpoint routing counters for `doctor --json` and the load harness.
+    pub fn stats(&self) -> BTreeMap<String, pool::EndpointStats> {
+        self.lock().stats.clone()
+    }
+
     /// Replace the explicit endpoint list. Discovery, if enabled, adds to it.
     pub fn set_nodes(&self, nodes: Vec<String>) -> Result<(), ChainError> {
         let mut normalized = Vec::with_capacity(nodes.len());
@@ -346,17 +370,40 @@ impl NodeClient {
         if mode == DiscoveryMode::Disabled {
             return;
         }
-        {
+        // Decide under the lock, then release it before any await.
+        let wait_for = {
             let mut state = self.lock();
-            if state.fresh() || state.refreshing {
+            if state.fresh() {
                 return;
             }
-            state.refreshing = true;
+            if state.refreshing {
+                Some(state.options.probe_timeout)
+            } else {
+                state.refreshing = true;
+                None
+            }
+        };
+        if let Some(timeout) = wait_for {
+            // Join the in-flight refresh briefly instead of planning from a
+            // seed-only pool. Bounded so a stuck probe cannot block forever.
+            let deadline = Instant::now() + timeout.saturating_mul(2);
+            while Instant::now() < deadline {
+                sleep(Duration::from_millis(50)).await;
+                let ready = {
+                    let state = self.lock();
+                    !state.refreshing || state.fresh()
+                };
+                if ready {
+                    return;
+                }
+            }
+            return;
         }
+        // The guard clears `refreshing` on success, failure, panic or cancellation.
+        let _guard = RefreshGuard { pool: &self.pool };
         let result = self.refresh_snapshot().await;
         {
             let mut state = self.lock();
-            state.refreshing = false;
             if let Err(error) = result {
                 if state.report.is_none() {
                     state.report = Some(DiscoveryReport {
@@ -443,7 +490,10 @@ impl NodeClient {
                 }
             }
         });
-        stream::iter(probes).buffer_unordered(8).collect().await
+        stream::iter(probes)
+            .buffer_unordered(options.probe_concurrency.max(1))
+            .collect()
+            .await
     }
 
     async fn refresh_snapshot(&self) -> Result<DiscoveryReport, ChainError> {
@@ -513,8 +563,8 @@ impl NodeClient {
             .unwrap_or_else(|| list.network_id.clone());
         let generated_age_ms = now_millis().map(|now| now.saturating_sub(list.generated_at));
         if let Some(age) = generated_age_ms {
-            if age > MAX_HOSTLIST_AGE_MS {
-                let reason = format!("hostlist is stale ({age} ms old)");
+            if !(-pool::MAX_HOSTLIST_FUTURE_SKEW_MS..=MAX_HOSTLIST_AGE_MS).contains(&age) {
+                let reason = format!("hostlist timestamp is not credible ({age} ms from now)");
                 let known = self
                     .probe_known(&options, &seed, &BTreeSet::new(), true)
                     .await;
@@ -525,9 +575,11 @@ impl NodeClient {
 
         let (entries, mut rejected) = filter_node_list(&list, &options, &seed);
         let had_entries = !list.nodes.is_empty();
+        // Probe before truncating: a dead advertised node must not consume a
+        // pool slot. The entry cap only bounds the probe work.
         let entries: Vec<_> = entries
             .into_iter()
-            .take(options.max_verified_nodes)
+            .take(options.max_hostlist_entries)
             .collect();
 
         let client = self;
@@ -551,8 +603,10 @@ impl NodeClient {
                 }
             }
         });
-        let results: Vec<Result<NodeEndpoint, RejectedEntry>> =
-            stream::iter(probes).buffer_unordered(8).collect().await;
+        let results: Vec<Result<NodeEndpoint, RejectedEntry>> = stream::iter(probes)
+            .buffer_unordered(options.probe_concurrency.max(1))
+            .collect()
+            .await;
         let mut verified = Vec::new();
         for result in results {
             match result {
@@ -560,6 +614,15 @@ impl NodeClient {
                 Err(rejection) => rejected.push(rejection),
             }
         }
+        // Rank the verified pool deterministically, then apply the pool cap.
+        verified.sort_by(|a, b| {
+            b.accepts_deploys
+                .cmp(&a.accepts_deploys)
+                .then(b.latest_block_number.cmp(&a.latest_block_number))
+                .then(a.node_id.cmp(&b.node_id))
+                .then(a.base.cmp(&b.base))
+        });
+        verified.truncate(options.max_verified_nodes);
 
         let verified_any = !verified.is_empty();
         let verified_bases: BTreeSet<String> = verified.iter().map(|e| e.base.clone()).collect();
@@ -726,41 +789,75 @@ impl NodeClient {
             (state.options.clone(), endpoints, index)
         };
 
-        let candidates: Vec<_> = endpoints
-            .into_iter()
-            .filter(|endpoint| endpoint.proposer)
+        // Every accepting proposer inside the policy's fee band and tip window
+        // is eligible; the rest stay as fallbacks. Rotate only the eligible
+        // prefix so a fallback never outranks an eligible node.
+        let eligible = eligible_write_targets(&endpoints, &options.routing, configured_phlo_price);
+        let eligible_bases: BTreeSet<&str> = eligible
+            .iter()
+            .map(|endpoint| endpoint.base.as_str())
             .collect();
-        let (candidates, _) = filter_stale_targets(&candidates, DEPLOY_LIFESPAN_BLOCKS);
-        if candidates.is_empty() {
+        let mut fallbacks: Vec<_> = endpoints
+            .iter()
+            .filter(|endpoint| {
+                endpoint.proposer && !eligible_bases.contains(endpoint.base.as_str())
+            })
+            .cloned()
+            .collect();
+        fallbacks.sort_by(|a, b| {
+            b.accepts_deploys
+                .cmp(&a.accepts_deploys)
+                .then(a.min_phlo_price.cmp(&b.min_phlo_price))
+                .then(b.latest_block_number.cmp(&a.latest_block_number))
+                .then(a.node_id.cmp(&b.node_id))
+                .then(a.base.cmp(&b.base))
+        });
+        let eligible_len = eligible.len();
+        let mut ordered = eligible;
+        if eligible_len > 0 {
+            ordered.rotate_left(start % eligible_len);
+        }
+        ordered.extend(fallbacks);
+        if ordered.is_empty() {
             return Err(ChainError::NoEligibleNode {
-                reason: "no proposer inside the deploy lifespan".into(),
+                reason: "no proposer inside the tip window".into(),
             });
         }
-        // The anchor covers every surviving target so a relayed copy stays valid; the
-        // price covers only the node that receives the deploy, so the cheapest target is
-        // actually cheaper.
-        let anchor_floor = compute_anchor(&candidates);
+        if eligible_len == 0 {
+            let offset = start % ordered.len();
+            ordered.rotate_left(offset);
+        }
 
-        // Cheapest accepting tier first, freshest first within it, rotating so concurrent
-        // deploys spread without paying more. The rest stay as fallbacks.
-        let ranked = rank_write_targets(&candidates);
-        let tier = best_write_tier(&ranked);
-        let offset = start % tier.len().max(1);
-        let mut ordered = tier.to_vec();
-        ordered.rotate_left(offset);
-        ordered.extend(ranked[tier.len()..].iter().cloned());
+        // Probe statuses in bounded parallel. These are reads; no signed bytes
+        // are sent, so the write-once rule is unaffected.
+        let probes = ordered.iter().cloned().map(|candidate| {
+            let options = options.clone();
+            async move {
+                let status = self
+                    .status_on(&candidate.base, Some(options.probe_timeout))
+                    .await;
+                (candidate, status)
+            }
+        });
+        let results: Vec<_> = stream::iter(probes)
+            .buffer_unordered(options.probe_concurrency.max(1))
+            .collect()
+            .await;
+        let mut statuses: BTreeMap<String, Result<NodeStatusView, ChainError>> = BTreeMap::new();
+        for (candidate, status) in results {
+            statuses.insert(candidate.base.clone(), status);
+        }
 
+        let max_tip_skew = options.routing.max_tip_skew();
         let mut last = String::from("no candidate answered");
         for candidate in ordered {
-            let status = match self
-                .status_on(&candidate.base, Some(options.probe_timeout))
-                .await
-            {
-                Ok(status) => status,
-                Err(error) => {
+            let status = match statuses.remove(&candidate.base) {
+                Some(Ok(status)) => status,
+                Some(Err(error)) => {
                     last = error.to_string();
                     continue;
                 }
+                None => continue,
             };
             if !status.shard_id.is_empty() && status.shard_id != options.shard_id {
                 last = format!("{} is on shard {}", candidate.base, status.shard_id);
@@ -776,15 +873,44 @@ impl NodeClient {
                 last = format!("{} cannot propose", candidate.base);
                 continue;
             }
+            if status.accepts_deploys == Some(false) {
+                last = format!("{} is not accepting deploys", candidate.base);
+                continue;
+            }
             if status.latest_block_number < 0 {
                 last = format!("{} has no block height", candidate.base);
                 continue;
             }
 
-            let anchor = anchor_floor
-                .map(|floor| floor.min(status.latest_block_number))
-                .unwrap_or(status.latest_block_number);
+            // Anchor near the target's tip within the policy's skew window. The
+            // old min-across-candidates anchor could leave as little as one
+            // block of the 50-block lifespan.
+            // A young chain can be shorter than the skew window. Anchor at 1
+            // rather than 0: the platform never proposes a deploy anchored at 0.
+            let mut anchor = status
+                .latest_block_number
+                .saturating_sub(max_tip_skew)
+                .max(0);
+            if anchor == 0 && status.latest_block_number > 0 {
+                anchor = 1;
+            }
+            if status.latest_block_number - anchor >= DEPLOY_LIFESPAN_BLOCKS - ANCHOR_SAFETY_MARGIN
+            {
+                last = format!(
+                    "{} anchor would leave too little deploy lifespan",
+                    candidate.base
+                );
+                continue;
+            }
             let phlo_price = configured_phlo_price.max(status.min_phlo_price);
+            {
+                let mut state = self.lock();
+                state
+                    .stats
+                    .entry(candidate.base.clone())
+                    .or_default()
+                    .planned += 1;
+            }
             return Ok(WritePlan {
                 base: candidate.base.clone(),
                 node_id: candidate.node_id.clone(),
@@ -803,12 +929,31 @@ impl NodeClient {
         state
             .bindings
             .entry(deploy_id.to_string())
-            .or_insert_with(|| base.to_string());
+            .or_insert_with(|| pool::Binding {
+                base: base.to_string(),
+                at: Instant::now(),
+            });
+        while state.bindings.len() > pool::DEFAULT_MAX_BINDINGS {
+            let oldest = state
+                .bindings
+                .iter()
+                .min_by_key(|(_, binding)| binding.at)
+                .map(|(deploy_id, _)| deploy_id.clone());
+            match oldest {
+                Some(deploy_id) => {
+                    state.bindings.remove(&deploy_id);
+                }
+                None => break,
+            }
+        }
     }
 
     /// The node a deploy id was bound to, if this process bound it.
     pub fn bound_base(&self, deploy_id: &str) -> Option<String> {
-        self.lock().bindings.get(deploy_id).cloned()
+        self.lock()
+            .bindings
+            .get(deploy_id)
+            .map(|binding| binding.base.clone())
     }
 
     /// The bound node, or the seed for a deploy this process did not plan.
@@ -854,7 +999,7 @@ impl NodeClient {
         deploy_id: &str,
         term_len: usize,
     ) -> Result<(), ChainError> {
-        let response = self
+        let response = match self
             .transport
             .send(HttpRequest {
                 method: Method::Post,
@@ -862,8 +1007,22 @@ impl NodeClient {
                 body: Some(body.to_string()),
                 timeout: None,
             })
-            .await?;
+            .await
+        {
+            Ok(response) => response,
+            Err(error) => {
+                self.record_stats(base, |stats| stats.errors += 1);
+                return Err(error);
+            }
+        };
         if !(200..300).contains(&response.status) {
+            if response.status == 429 {
+                self.record_stats(base, |stats| stats.rate_limited += 1);
+            } else if response.status == 503 {
+                self.record_stats(base, |stats| stats.unavailable += 1);
+            } else {
+                self.record_stats(base, |stats| stats.errors += 1);
+            }
             let lower = response.body.to_ascii_lowercase();
             if lower.contains("duplicate")
                 || (lower.contains("already") && lower.contains("deploy"))
@@ -887,7 +1046,13 @@ impl NodeClient {
             }
             return Err(ChainError::DeployRejected(response.body));
         }
+        self.record_stats(base, |stats| stats.submitted += 1);
         Ok(())
+    }
+
+    fn record_stats(&self, base: &str, update: impl FnOnce(&mut pool::EndpointStats)) {
+        let mut state = self.lock();
+        update(state.stats.entry(base.to_string()).or_default());
     }
 
     /// Submit an exact request body to the deploy's bound node (the seed when unbound).
@@ -1221,6 +1386,26 @@ mod pool_tests {
     }
 
     #[tokio::test]
+    async fn plan_write_skips_a_live_closed_node() {
+        let (client, _log) = client(|request| {
+            if request.url.ends_with("/api/v1/nodes") {
+                Ok(response(
+                    200,
+                    hostlist_body(&[("aa", "http://a:40403"), ("bb", "http://b:40403")]),
+                ))
+            } else if request.url == "http://a:40403/api/v1/status" {
+                Ok(response(200, status_body("aa", 100, 1, false)))
+            } else if request.url == "http://b:40403/api/v1/status" {
+                Ok(response(200, status_body("bb", 99, 1, true)))
+            } else {
+                Ok(response(200, "deployed"))
+            }
+        });
+        let plan = client.plan_write(1).await.unwrap();
+        assert_eq!(plan.base, "http://b:40403");
+    }
+
+    #[tokio::test]
     async fn a_404_hostlist_leaves_the_seed_alone() {
         let (client, log) = client(|request| {
             if request.url.ends_with("/api/v1/nodes") {
@@ -1234,7 +1419,7 @@ mod pool_tests {
 
         let plan = client.plan_write(1).await.unwrap();
         assert_eq!(plan.base, "http://seed:40403");
-        assert_eq!(plan.anchor, 100);
+        assert_eq!(plan.anchor, 92);
         client
             .deploy_body_on(&plan.base, "{}", "id", 1)
             .await
@@ -1276,7 +1461,7 @@ mod pool_tests {
 
         let plan = client.plan_write(1).await.unwrap();
         assert_eq!(plan.base, "http://a:40403");
-        assert_eq!(plan.anchor, 99);
+        assert_eq!(plan.anchor, 92);
         assert_eq!(plan.phlo_price, 1);
         assert_eq!(client.nodes().len(), 2);
 
@@ -1383,7 +1568,7 @@ mod pool_tests {
         let client = NodeClient::with_options("http://seed:40403", transport, options).unwrap();
         let plan = client.plan_write(1).await.unwrap();
         assert_eq!(plan.base, "http://a:40403");
-        assert_eq!(plan.anchor, 100);
+        assert_eq!(plan.anchor, 92);
         assert_eq!(plan.phlo_price, 1);
         assert_eq!(client.nodes().len(), 3);
     }

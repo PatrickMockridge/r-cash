@@ -388,11 +388,12 @@ def create_market(keys: dict, state: dict, config: dict, base: str, quote: str,
     payload = f"rcash:market-create:v1|{market_id}|{terms_hash}|{sponsor['public']}"
     sig = sign_payload.sign_payload(sponsor["secret"], payload.encode())["signature"]
     term = (
-        "new rl(`rho:registry:lookup`), ch, r, deployId(`rho:rchain:deployId`) in {\n"
+        "new rl(`rho:registry:lookup`), ch, r, deployId(`rho:rchain:deployId`), "
+        "deployerId(`rho:rchain:deployerId`) in {\n"
         f"  rl!(`{state['market_factory_uri']}`, *ch) |\n"
         "  for (MarketFactory <- ch) {\n"
         f'    MarketFactory!("createMarket", {terms}, {values_literal}, '
-        f'"{sponsor["public"]}", "{sig}".hexToBytes(), *r) |\n'
+        f'"{sponsor["public"]}", "{sig}".hexToBytes(), *deployerId, *r) |\n'
         "    for (@x <- r) {\n"
         "      match x {\n"
         '        (true, mid, poolUri, lockUri, hash) => deployId!([mid, poolUri, lockUri, hash])\n'
@@ -402,7 +403,9 @@ def create_market(keys: dict, state: dict, config: dict, base: str, quote: str,
         "  }\n"
         "}"
     )
-    created = one(minify(term), keys["deployer"]["secret"])
+    sponsor_key = next(name for name in keys
+                       if keys[name].get("public") == sponsor["public"])
+    created = one(minify(term), keys[sponsor_key]["secret"])
     if not isinstance(created, list) or len(created) < 4:
         raise RuntimeError(f"createMarket {market_id} failed: {created}")
     return {

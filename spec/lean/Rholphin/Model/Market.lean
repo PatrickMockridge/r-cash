@@ -141,6 +141,20 @@ def marketIndex_stage (i : Index) (marketId version base quote : Nat)
           byPair := insertNat (insertNat i.byPair (pairKeyNat base quote) marketId)
                               (pairKeyNat quote base) marketId }
 
+/-- Pure stage pre-check: the same guards as `marketIndex_stage`, without a write.
+Used by the factory before it creates a pool or touches the directory. -/
+def marketIndex_checkStage (i : Index) (marketId version base quote : Nat)
+    (prior : Option Market) : Bool :=
+  match lookupMarket i.markets marketId with
+  | some _ => false
+  | none =>
+      match prior with
+      | some p =>
+          if p.status = .active ∨ p.status = .paused then false
+          else if version ≤ p.version then false
+          else true
+      | none => true
+
 theorem staged_is_draft {i i' : Index} {marketId version base quote : Nat} {prior : Option Market}
     (h : marketIndex_stage i marketId version base quote prior = some i') :
     (lookupMarket i'.markets marketId).map (fun m => m.status) = some .draft := by
@@ -161,6 +175,11 @@ theorem staged_is_draft {i i' : Index} {marketId version base quote : Nat} {prio
 
 def marketIndex_activate (m : Market) : Option Market :=
   if m.status = .draft then some { m with status := .active } else none
+
+/-- Activation with the pair-ownership guard. `pair_ok` is the result of the
+pair-owner check (absent, this market, or a delisted lower version). -/
+def marketIndex_activateChecked (m : Market) (pair_ok : Bool) : Option Market :=
+  if pair_ok ∧ m.status = .draft then some { m with status := .active } else none
 
 def marketIndex_market (i : Index) (marketId : Nat) : Option Market :=
   lookupMarket i.markets marketId

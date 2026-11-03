@@ -137,9 +137,10 @@ if it is not installed); the finite models are committed so they can be checked 
 
 rholo's merge semantics are not Ethereum's. A HAZOP of the shared channels classified every
 channel and stated a conflict rule: one pre→post diff per channel, and a whole-deploy
-rejection on conflict. The analysis is part of the contract-safety record. It is a design
-review, not a proof; the merge-gossip arms were not reached on the available devnet and are
-recorded as blocked.
+rejection on conflict. The analysis is part of the contract-safety record and is committed at
+[`docs/spec/HAZOP.md`](https://github.com/PatrickMockridge/r-cash/blob/main/docs/spec/HAZOP.md).
+It is a design review, not a proof; the merge-gossip arms were not reached on the available
+devnet and are recorded as blocked.
 
 ## Traceability
 
