@@ -110,6 +110,6 @@ never stores a claim secret or a private key.
 - It does not keep the private key in the DOM. The key stays in WASM.
 
 > **Where to go deeper.** Web requirements are in
-> [`docs/SPEC.md` §16](https://github.com/PatrickMockridge/r-cash/blob/main/docs/SPEC.md#16-web-ui).
+> [`docs/SPEC.md` §16](https://github.com/rhovision-org/r-cash/blob/main/docs/SPEC.md#16-web-ui).
 > The routes are in `web/src/routes/`; the wallet and journal are in `web/src/lib/`. The CLI
 > is the scripting surface: [The CLI](cli.md).

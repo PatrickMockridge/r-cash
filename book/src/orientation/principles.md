@@ -8,7 +8,7 @@ the settlement and market core — local stablecoins, stablecoin pairs, the mesh
 payment primitives — not the business-logic suite built on top. These eight principles are its
 operational consequences. They are explanatory, not normative; a decision that creates or changes
 a requirement must be encoded in
-[`docs/SPEC.md`](https://github.com/PatrickMockridge/r-cash/blob/main/docs/SPEC.md).
+[`docs/SPEC.md`](https://github.com/rhovision-org/r-cash/blob/main/docs/SPEC.md).
 
 ## 1. Non-custodial
 
@@ -120,8 +120,8 @@ The status page separates what passed, what is blocked and what was never attemp
 where the evidence is a blocked testnet.
 
 > **Where to go deeper.** The principles follow from the [north star](north-star.md) and are
-> encoded as requirements in [`docs/SPEC.md`](https://github.com/PatrickMockridge/r-cash/blob/main/docs/SPEC.md).
+> encoded as requirements in [`docs/SPEC.md`](https://github.com/rhovision-org/r-cash/blob/main/docs/SPEC.md).
 > The capability rules are in
-> [`docs/SPEC.md` §3](https://github.com/PatrickMockridge/r-cash/blob/main/docs/SPEC.md#3-system-model-and-authority);
+> [`docs/SPEC.md` §3](https://github.com/rhovision-org/r-cash/blob/main/docs/SPEC.md#3-system-model-and-authority);
 > the exclusions are in
-> [§19](https://github.com/PatrickMockridge/r-cash/blob/main/docs/SPEC.md#19-exclusions).
+> [§19](https://github.com/rhovision-org/r-cash/blob/main/docs/SPEC.md#19-exclusions).

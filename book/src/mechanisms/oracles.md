@@ -152,7 +152,7 @@ band checks. It is not trustless. It is a named party that can be replaced by go
 threat.
 
 > **Where to go deeper.** Feed requirements are in
-> [`docs/SPEC.md` §6](https://github.com/PatrickMockridge/r-cash/blob/main/docs/SPEC.md#6-oracle-and-feeds).
+> [`docs/SPEC.md` §6](https://github.com/rhovision-org/r-cash/blob/main/docs/SPEC.md#6-oracle-and-feeds).
 > The transition table is in
-> [`docs/spec/flows/10-oracle.yaml`](https://github.com/PatrickMockridge/r-cash/blob/main/docs/spec/flows/10-oracle.yaml).
+> [`docs/spec/flows/10-oracle.yaml`](https://github.com/rhovision-org/r-cash/blob/main/docs/spec/flows/10-oracle.yaml).
 > The consumption matrix is in [Governance and the timelock](governance.md).

@@ -125,4 +125,4 @@ The exact numbers depend on the faucet and the demo amount.
 
 > **Where to go deeper.** The platform limits and measured costs that shape these commands are
 > in [Repository and implementation map](../trust/repository-map.md). The install order is in
-> [`docs/spec/30-WIRING.md`](https://github.com/PatrickMockridge/r-cash/blob/main/docs/spec/30-WIRING.md).
+> [`docs/spec/30-WIRING.md`](https://github.com/rhovision-org/r-cash/blob/main/docs/spec/30-WIRING.md).

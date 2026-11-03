@@ -11,8 +11,8 @@ build-dir = "book"
 [output.html]
 default-theme = "light"
 preferred-dark-theme = "navy"
-git-repository-url = "https://github.com/PatrickMockridge/r-cash"
-edit-url-template = "https://github.com/PatrickMockridge/r-cash/edit/main/book/{path}"
+git-repository-url = "https://github.com/rhovision-org/r-cash"
+edit-url-template = "https://github.com/rhovision-org/r-cash/edit/main/book/{path}"
 additional-css = ["theme/custom.css"]
 additional-js = ["mermaid.min.js", "mermaid-init.js"]
 

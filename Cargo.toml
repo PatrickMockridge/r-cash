@@ -22,7 +22,7 @@ version = "0.1.0"
 edition = "2021"
 license = "AGPL-3.0-only"
 rust-version = "1.95"
-repository = "https://github.com/PatrickMockridge/r-cash"
+repository = "https://github.com/rhovision-org/r-cash"
 
 [workspace.dependencies]
 rcash-core = { path = "crates/rcash-core" }

@@ -10,7 +10,7 @@ those grants are not revoked. Anyone running a modified version over a network m
 source under AGPL §13.
 
 Third-party notices are in
-[`THIRD_PARTY_NOTICES.md`](https://github.com/PatrickMockridge/r-cash/blob/main/THIRD_PARTY_NOTICES.md),
+[`THIRD_PARTY_NOTICES.md`](https://github.com/rhovision-org/r-cash/blob/main/THIRD_PARTY_NOTICES.md),
 including:
 
 - the pinned rholo crates (AGPL-3.0-only);

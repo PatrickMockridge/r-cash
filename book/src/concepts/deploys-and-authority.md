@@ -156,8 +156,8 @@ capabilities and replies, not accounts, storage slots and events. The rest of th
 that model consistently.
 
 > **Where to go deeper.** Deploy and authority requirements are in
-> [`docs/SPEC.md` §3](https://github.com/PatrickMockridge/r-cash/blob/main/docs/SPEC.md#3-system-model-and-authority).
+> [`docs/SPEC.md` §3](https://github.com/rhovision-org/r-cash/blob/main/docs/SPEC.md#3-system-model-and-authority).
 > The component calculus and linear-cell rules are in
-> [`docs/spec/00-CALCULUS.md`](https://github.com/PatrickMockridge/r-cash/blob/main/docs/spec/00-CALCULUS.md).
+> [`docs/spec/00-CALCULUS.md`](https://github.com/rhovision-org/r-cash/blob/main/docs/spec/00-CALCULUS.md).
 > The flow method is in
-> [`docs/spec/flows/README.md`](https://github.com/PatrickMockridge/r-cash/blob/main/docs/spec/flows/README.md).
+> [`docs/spec/flows/README.md`](https://github.com/rhovision-org/r-cash/blob/main/docs/spec/flows/README.md).

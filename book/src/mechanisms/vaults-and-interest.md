@@ -147,8 +147,8 @@ The asymmetry is deliberate. A pause should stop risk-increasing actions, not tr
 The next chapter explains what happens when a vault becomes unhealthy and cannot be repaid.
 
 > **Where to go deeper.** Vault and interest requirements are in
-> [`docs/SPEC.md` §7.2–7.3](https://github.com/PatrickMockridge/r-cash/blob/main/docs/SPEC.md#72-vault-lifecycle).
+> [`docs/SPEC.md` §7.2–7.3](https://github.com/rhovision-org/r-cash/blob/main/docs/SPEC.md#72-vault-lifecycle).
 > The transition tables are
-> [`01-issuer.yaml`](https://github.com/PatrickMockridge/r-cash/blob/main/docs/spec/flows/01-issuer.yaml)
-> and [`02-vault.yaml`](https://github.com/PatrickMockridge/r-cash/blob/main/docs/spec/flows/02-vault.yaml).
+> [`01-issuer.yaml`](https://github.com/rhovision-org/r-cash/blob/main/docs/spec/flows/01-issuer.yaml)
+> and [`02-vault.yaml`](https://github.com/rhovision-org/r-cash/blob/main/docs/spec/flows/02-vault.yaml).
 > The Lean model is `spec/lean/Rholphin/Model/Vault.lean`.

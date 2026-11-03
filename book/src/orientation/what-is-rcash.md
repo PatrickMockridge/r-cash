@@ -104,6 +104,6 @@ that name is not a separate product. The protocol is not affiliated with a centr
 mobile-money operator or an existing stablecoin issuer.
 
 > **Where to go deeper.** The product scope is in
-> [`docs/SPEC.md` §2](https://github.com/PatrickMockridge/r-cash/blob/main/docs/SPEC.md#2-scope-actors-and-units).
+> [`docs/SPEC.md` §2](https://github.com/rhovision-org/r-cash/blob/main/docs/SPEC.md#2-scope-actors-and-units).
 > The competitive framing and actor list are in [Who it is for](who-it-is-for.md); the
 > principles that constrain the design are in [Design principles](principles.md).

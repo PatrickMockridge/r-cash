@@ -65,7 +65,7 @@ export default function Layout() {
 
       <footer className="footer">
         <span>Devnet only. No real funds.</span>
-        <a href="https://github.com/PatrickMockridge/r-cash" target="_blank" rel="noreferrer">
+        <a href="https://github.com/rhovision-org/r-cash" target="_blank" rel="noreferrer">
           Source (AGPL-3.0)
         </a>
       </footer>

@@ -125,7 +125,7 @@ The liquidator receives the seized REV. A refusal returns the stablecoin payment
 partial seizure: the arm either completes or the deploy fails.
 
 > **Where to go deeper.** Liquidation requirements are in
-> [`docs/SPEC.md` §8](https://github.com/PatrickMockridge/r-cash/blob/main/docs/SPEC.md#8-liquidation-and-bad-debt).
+> [`docs/SPEC.md` §8](https://github.com/rhovision-org/r-cash/blob/main/docs/SPEC.md#8-liquidation-and-bad-debt).
 > The vault transition table is
-> [`docs/spec/flows/02-vault.yaml`](https://github.com/PatrickMockridge/r-cash/blob/main/docs/spec/flows/02-vault.yaml).
+> [`docs/spec/flows/02-vault.yaml`](https://github.com/rhovision-org/r-cash/blob/main/docs/spec/flows/02-vault.yaml).
 > The buffer mechanics are in [The surplus buffer](surplus-buffer.md).

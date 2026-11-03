@@ -89,7 +89,7 @@ bootstrapped. The [quickstart](../guides/quickstart.md) and
 ## The campaign record
 
 The committed devnet campaign is in
-[`docs/spec/flows/CAMPAIGN.md`](https://github.com/PatrickMockridge/r-cash/blob/main/docs/spec/flows/CAMPAIGN.md).
+[`docs/spec/flows/CAMPAIGN.md`](https://github.com/rhovision-org/r-cash/blob/main/docs/spec/flows/CAMPAIGN.md).
 It records:
 
 - the fixed rholo node and one-validator devnet;
@@ -163,7 +163,7 @@ The formal checks need Python 3.12 with `pyyaml` and `hypothesis`, and Lean 4 fo
 `make lean-check`. TLC is optional.
 
 > **Where to go deeper.** The flow method is in
-> [`docs/spec/flows/README.md`](https://github.com/PatrickMockridge/r-cash/blob/main/docs/spec/flows/README.md);
+> [`docs/spec/flows/README.md`](https://github.com/rhovision-org/r-cash/blob/main/docs/spec/flows/README.md);
 > the evidence registry is
-> [`docs/spec/checks.yaml`](https://github.com/PatrickMockridge/r-cash/blob/main/docs/spec/checks.yaml).
+> [`docs/spec/checks.yaml`](https://github.com/rhovision-org/r-cash/blob/main/docs/spec/checks.yaml).
 > The formal models are described in [How the protocol is verified](verification.md).

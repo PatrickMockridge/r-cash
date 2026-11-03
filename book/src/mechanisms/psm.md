@@ -139,7 +139,7 @@ redemption window while the reserve lasts. The [security model](../trust/securit
 treats a depleted reserve as a real risk.
 
 > **Where to go deeper.** PSM requirements are in
-> [`docs/SPEC.md` §11](https://github.com/PatrickMockridge/r-cash/blob/main/docs/SPEC.md#11-peg-stability-module).
+> [`docs/SPEC.md` §11](https://github.com/rhovision-org/r-cash/blob/main/docs/SPEC.md#11-peg-stability-module).
 > The transition table is
-> [`docs/spec/flows/04-psm.yaml`](https://github.com/PatrickMockridge/r-cash/blob/main/docs/spec/flows/04-psm.yaml).
+> [`docs/spec/flows/04-psm.yaml`](https://github.com/rhovision-org/r-cash/blob/main/docs/spec/flows/04-psm.yaml).
 > The Lean arithmetic is in `spec/lean/Rholphin/Arith/Psm.lean`.

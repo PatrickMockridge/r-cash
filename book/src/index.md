@@ -79,8 +79,8 @@ then [The north star](orientation/north-star.md) — but each part stands on its
 
 The book explains and connects. It does **not** replace the normative specification. Exact
 requirements, acceptance criteria, refusal strings and arm-level behaviour live in
-[`docs/SPEC.md`](https://github.com/PatrickMockridge/r-cash/blob/main/docs/SPEC.md) and
-[`docs/spec/`](https://github.com/PatrickMockridge/r-cash/tree/main/docs/spec). Each chapter
+[`docs/SPEC.md`](https://github.com/rhovision-org/r-cash/blob/main/docs/SPEC.md) and
+[`docs/spec/`](https://github.com/rhovision-org/r-cash/tree/main/docs/spec). Each chapter
 ends with pointers to the relevant source.
 
 ## Status at a glance
@@ -110,7 +110,7 @@ what is explicitly excluded.
 - `spec/lean/` and `spec/tla/` — machine-checked models.
 - `book/` — this book.
 
-If you are an AI coding agent, read [`AGENTS.md`](https://github.com/PatrickMockridge/r-cash/blob/main/AGENTS.md)
+If you are an AI coding agent, read [`AGENTS.md`](https://github.com/rhovision-org/r-cash/blob/main/AGENTS.md)
 first. It records the authority order, generated-file rules and the commands that must pass.
 
 ## Building this book

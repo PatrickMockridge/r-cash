@@ -157,11 +157,11 @@ test 3 because the memo is a payment primitive; an invoice lifecycle does not.
   product, partner or delivery promise.
 
 > **Where to go deeper.** The normative scope is in
-> [`docs/SPEC.md` §2](https://github.com/PatrickMockridge/r-cash/blob/main/docs/SPEC.md#2-scope-actors-and-units);
+> [`docs/SPEC.md` §2](https://github.com/rhovision-org/r-cash/blob/main/docs/SPEC.md#2-scope-actors-and-units);
 > the USD default and mesh are in
-> [§12.4](https://github.com/PatrickMockridge/r-cash/blob/main/docs/SPEC.md#124-currency-mesh-usd-default-and-external-assets);
+> [§12.4](https://github.com/rhovision-org/r-cash/blob/main/docs/SPEC.md#124-currency-mesh-usd-default-and-external-assets);
 > the exclusions are in
-> [§19](https://github.com/PatrickMockridge/r-cash/blob/main/docs/SPEC.md#19-exclusions). The
+> [§19](https://github.com/rhovision-org/r-cash/blob/main/docs/SPEC.md#19-exclusions). The
 > operational consequences are in [Design principles](principles.md); the mechanisms are in
 > [The currency mesh](../mechanisms/mesh.md), [Payments and claim links](../mechanisms/payments.md)
 > and [Governance and the timelock](../mechanisms/governance.md); the trust boundaries are in

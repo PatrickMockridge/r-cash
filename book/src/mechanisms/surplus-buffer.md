@@ -117,7 +117,7 @@ show whether the currency is recapitalised and whether new minting is open.
 - A savings notification to an empty pool is skipped, not failed.
 
 > **Where to go deeper.** Buffer requirements are in
-> [`docs/SPEC.md` §9](https://github.com/PatrickMockridge/r-cash/blob/main/docs/SPEC.md#9-surplus-buffer).
+> [`docs/SPEC.md` §9](https://github.com/rhovision-org/r-cash/blob/main/docs/SPEC.md#9-surplus-buffer).
 > The buffer/savings transition table is
-> [`docs/spec/flows/03-buffer-savings.yaml`](https://github.com/PatrickMockridge/r-cash/blob/main/docs/spec/flows/03-buffer-savings.yaml).
+> [`docs/spec/flows/03-buffer-savings.yaml`](https://github.com/rhovision-org/r-cash/blob/main/docs/spec/flows/03-buffer-savings.yaml).
 > The Lean model is `spec/lean/Rholphin/Model/BufferSavings.lean`.

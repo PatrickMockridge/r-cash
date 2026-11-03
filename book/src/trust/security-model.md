@@ -103,8 +103,8 @@ and the harness agree. None of that is an audit or a mainnet-readiness statement
 [verification chapter](verification.md) is explicit about the boundary.
 
 > **Where to go deeper.** The normative invariants are in
-> [`docs/spec/20-INVARIANTS.md`](https://github.com/PatrickMockridge/r-cash/blob/main/docs/spec/20-INVARIANTS.md).
+> [`docs/spec/20-INVARIANTS.md`](https://github.com/rhovision-org/r-cash/blob/main/docs/spec/20-INVARIANTS.md).
 > The governance and pause matrix is in
-> [`docs/SPEC.md` §13](https://github.com/PatrickMockridge/r-cash/blob/main/docs/SPEC.md#13-governance-timelock-and-pause).
+> [`docs/SPEC.md` §13](https://github.com/rhovision-org/r-cash/blob/main/docs/SPEC.md#13-governance-timelock-and-pause).
 > The capability rules are in
-> [`docs/spec/00-CALCULUS.md`](https://github.com/PatrickMockridge/r-cash/blob/main/docs/spec/00-CALCULUS.md).
+> [`docs/spec/00-CALCULUS.md`](https://github.com/rhovision-org/r-cash/blob/main/docs/spec/00-CALCULUS.md).
