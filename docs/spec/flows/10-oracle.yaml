@@ -91,6 +91,7 @@ components:
     - {id: new, expr: 'feeds[code] = Nil', refusal: {reason: duplicate, phase: pre}}
     effects:
     - {target: 'feeds[code]', formula: '{uri: feedUri, feedId, policyHash, sponsor, status: active}'}
+    - {target: oracleRegState.rev, formula: rev + 1}
     access:
     - {cell: oracleRegState, mode: peek, actor: arm, phase: pre}
     - {cell: oracleRegState, mode: consume, actor: 'helper:regBind', phase: commit}
@@ -160,6 +161,7 @@ components:
     - {id: duplicate, expr: reporter not already allowlisted, refusal: {reason: duplicate, phase: pre}}
     effects:
     - {target: allowlist, formula: add or remove reporter}
+    - {target: oracleRegState.rev, formula: rev + 1}
     access:
     - {cell: oracleRegState, mode: peek, actor: arm, phase: pre}
     - {cell: oracleRegState, mode: consume, actor: arm, phase: commit}

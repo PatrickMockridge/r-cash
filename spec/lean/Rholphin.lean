@@ -6,6 +6,10 @@ import Rholphin.Arith.Psm
 import Rholphin.Arith.Amm
 import Rholphin.Linear.Cell
 import Rholphin.Linear.Protocol
+import Rholphin.Linear.Prim
+import Rholphin.Linear.Deploy
+import Rholphin.Linear.Interleave
+import Rholphin.Prim.EDSL
 import Rholphin.Model.Types
 import Rholphin.Model.Issuer
 import Rholphin.Model.Vault

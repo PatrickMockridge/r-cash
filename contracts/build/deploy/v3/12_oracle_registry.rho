@@ -149,7 +149,7 @@ in {
             "policyHash": policyHash,
             "sponsor": sponsorHex,
             "status": "active"
-          }))) |
+          })).set("rev", s.get("rev") + 1)) |
           ret!((true, Nil))
         }
         _ => { oracleRegState!(s) | ret!((false, "duplicate")) }
@@ -246,7 +246,8 @@ in {
                                 oracleRegState!(s2) | ret!((false, "duplicate"))
                               } else {
                                 oracleRegState!(s2.set("allowlist",
-                                  s2.get("allowlist") ++ [reporter])) |
+                                  s2.get("allowlist") ++ [reporter])
+                                  .set("rev", s2.get("rev") + 1)) |
                                 ret!((true, Nil))
                               }
                             }
@@ -260,7 +261,8 @@ in {
                           new outCh in {
                             regRemove!(s2.get("allowlist"), 0, reporter, [], *outCh) |
                             for (@items <- outCh) {
-                              oracleRegState!(s2.set("allowlist", items)) |
+                              oracleRegState!(s2.set("allowlist", items)
+                                .set("rev", s2.get("rev") + 1)) |
                               ret!((true, Nil))
                             }
                           }
@@ -284,7 +286,8 @@ in {
     "feeds": {},
     "admins": __ADMIN_KEYS__,
     "threshold": 2,
-    "govNonce": 0
+    "govNonce": 0,
+    "rev": 0
   }) |
 
   rl!(`__ROOT_URI__`, *rootCh) |
