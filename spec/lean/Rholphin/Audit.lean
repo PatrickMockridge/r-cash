@@ -1,5 +1,9 @@
 import Rholphin.Linear.Cell
 import Rholphin.Linear.Protocol
+import Rholphin.Linear.Prim
+import Rholphin.Linear.Deploy
+import Rholphin.Linear.Interleave
+import Rholphin.Prim.EDSL
 import Rholphin.Invariants
 import Rholphin.Model.Registry
 import Rholphin.Model.Transfer
@@ -28,6 +32,17 @@ output containing `sorryAx` or a project-local axiom.
 #print axioms Rholphin.take_without_put_not_wf
 #print axioms Rholphin.nested_call_rejected
 #print axioms Rholphin.h2a_caller_token
+#print axioms Rholphin.runPrim_cell
+#print axioms Rholphin.CellArm.preserves
+#print axioms Rholphin.take_put_balance
+#print axioms Rholphin.refuse_quiescent
+#print axioms Rholphin.fail_aborts
+#print axioms Rholphin.commit_atomic
+#print axioms Rholphin.apply_preserves_untouched
+#print axioms Rholphin.apply_bumps_rev
+#print axioms Rholphin.step_preserves_linear
+#print axioms Rholphin.held_take_unavailable
+#print axioms Rholphin.steps_preserve_linear
 #print axioms Rholphin.Model.Issuer.repay_S3
 #print axioms Rholphin.Model.Issuer.writeOff_S3
 #print axioms Rholphin.Model.Vault.deposit_S2

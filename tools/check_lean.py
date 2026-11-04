@@ -11,6 +11,7 @@ and accepts only the three core axioms Lean may introduce (`propext`,
 
 from __future__ import annotations
 
+import argparse
 import re
 import subprocess
 import sys
@@ -19,6 +20,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 LEAN = ROOT / "spec" / "lean"
 AUDIT = "Rholphin/Audit.lean"
+CLAIMS = ROOT / "tools" / "check_claims.py"
 
 FORBIDDEN = re.compile(r"(?<!#)\b(sorry|admit|native_decide)\b|^\s*axiom\s+[A-Za-z_]")
 ALLOWED = {"propext", "Classical.choice", "Quot.sound"}
@@ -39,7 +41,30 @@ def run(cmd: list[str]) -> subprocess.CompletedProcess[str]:
     return subprocess.run(cmd, cwd=LEAN, text=True, capture_output=True)
 
 
+def warnings() -> list[str]:
+    """Report modules that emit warnings under `-DwarningAsError=true`.
+
+    Report-only for now: Phase 4 removes the weak hypotheses that produce most
+    of these, then the flag becomes blocking.
+    """
+    out: list[str] = []
+    for path in sorted((LEAN / "Rholphin").rglob("*.lean")):
+        relative = path.relative_to(LEAN)
+        check = run(["lake", "env", "lean", "-DwarningAsError=true", str(relative)])
+        if check.returncode != 0:
+            first = next(
+                (line for line in check.stdout.splitlines() if "warning" in line.lower()),
+                check.stdout.splitlines()[0] if check.stdout.splitlines() else "build error",
+            )
+            out.append(f"{relative}: {first.strip()}")
+    return out
+
+
 def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--warnings", action="store_true", help="report warning-as-error modules")
+    args = parser.parse_args()
+
     problems = source_scan()
     for problem in problems:
         print(f"forbidden proof escape: {problem}", file=sys.stderr)
@@ -74,6 +99,21 @@ def main() -> int:
         if "sorryAx" in used:
             print(f"lean: sorryAx in {line}", file=sys.stderr)
             return 1
+
+    claims = subprocess.run(
+        [sys.executable, str(CLAIMS), "--check"], cwd=ROOT, text=True, capture_output=True
+    )
+    sys.stdout.write(claims.stdout)
+    sys.stderr.write(claims.stderr)
+    if claims.returncode != 0:
+        print("lean: claim register failed", file=sys.stderr)
+        return 1
+
+    if args.warnings:
+        warned = warnings()
+        for item in warned:
+            print(f"lean warning: {item}", file=sys.stderr)
+        print(f"lean: {len(warned)} modules emit warnings")
 
     if problems:
         return 1

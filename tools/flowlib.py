@@ -105,7 +105,7 @@ def lean_names(root: Path) -> set[str]:
                         namespaces.pop()
                 continue
             match = re.match(
-                r"(?:private\s+|protected\s+|noncomputable\s+)?"
+                r"(?:@\[[^\]]*\]\s*)*(?:private\s+|protected\s+|noncomputable\s+)?"
                 r"(?:def|theorem|lemma|abbrev|structure|inductive)\s+"
                 r"([A-Za-z_][A-Za-z0-9_'.]*)",
                 stripped,

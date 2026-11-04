@@ -1,0 +1,437 @@
+# Machine-readable claim register for the Lean model.
+#
+# This file is the audit's coverage contract.  It records, for every invariant in
+# docs/spec/20-INVARIANTS.md, the Lean predicate and preservation theorems that
+# are supposed to carry it, the strength of each theorem, and every assumption
+# the theorem is conditional on.  tools/check_claims.py enforces the register:
+# every invariant must appear, every named theorem must resolve, and a theorem
+# declared `substantive` must not be a hypothesis restatement.
+#
+# Status values:
+#   covered   - a preservation theorem exists and is substantive
+#   partial   - some obligation is proved, but a stated part is missing
+#   deferred  - no theorem yet; the deferral names the phase and the reason
+#   tool      - evidence is a static tool (check_captures/check_mesh/measure), not Lean
+#
+# Strength values: substantive | definitional | restatement | stub | alias
+# Only `substantive` is counted as proof of an invariant.  `definitional` and
+# `restatement` theorems may stay in the model but must not be cited as a proof.
+
+schema: rcash.lean-claims/v1
+review_date: 2026-11-04
+
+assumptions:
+  hash.collision_resistant:
+    lean: Rholphin.Crypto.CollisionResistant
+    status: planned
+    note: >-
+      Content addressing is conditional on the hash being collision-resistant.
+      The model currently uses an ad-hoc polynomial hash; Phase 5 replaces it
+      with this interface and records the hypothesis on each theorem.
+  sig.unforgeable:
+    lean: Rholphin.Crypto.Unforgeable
+    status: planned
+    note: >-
+      Deployer/sponsor authority is conditional on signature unforgeability.
+      Rholphin.Model.Kernel.verifier_sigOk is an identity stub today.
+  claim.binding:
+    lean: Rholphin.Crypto.Binding
+    status: planned
+    note: >-
+      Claim-secret authority is conditional on the claim hash being binding.
+      Rholphin.Model.Kernel.claimCode_hash is an identity stub today.
+  codec.canonical_injective:
+    lean: Rholphin.Crypto.Canonical
+    status: planned
+    note: >-
+      The length-prefixed encoding is assumed injective; the model's
+      codec_hash is not the deployed blake2b256.
+  ertp.native_total:
+    lean: Rholphin.Linear.NativeTotal
+    status: planned
+    note: >-
+      P4 and I10/I15 assume a native purse/issuer step that conserves total
+      value or fails.  ERTP itself is not modelled.
+  arithmetic.no_overflow:
+    lean: Rholphin.NoOverflow
+    status: assumed
+    note: >-
+      Lean Nat/Int are unbounded; the deploy's fixed-width arithmetic and
+      truncation are not modelled.  Every arithmetic theorem is conditional
+      on this.
+  scheduler.fairness:
+    lean: Rholphin.Fairness
+    status: out_of_scope
+    note: No liveness or fairness claim is made; the concurrency model is safety-only.
+  phlo.gas:
+    lean: Rholphin.Phlo
+    status: out_of_scope
+    note: Phlo, gas and the node scheduler are not modelled.
+
+invariants:
+  I1:
+    statement: Quiescent linearity; one Full in every cell.
+    predicate: Rholphin.Linear.WF
+    status: partial
+    note: >-
+      WF only constrains a finite trace to finish with nothing held.  There is
+      no theorem that every inventory arm's trace is WF; that is the Phase 2
+      primitive-law obligation.
+    theorems:
+      - name: Rholphin.wf_quiescent
+        strength: definitional
+        kind: preservation
+      - name: Rholphin.take_then_put_wf
+        strength: substantive
+        kind: preservation
+      - name: Rholphin.wf_compose
+        strength: substantive
+        kind: composition
+      - name: Rholphin.take_without_put_not_wf
+        strength: substantive
+        kind: rejection
+      - name: Rholphin.step_preserves_linear
+        strength: substantive
+        kind: preservation
+      - name: Rholphin.steps_preserve_linear
+        strength: substantive
+        kind: preservation
+      - name: Rholphin.held_take_unavailable
+        strength: substantive
+        kind: rejection
+  I2:
+    statement: Currency code unique; registry resolution matches the listing.
+    predicate: Rholphin.Model.Registry.lookup
+    status: partial
+    note: Registration is proved; the live attestation/capability half is not.
+    theorems:
+      - name: Rholphin.Model.Registry.register_lookup
+        strength: substantive
+        kind: preservation
+      - name: Rholphin.Model.Registry.root_register_resolves
+        strength: substantive
+        kind: preservation
+      - name: Rholphin.Model.Registry.currencyRegistry_register_resolves
+        strength: substantive
+        kind: preservation
+  I3:
+    statement: One active-or-paused market per unordered pair; both orientations resolve.
+    predicate: Rholphin.Model.Market.Index
+    status: partial
+    note: >-
+      Staging writes both orientations and refuses an active prior; pair
+      uniqueness at activation and reverse-stage refusal are not proved.
+      Phase 5 replaces the Cantor Nat key with PairKey.
+    theorems:
+      - name: Rholphin.Model.Market.staged_is_draft
+        strength: substantive
+        kind: preservation
+      - name: Rholphin.Model.Market.stage_writes_both
+        strength: substantive
+        kind: preservation
+      - name: Rholphin.Model.Market.stage_refuses_active
+        strength: substantive
+        kind: rejection
+  I4:
+    statement: Legal market transitions; delisted is terminal.
+    predicate: Rholphin.Model.Market.legal
+    status: partial
+    note: Delisted terminality is proved; the draft-abandon and version monotonicity halves are not.
+    theorems:
+      - name: Rholphin.Model.Market.delisted_terminal
+        strength: definitional
+        kind: invariant
+      - name: Rholphin.Model.Market.delisted_accepts_nothing
+        strength: substantive
+        kind: rejection
+  I5:
+    statement: Terms integrity; termsHash = H(schema, values).
+    predicate: Rholphin.Crypto.CollisionResistant
+    status: deferred
+    deferral: {phase: 5, reason: marketTerms_put is an identity stub; needs the Hasher interface}
+    theorems: []
+  I6:
+    statement: Market URI slots are factory-created and sealed before activation.
+    predicate: Rholphin.Model.Market.Directory
+    status: deferred
+    deferral: {phase: 5, reason: no well-formedness predicate for sealed slots yet}
+    theorems: []
+  I7:
+    statement: Feed freshness; quorum, median, age, band, spread.
+    predicate: Rholphin.Model.Oracle.Feed
+    status: partial
+    note: Pause and trial guards are proved; quorum/median/age/band/spread are not.
+    theorems:
+      - name: Rholphin.Model.Oracle.submit_paused_refused
+        strength: substantive
+        kind: rejection
+      - name: Rholphin.Model.Oracle.activate_requires_trial
+        strength: substantive
+        kind: rejection
+  I8:
+    statement: Three distinct reporter keys; sponsor occupies at most one slot.
+    predicate: Rholphin.Model.Oracle.reporterSet
+    status: deferred
+    deferral: {phase: 5, reason: Feed has no reporter set in the model}
+    theorems: []
+  I9:
+    statement: Pair rate is fresh per feed and within the caller's age bound.
+    predicate: Rholphin.Model.Oracle.PairQuote
+    status: deferred
+    deferral: {phase: 5, reason: getPair is a projection stub}
+    theorems: []
+  I10:
+    statement: Pool reserves equal native custody.
+    predicate: Rholphin.Model.Pool.PoolCustody
+    status: deferred
+    deferral: {phase: 5, reason: fxPool_attest is an identity stub; needs the NativeTotal abstraction}
+    theorems: []
+  I11:
+    statement: totalShares = lpMinted - lpBurned.
+    predicate: Rholphin.Model.Pool.ShareLedger
+    status: deferred
+    deferral: {phase: 5, reason: Pool has no mint/burn counters}
+    theorems: []
+  I12:
+    statement: Depth floor, min ticket, max trade and first-deposit tolerance.
+    predicate: Rholphin.Model.Market.tradabilityGate_admit
+    status: deferred
+    deferral: {phase: 5, reason: the gate is a def; no implication theorem}
+    theorems: []
+  I13:
+    statement: Seed lock is one-shot; terminal flags exclusive; beneficiary/governor gated.
+    predicate: Rholphin.Model.Pool.Lock
+    status: deferred
+    deferral: {phase: 5, reason: fund_refuses_short is a height check, not lock linearity}
+    theorems: []
+  I14:
+    statement: Transfer status changes at most once; claim xor refund.
+    predicate: Rholphin.Model.Transfer.Transfer
+    status: covered
+    theorems:
+      - name: Rholphin.Model.Transfer.claim_then_refund_refused
+        strength: substantive
+        kind: preservation
+      - name: Rholphin.Model.Transfer.refund_then_claim_refused
+        strength: substantive
+        kind: preservation
+  I15:
+    statement: No payment is stranded on a refusal.
+    predicate: Rholphin.Linear.NoStranded
+    status: deferred
+    deferral: {phase: 2, reason: needs the P3/P6 primitive laws and a payment abstraction}
+    theorems: []
+  I19:
+    statement: Admin threshold and monotone nonce.
+    predicate: Rholphin.Model.Governance.GovernorState
+    status: partial
+    note: Nonce monotonicity is proved only on a toy Gov, not on GovernorState.
+    theorems:
+      - name: Rholphin.Invariants.S12_nonce_monotone
+        strength: substantive
+        kind: preservation
+      - name: Rholphin.Model.Governance.adminGuard_verify
+        strength: stub
+        kind: guard
+  I20:
+    statement: Capability provenance and bundleability.
+    predicate: Rholphin.Linear.Prov
+    status: tool
+    tool: check_captures.py
+    note: No Lean model; the static capture checker is the current evidence.
+    theorems: []
+  I21:
+    statement: Only the owner's deployerId passes owner arms.
+    predicate: Rholphin.Model.Identity.accountGate_verify
+    status: covered
+    theorems:
+      - name: Rholphin.Model.Identity.getOrCreate_verify
+        strength: substantive
+        kind: preservation
+      - name: Rholphin.Model.Identity.gate_owner
+        strength: definitional
+        kind: guard
+      - name: Rholphin.Model.Identity.gate_other
+        strength: substantive
+        kind: rejection
+  I22:
+    statement: Deploy resource bounds.
+    predicate: Rholphin.Budget
+    status: tool
+    tool: measure_contracts.py
+    note: Enforced by the contract budget and architecture checks, not Lean.
+    theorems: []
+  I23:
+    statement: External asset shape.
+    predicate: Rholphin.Model.Registry.Entry
+    status: covered
+    theorems:
+      - name: Rholphin.Model.Registry.Entry.external_kind
+        strength: definitional
+        kind: invariant
+      - name: Rholphin.Model.Registry.Entry.external_decimals
+        strength: definitional
+        kind: invariant
+      - name: Rholphin.Model.Registry.currencyRegistry_registerExternal_shape
+        strength: substantive
+        kind: preservation
+  I24:
+    statement: Mesh discovery completeness.
+    predicate: Rholphin.Mesh
+    status: tool
+    tool: check_mesh.py
+    note: Enforced by the mesh configuration checker, not Lean.
+    theorems: []
+
+  S1:
+    statement: supply = totalPrincipal = minted - burned; supply <= maxSupply.
+    predicate: Rholphin.S1
+    status: covered
+    theorems:
+      - {name: Rholphin.Model.Issuer.mint_S1, strength: substantive, kind: preservation}
+      - {name: Rholphin.Model.Issuer.burn_S1, strength: substantive, kind: preservation}
+      - {name: Rholphin.Model.Issuer.settle_S1, strength: substantive, kind: preservation}
+      - {name: Rholphin.Model.Issuer.repay_S1, strength: substantive, kind: preservation}
+      - {name: Rholphin.Model.Issuer.liquidate_S1, strength: substantive, kind: preservation}
+      - {name: Rholphin.Model.Issuer.writeOff_S1, strength: substantive, kind: preservation}
+      - {name: Rholphin.Model.Issuer.psmBuy_S1, strength: substantive, kind: preservation}
+      - {name: Rholphin.Model.Issuer.psmSell_S1, strength: substantive, kind: preservation}
+      - {name: Rholphin.Model.Issuer.cover0_S1, strength: substantive, kind: preservation}
+  S2:
+    statement: totalDebt = sum vault.debt; totalCollateral = sum vault.collateral.
+    predicate: Rholphin.S2
+    status: covered
+    theorems:
+      - {name: Rholphin.Model.Vault.deposit_S2, strength: substantive, kind: preservation}
+      - {name: Rholphin.Model.Vault.mint_S2, strength: substantive, kind: preservation}
+      - {name: Rholphin.Model.Vault.withdraw_S2, strength: substantive, kind: preservation}
+      - {name: Rholphin.Model.Vault.liquidate_S2, strength: substantive, kind: preservation}
+      - {name: Rholphin.Model.Vault.writeOff_S2, strength: substantive, kind: preservation}
+  S3:
+    statement: totalDebt + sin + psmDebt = supply + totalAccruedInterest.
+    predicate: Rholphin.S3
+    status: covered
+    note: depositInterest_S3 is a restatement and is excluded from the covered set.
+    theorems:
+      - {name: Rholphin.Model.Issuer.mint_S3, strength: substantive, kind: preservation}
+      - {name: Rholphin.Model.Issuer.repay_S3, strength: substantive, kind: preservation}
+      - {name: Rholphin.Model.Issuer.liquidate_S3, strength: substantive, kind: preservation}
+      - {name: Rholphin.Model.Issuer.writeOff_S3, strength: substantive, kind: preservation}
+      - {name: Rholphin.Model.Issuer.psmBuy_S3, strength: substantive, kind: preservation}
+      - {name: Rholphin.Model.Issuer.psmSell_S3, strength: substantive, kind: preservation}
+      - {name: Rholphin.Model.Issuer.cover0_S3, strength: substantive, kind: preservation}
+      - {name: Rholphin.Model.Issuer.accrualDelta_S3, strength: substantive, kind: preservation}
+      - {name: Rholphin.Model.Issuer.depositInterest_S3, strength: restatement, kind: preservation}
+  S4:
+    statement: Mint and collateral withdrawal preserve health.
+    predicate: Rholphin.Model.Issuer.health
+    status: partial
+    note: Both audited theorems restate the post-state health hypothesis; Phase 5 replaces them.
+    theorems:
+      - {name: Rholphin.Model.Vault.mint_preserves_health, strength: restatement, kind: preservation}
+      - {name: Rholphin.Model.Vault.withdraw_preserves_health, strength: restatement, kind: preservation}
+  S5:
+    statement: Liquidation is bounded by the close factor.
+    predicate: Rholphin.Model.Issuer.closeMax
+    status: covered
+    theorems:
+      - {name: Rholphin.close_factor_bound, strength: substantive, kind: invariant}
+  S6:
+    statement: Write-off books bad debt to badDebt and sin.
+    predicate: Rholphin.S3
+    status: partial
+    note: writeOff_badDebt is definitional; the cover step is in S9.
+    theorems:
+      - {name: Rholphin.Model.Issuer.writeOff_badDebt, strength: definitional, kind: preservation}
+  S7:
+    statement: Settle burns principal and deposits interest.
+    predicate: Rholphin.Model.Issuer.Ledger
+    status: partial
+    note: settle_principal is definitional; the interest deposit is not modelled.
+    theorems:
+      - {name: Rholphin.Model.Issuer.settle_principal, strength: definitional, kind: preservation}
+      - {name: Rholphin.Model.Issuer.settle_S1, strength: substantive, kind: preservation}
+  S8:
+    statement: One system per currency; listing requires sponsor signature and live attestation.
+    predicate: Rholphin.S8
+    status: deferred
+    deferral: {phase: 5, reason: no registry/listing consistency predicate}
+    theorems: []
+  S9:
+    statement: Buffer waterfall; solvency precedes yield.
+    predicate: Rholphin.Model.BufferSavings.Buffer
+    status: partial
+    note: Surplus monotonicity is proved; the full waterfall order and burn step are not.
+    theorems:
+      - {name: Rholphin.Model.BufferSavings.cover_surplus_le, strength: substantive, kind: preservation}
+      - {name: Rholphin.Model.BufferSavings.paySavings_le, strength: definitional, kind: preservation}
+      - {name: Rholphin.Model.BufferSavings.waterfall_le, strength: substantive, kind: preservation}
+  S10:
+    statement: Savings conservation; notify does not mint shares.
+    predicate: Rholphin.S10
+    status: partial
+    note: notify_S10 is a restatement; deposit/withdraw are substantive.
+    theorems:
+      - {name: Rholphin.Model.BufferSavings.deposit_S10, strength: substantive, kind: preservation}
+      - {name: Rholphin.Model.BufferSavings.withdraw_S10, strength: substantive, kind: preservation}
+      - {name: Rholphin.Model.BufferSavings.notify_S10, strength: restatement, kind: preservation}
+  S11:
+    statement: PSM signed-debt conservation and floor.
+    predicate: Rholphin.Model.Psm.Psm
+    status: partial
+    note: buy_ceiling and sell_floor restate their guard hypotheses; Phase 5 replaces them.
+    theorems:
+      - {name: Rholphin.Model.Psm.sell_decreases, strength: substantive, kind: preservation}
+      - {name: Rholphin.Model.Psm.sell_preserves_ceiling, strength: substantive, kind: preservation}
+      - {name: Rholphin.Model.Psm.buy_ceiling, strength: restatement, kind: preservation}
+      - {name: Rholphin.Model.Psm.sell_floor, strength: restatement, kind: preservation}
+  S12:
+    statement: Timelock; not early, ready, nonce monotone.
+    predicate: Rholphin.Invariants.Gov
+    status: partial
+    note: Nonce monotonicity is on a toy Gov; GovernorState is not covered.
+    theorems:
+      - {name: Rholphin.Invariants.S12_not_early, strength: substantive, kind: preservation}
+      - {name: Rholphin.Invariants.S12_ready, strength: definitional, kind: preservation}
+      - {name: Rholphin.Invariants.S12_nonce_monotone, strength: substantive, kind: preservation}
+      - {name: Rholphin.Model.Governance.execute_not_early, strength: restatement, kind: preservation}
+
+primitives:
+  P1:
+    statement: Single-cell commit; take/post exactly once with no await between.
+    status: partial
+    note: The generic balance and embedding are proved; the 171 arm instances are not yet generated.
+    theorems:
+      - {name: Rholphin.runPrim_cell, strength: substantive, kind: embedding}
+      - {name: Rholphin.take_put_balance, strength: substantive, kind: law}
+  P3:
+    statement: Effect-then-commit; a failed revalidation aborts and leaves no post.
+    status: partial
+    note: fail_aborts proves the abort is quiescent; the revalidation guard is not yet modelled.
+    theorems:
+      - {name: Rholphin.fail_aborts, strength: substantive, kind: law}
+  P6:
+    statement: Fail-closed; a graceful refusal never follows a write.
+    status: partial
+    note: refuse_quiescent proves a refusal changes no state; the write-tracking antecedent is Phase 4.
+    theorems:
+      - {name: Rholphin.refuse_quiescent, strength: substantive, kind: law}
+  WF4:
+    statement: A guarded effect preserves the arm invariant.
+    status: covered
+    theorems:
+      - {name: Rholphin.CellArm.preserves, strength: substantive, kind: law}
+  ATOM:
+    statement: A deploy commits its whole diff or is rejected whole.
+    status: covered
+    theorems:
+      - {name: Rholphin.commit_atomic, strength: substantive, kind: law}
+      - {name: Rholphin.apply_preserves_untouched, strength: substantive, kind: law}
+      - {name: Rholphin.apply_bumps_rev, strength: substantive, kind: law}
+  LIN:
+    statement: Linearity is preserved by any interleaving of primitive steps.
+    status: covered
+    theorems:
+      - {name: Rholphin.step_preserves_linear, strength: substantive, kind: law}
+      - {name: Rholphin.steps_preserve_linear, strength: substantive, kind: law}
+      - {name: Rholphin.held_take_unavailable, strength: substantive, kind: rejection}

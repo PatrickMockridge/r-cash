@@ -7,6 +7,12 @@ R-Cash Rholang suite (`contracts/src/deploy/v3/`), the Rust client
 It is a design review, not a proof and not an audit. The review date is 2026-11-03 on
 `docs/mdbook-rewrite`.
 
+The **primitive-level** HAZOP and the proof audit are separate records:
+[`PRIMITIVES-HAZOP.md`](PRIMITIVES-HAZOP.md) applies the guide words to the cell, capability,
+guard, commit-protocol, `rev`, directory, op-id, native-boundary and signature patterns and
+maps every deviation to a Lean obligation or a gate; [`AUDIT-PRIMITIVES.md`](AUDIT-PRIMITIVES.md)
+records the Lean coverage, the identity stubs and the gate weaknesses.
+
 ## 1. Merge model
 
 rholo is not Ethereum. Its merge rule is **one pre→post diff per channel and a whole-deploy
@@ -86,3 +92,9 @@ window but does not multiply commits per block.
 - The behavioural harness scenarios for concurrent market creation, transfer facet
   refusal, pause interleaving and savings notify are the next evidence step on a live
   devnet; a green static gate is not a conformance campaign.
+
+Primitive follow-ups from [`PRIMITIVES-HAZOP.md`](PRIMITIVES-HAZOP.md): the ignored native
+reply in `sendCommit` and the missing `oracleRegState.rev` are fixed; the lock arms were
+reviewed and do read Clock/identity before the take (PRIM-05 withdrawn). The open items are
+the book-level opId index, `MarketTerms.put` authentication, the sponsor preimage domain,
+the pause projection, and the mechanical `rev`/facet/native-reply checks.

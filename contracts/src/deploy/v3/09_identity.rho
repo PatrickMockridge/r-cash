@@ -268,8 +268,8 @@ in {
                             revAddress!("fromPublicKey", recipientPub, *addrCh) |
                             for (@addr <- addrCh) {
                               revVault!("transfer", *deployerId, addr, stipend, *vCh) |
-                              for (_ <- vCh) {
-                                finishSend!(opId, id, uri, *ret2)
+                              for (@v <- vCh) {
+                                match v { Nil => { finishSend!(opId, id, uri, *ret2) } true => { finishSend!(opId, id, uri, *ret2) } (true, _) => { finishSend!(opId, id, uri, *ret2) } _ => { ret2!(1 / 0) } }
                               }
                             }
                           }
