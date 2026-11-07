@@ -41,8 +41,8 @@ def submit_price(keys: dict, feed_ref: tuple[str, str], currency: str,
     feed, feed_id = feed_ref
     height = node.height()
     reporter = keys[f"reporter{index + 1}"]
-    payload = f"rcash:oracle-submit:v3|{feed_id}|{currency}|{index}|{price}|{height}"
-    sig = sign_payload.sign_payload(reporter["secret"], payload.encode())["signature"]
+    payload = sign_payload.oracle_submit_payload(feed_id, currency, index, price, height)
+    sig = sign_payload.sign_payload(reporter["secret"], payload)["signature"]
     body = (
         f'OracleFeed!("submit", {index}, {price}, {height}, "{reporter["public"]}", '
         f'"{sig}".hexToBytes(), *r) |\n'

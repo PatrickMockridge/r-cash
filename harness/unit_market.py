@@ -131,8 +131,9 @@ def main() -> int:
     terms_literal = "{" + ", ".join(
         f'"{key}": {rholang_value(value)}' for key, value in fields) + "}"
     values_literal = "[" + ", ".join(f'"{v}"' for v in values) + "]"
-    payload = f"rcash:market-create:v1|{MARKET_ID}|{terms_hash}|{sponsor['public']}"
-    sig = sign_payload.sign_payload(sponsor["secret"], payload.encode())["signature"]
+    payload = sign_payload.market_create_payload(
+        MARKET_ID, terms_hash, sponsor["public"])
+    sig = sign_payload.sign_payload(sponsor["secret"], payload)["signature"]
 
     create_term = (
         "new rl(`rho:registry:lookup`), ch, r, deployId(`rho:rchain:deployId`), "
@@ -311,9 +312,9 @@ def main() -> int:
 
     def set_status(status: str, nonce: int) -> list:
         args = f"REV/V4T:v1|{status}"
-        payload = f"rcash:admin:v1|market-index|{nonce}|setStatus|{args}"
+        payload = sign_payload.admin_payload("market-index", nonce, "setStatus", [args])
         sigs = ", ".join(
-            f'"{sign_payload.sign_payload(keys[n]["secret"], payload.encode())["signature"]}".hexToBytes()'
+            f'"{sign_payload.sign_payload(keys[n]["secret"], payload)["signature"]}".hexToBytes()'
             for n in ("admin1", "admin2"))
         body = (f'MarketIndex!("setStatus", "REV/V4T:v1", "{status}", {nonce}, '
                 f"[{sigs}], *r) | for (@x <- r) {{ deployId!(x) }}")
@@ -341,8 +342,9 @@ def main() -> int:
     literal2 = "{" + ", ".join(
         f'"{key}": {rholang_value(value)}' for key, value in fields2) + "}"
     values2_literal = "[" + ", ".join(f'"{v}"' for v in values2) + "]"
-    payload2 = f"rcash:market-create:v1|REV/V4T:v2|{hash2}|{sponsor['public']}"
-    sig2 = sign_payload.sign_payload(sponsor["secret"], payload2.encode())["signature"]
+    payload2 = sign_payload.market_create_payload(
+        "REV/V4T:v2", hash2, sponsor["public"])
+    sig2 = sign_payload.sign_payload(sponsor["secret"], payload2)["signature"]
     create2 = (
         "new rl(`rho:registry:lookup`), ch, r, deployId(`rho:rchain:deployId`), "
         "deployerId(`rho:rchain:deployerId`) in {\n"

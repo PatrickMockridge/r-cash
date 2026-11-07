@@ -146,29 +146,38 @@ in {
   } |
 
   contract feedVerify(@s, @index, @price, @height, @pubKey, @sig, ret) = {
-    new rCh, verCh in {
+    new rCh, codecCh, codecC, verCh in {
       rl!(`__ROOT_URI__`, *rCh) |
       for (Root <- rCh) {
-        Root!("resolve", "component:verifier", 1, *verCh) |
-        for (@__reply9 <- verCh) {
+        Root!("resolve", "component:codec", 1, *codecCh) |
+        for (@__replyCodec <- codecCh) {
+  match __replyCodec {
+    (true, codecUri, _) => {
+          Root!("resolve", "component:verifier", 1, *verCh) |
+          for (@__reply9 <- verCh) {
   match __reply9 {
     (true, vUri, vv) => {
-          new vc, dCh, okCh in {
-            rl!(vUri, *vc) |
-            for (Verifier <- vc) {
-              match "rcash:oracle-submit:v3|" ++ s.get("feedId") ++ "|"
-                    ++ s.get("currency") ++ "|" ++ index.toString() ++ "|"
-                    ++ price.toString() ++ "|" ++ height.toString() {
-                payload => {
-                  Verifier!("hash", payload.toUtf8Bytes(), *dCh) |
-                  for (@digest <- dCh) {
-                    Verifier!("sigOk", digest, sig, pubKey.hexToBytes(), *okCh) |
-                    for (@ok <- okCh) { ret!(ok) }
-                  }
+          new vc, cc, pCh, dCh, okCh in {
+            rl!(vUri, *vc) | rl!(codecUri, *cc) |
+            for (Verifier <- vc; Codec <- cc) {
+              // OCAP-09: length-prefixed canonical preimage.
+              Codec!("canonical", "rcash:oracle-submit:v3",
+                     [s.get("feedId"), s.get("currency"), index.toString(),
+                      price.toString(), height.toString()], *pCh) |
+              for (@payload <- pCh) {
+                Verifier!("hash", payload.toUtf8Bytes(), *dCh) |
+                for (@digest <- dCh) {
+                  Verifier!("sigOk", digest, sig, pubKey.hexToBytes(), *okCh) |
+                  for (@ok <- okCh) { ret!(ok) }
                 }
               }
             }
           }
+        }
+    (false, __why) => { ret!(1 / 0) }
+    _ => { ret!(1 / 0) }
+  }
+}
         }
     (false, __why) => { ret!(1 / 0) }
     _ => { ret!(1 / 0) }
