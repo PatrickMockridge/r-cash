@@ -22,7 +22,7 @@
       },
       "contracts/build/deploy/v3/40_transfer.rho": {
         "bytes": 12288,
-        "depth": 64,
+        "depth": 80,
         "contracts": 8
       },
       "contracts/build/deploy/v3/50_market.rho": {
@@ -52,7 +52,7 @@
       },
       "contracts/build/deploy/v3/32_currency_registry.rho": {
         "bytes": 16384,
-        "depth": 64,
+        "depth": 80,
         "contracts": 14
       },
       "contracts/build/deploy/v3/31_issuer.rho": {

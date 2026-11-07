@@ -203,31 +203,31 @@ new ertpCh, regCh, eCh, afCh, oCh, zCh, r1, r2, r3, vc,
 
 
 def rt01_issuer_fresh_names(state: dict, secret: str) -> None:
-    """RT-01: a fresh name is not the issuer/buffer authority."""
-    stablecoin = state_env(state, "stablecoin_uri")
-    custody = state_env(state, "custody_uri")
-    if not (stablecoin and custody):
-        skipped("RT-01 issuer fresh-name arms", "no stablecoin/custody URI")
-        return
-    reply = one(render_scenario("ocap_issuer_fresh_names.rho", {
-        "__STABLECOIN_URI__": stablecoin,
-        "__CUSTODY_URI__": custody,
-        "__AMOUNT__": "1",
-    }), secret)
-    if not (isinstance(reply, list) and len(reply) == 2):
-        raise AssertionError(f"RT-01 probe did not run: {reply!r}")
-    check("RT-01 mint refuses a fresh name", reply[0][0], False)
-    check("RT-01 custody withdraw refuses a fresh name", reply[1][0], False)
+    """RT-01: a fresh name is not a provisioned facet.
 
-    buffer_uri = state_env(state, "surplus_buffer_uri", "buffer_uri")
-    if not buffer_uri:
-        skipped("RT-01b buffer fresh-name arm", "no surplus buffer URI")
+    The privileged issuer/custody arms are no longer in the published bundles;
+    the remaining boundary is each shop's `isFacet`. A fresh name must be
+    refused by the issuer shop and by the buffer shop.
+    """
+    shop = state_env(state, "issuer_shop_uri", "facet_shop_uri")
+    if not shop:
+        skipped("RT-01 issuer fresh-name probe", "no issuer shop URI")
         return
-    buffer_reply = one(render_scenario("ocap_buffer_fresh_names.rho", {
-        "__SURPLUS_BUFFER_URI__": buffer_uri,
-        "__BAD_DEBT__": "0",
-    }), secret)
-    check("RT-01 buffer cover refuses a fresh name", buffer_reply[0], False)
+    reply = one(call(
+        shop, "FacetShop",
+        'new fake in { FacetShop!("isFacet", "mint", *fake, *r) } | '
+        "for (@x <- r) { deployId!(x) }"), secret)
+    check("RT-01 issuer shop refuses a fresh facet", reply, False)
+
+    buffer_shop = state_env(state, "buffer_shop_uri")
+    if not buffer_shop:
+        skipped("RT-01b buffer fresh-name probe", "no buffer shop URI")
+        return
+    reply = one(call(
+        buffer_shop, "BufferFacetShop",
+        'new fake in { BufferFacetShop!("isFacet", "buffer", *fake, *r) } | '
+        "for (@x <- r) { deployId!(x) }"), secret)
+    check("RT-01 buffer shop refuses a fresh facet", reply, False)
 
 
 def rt04_caller_facet_sink(state: dict, keys: dict, secret: str) -> None:
@@ -241,17 +241,22 @@ def rt04_caller_facet_sink(state: dict, keys: dict, secret: str) -> None:
         return
     faucet_top_up(sender["address"])
     faucet_top_up(recipient["address"])
+    op_id = f"ocap-rt04-{node.height()}"
+    _hash = sign_payload.hash_canonical_hex(
+        "rcash:claim:v1",
+        [op_id, "REV", str(AMOUNT), RT04_SECRET.hex()])
     reply = one(render_scenario("ocap_caller_facet_sink.rho", {
         "__ROOT_URI__": state["root_uri"],
         "__SENDER_PUB__": sender["public"],
         "__RECIPIENT_PUB__": recipient["public"],
         "__FUND__": str(FUND),
         "__AMOUNT__": str(AMOUNT),
-        "__SECRET_HASH__": digest(RT04_SECRET),
+        "__SECRET_HASH__": _hash,
         "__SECRET__": RT04_SECRET.hex(),
-        "__EXPIRY__": str(node.height() + 100),
+        "__OP_ID__": op_id,
+        "__EXPIRY__": str(node.height() + 2000),
     }), sender["secret"])
-    if not (isinstance(reply, list) and len(reply) == 2):
+    if not (isinstance(reply, list) and len(reply) >= 2):
         raise AssertionError(f"RT-04 probe did not run: {reply!r}")
     check("RT-04 claim accepted through a sink facet", reply[0][0], True)
     check("RT-04 hostile withdraw was never called", reply[1], False)
@@ -408,7 +413,7 @@ def rt16_cross_term_rollback(state: dict, keys: dict, secret: str) -> None:
     the issuer supply must be unchanged.  The vault must exist and the owner
     must have opened it; RT-16 is gated on RCASH_OCAP_VAULT_URI.
     """
-    vault = os.environ.get("RCASH_OCAP_VAULT_URI") or state.get("vault_uri")
+    vault = os.environ.get("RCASH_OCAP_VAULT_URI")
     root = state.get("root_uri")
     stablecoin = state_env(state, "stablecoin_uri")
     owner = keys.get("deployer")

@@ -22,12 +22,12 @@ stateDiagram-v2
 
 | arm | transition | kind | guards | effects | access | refusals | invariants | status | source |
 |---|---|---|---|---|---|---|---|---|---|
-| `Stablecoin@"brand"` | `issuer.Stablecoin.brand` | read | — | — | — | — | — | blocked | contracts/src/deploy/v3/31_issuer.rho:92 |
-| `Stablecoin@"issuer"` | `issuer.Stablecoin.issuer` | read | — | — | — | — | — | blocked | contracts/src/deploy/v3/31_issuer.rho:96 |
-| `Stablecoin@"supply"` | `issuer.Stablecoin.supply` | read | — | — | peek issuerState (arm) | — | — | blocked | contracts/src/deploy/v3/31_issuer.rho:100 |
-| `Stablecoin@"amountOf"` | `issuer.Stablecoin.amountOf` | read | — | — | — | — | — | blocked | contracts/src/deploy/v3/31_issuer.rho:104 |
-| `Stablecoin@"info"` | `issuer.Stablecoin.info` | read | — | — | peek issuerState (arm) | — | — | blocked | contracts/src/deploy/v3/31_issuer.rho:108 |
-| `Stablecoin@"attest"` | `issuer.Stablecoin.attest` | read | — | reply = (true, {currency, paramsHash, sponsor, kind}) | — | — | — | blocked | contracts/src/deploy/v3/31_issuer.rho:120 |
+| `Stablecoin@"brand"` | `issuer.Stablecoin.brand` | read | — | — | — | — | — | verified | contracts/src/deploy/v3/31_issuer.rho:92 |
+| `Stablecoin@"issuer"` | `issuer.Stablecoin.issuer` | read | — | — | — | — | — | verified | contracts/src/deploy/v3/31_issuer.rho:96 |
+| `Stablecoin@"supply"` | `issuer.Stablecoin.supply` | read | — | — | peek issuerState (arm) | — | — | verified | contracts/src/deploy/v3/31_issuer.rho:100 |
+| `Stablecoin@"amountOf"` | `issuer.Stablecoin.amountOf` | read | — | — | — | — | — | verified | contracts/src/deploy/v3/31_issuer.rho:104 |
+| `Stablecoin@"info"` | `issuer.Stablecoin.info` | read | — | — | peek issuerState (arm) | — | — | verified | contracts/src/deploy/v3/31_issuer.rho:108 |
+| `Stablecoin@"attest"` | `issuer.Stablecoin.attest` | read | — | reply = (true, {currency, paramsHash, sponsor, kind}) | — | — | — | verified | contracts/src/deploy/v3/31_issuer.rho:120 |
 
 ### CollateralCustody
 
@@ -42,8 +42,8 @@ stateDiagram-v2
 
 | arm | transition | kind | guards | effects | access | refusals | invariants | status | source |
 |---|---|---|---|---|---|---|---|---|---|
-| `CollateralCustody@"balance"` | `issuer.CollateralCustody.balance` | read | — | reply = custody.rev | — | — | — | blocked | contracts/src/deploy/v3/31_issuer.rho:129 |
-| `CollateralCustody@"attest"` | `issuer.CollateralCustody.attest` | read | — | reply = (true, {currency, paramsHash, sponsor, kind}) | — | — | — | blocked | contracts/src/deploy/v3/31_issuer.rho:133 |
+| `CollateralCustody@"balance"` | `issuer.CollateralCustody.balance` | read | — | reply = custody.rev | — | — | — | verified | contracts/src/deploy/v3/31_issuer.rho:129 |
+| `CollateralCustody@"attest"` | `issuer.CollateralCustody.attest` | read | — | reply = (true, {currency, paramsHash, sponsor, kind}) | — | — | — | verified | contracts/src/deploy/v3/31_issuer.rho:133 |
 
 ### AuthLedger
 
@@ -58,7 +58,7 @@ stateDiagram-v2
 
 | arm | transition | kind | guards | effects | access | refusals | invariants | status | source |
 |---|---|---|---|---|---|---|---|---|---|
-| `AuthLedger@"check"` | `issuer.AuthLedger.check` | read | kind in mint, burn, settle, custody → kind | reply = (true, Nil) or (false, bad auth) | peek mintAuthState (arm)<br>peek burnAuthState (arm)<br>peek settlementAuthState (arm)<br>peek custodyAuthState (arm) | bad auth (pre)<br>kind (pre) | S8 | blocked | contracts/src/deploy/v3/31_issuer.rho:144 |
+| `AuthLedger@"check"` | `issuer.AuthLedger.check` | read | kind in mint, burn, settle, custody → kind | reply = (true, Nil) or (false, bad auth) | peek mintAuthState (arm)<br>peek burnAuthState (arm)<br>peek settlementAuthState (arm)<br>peek custodyAuthState (arm) | bad auth (pre)<br>kind (pre) | S8 | verified | contracts/src/deploy/v3/31_issuer.rho:144 |
 | `AuthLedger@"rotate"` | `issuer.AuthLedger.rotate` | mutate | kind in mint, burn, settle, custody → kind<br>Governor.authorize(auth:currency:kind, nonce, rotate, kind) → kind | mintAuthState = nextAuth<br>burnAuthState = nextAuth<br>settlementAuthState = nextAuth<br>custodyAuthState = nextAuth<br>reply = (true, Nil) | consume mintAuthState (arm)<br>post mintAuthState (arm)<br>consume burnAuthState (arm)<br>post burnAuthState (arm)<br>consume settlementAuthState (arm)<br>post settlementAuthState (arm)<br>consume custodyAuthState (arm)<br>post custodyAuthState (arm) | kind (pre) | S12<br>S13 | blocked | contracts/src/deploy/v3/31_issuer.rho:181 |
 
 ### MintFacet
@@ -73,7 +73,7 @@ stateDiagram-v2
 
 | arm | transition | kind | guards | effects | access | refusals | invariants | status | source |
 |---|---|---|---|---|---|---|---|---|---|
-| `MintFacet@"mint"` | `issuer.MintFacet.mint` | mutate | auth = mintAuthState → bad auth<br>amount > 0 → amount<br>totalPrincipal + amount <= maxSupply → max supply | totalPrincipal = totalPrincipal + amount<br>supply = totalPrincipal + amount<br>reply = (true, payment, totalPrincipal + amount) | peek mintAuthState (arm)<br>consume issuerState (helper:mintCore)<br>post issuerState (helper:mintCore) | amount (pre)<br>bad auth (pre)<br>max supply (pre) | S1<br>S3<br>S5<br>S9 | blocked | contracts/src/deploy/v3/31_issuer.rho:455 |
+| `MintFacet@"mint"` | `issuer.MintFacet.mint` | mutate | auth = mintAuthState → bad auth<br>amount > 0 → amount<br>totalPrincipal + amount <= maxSupply → max supply | totalPrincipal = totalPrincipal + amount<br>supply = totalPrincipal + amount<br>reply = (true, payment, totalPrincipal + amount) | peek mintAuthState (arm)<br>consume issuerState (helper:mintCore)<br>post issuerState (helper:mintCore) | amount (pre)<br>bad auth (pre)<br>max supply (pre) | S1<br>S3<br>S5<br>S9 | verified | contracts/src/deploy/v3/31_issuer.rho:455 |
 
 ### BurnFacet
 
@@ -87,7 +87,7 @@ stateDiagram-v2
 
 | arm | transition | kind | guards | effects | access | refusals | invariants | status | source |
 |---|---|---|---|---|---|---|---|---|---|
-| `BurnFacet@"burn"` | `issuer.BurnFacet.burn` | mutate | auth = burnAuthState → bad auth<br>isStablecoinPayment(payment) → not a stablecoin payment<br>0 < amount and amount <= maxAmount → amount<br>totalPrincipal >= amount → supply | totalPrincipal = totalPrincipal - amount<br>supply = totalPrincipal - amount<br>reply = (true, amount, totalPrincipal - amount) | peek burnAuthState (arm)<br>consume issuerState (helper:burnCore)<br>post issuerState (helper:burnCore) | amount (pre)<br>bad auth (pre)<br>not a stablecoin payment (pre)<br>supply (pre) | S1<br>S3<br>S7 | blocked | contracts/src/deploy/v3/31_issuer.rho:459 |
+| `BurnFacet@"burn"` | `issuer.BurnFacet.burn` | mutate | auth = burnAuthState → bad auth<br>isStablecoinPayment(payment) → not a stablecoin payment<br>0 < amount and amount <= maxAmount → amount<br>totalPrincipal >= amount → supply | totalPrincipal = totalPrincipal - amount<br>supply = totalPrincipal - amount<br>reply = (true, amount, totalPrincipal - amount) | peek burnAuthState (arm)<br>consume issuerState (helper:burnCore)<br>post issuerState (helper:burnCore) | amount (pre)<br>bad auth (pre)<br>not a stablecoin payment (pre)<br>supply (pre) | S1<br>S3<br>S7 | verified | contracts/src/deploy/v3/31_issuer.rho:459 |
 
 ### SettlementFacet
 
@@ -101,7 +101,7 @@ stateDiagram-v2
 
 | arm | transition | kind | guards | effects | access | refusals | invariants | status | source |
 |---|---|---|---|---|---|---|---|---|---|
-| `SettlementFacet@"settle"` | `issuer.SettlementFacet.settle` | mutate | auth = settlementAuthState → bad auth<br>principal >= 0 and interest >= 0 → amount<br>total = principal + interest → amount<br>isStablecoinPayment(payment) → asset | totalPrincipal = totalPrincipal - principal<br>supply = totalPrincipal - principal<br>reply = (true, principal, interest, interestPay) | peek settlementAuthState (arm)<br>peek burnAuthState (helper:settleCore)<br>consume issuerState (helper:settleCore)<br>post issuerState (helper:settleCore) | amount (pre)<br>asset (pre)<br>bad auth (pre)<br>not a stablecoin payment (pre)<br>supply (pre) | S1<br>S3<br>S7<br>S9 | blocked | contracts/src/deploy/v3/31_issuer.rho:465 |
+| `SettlementFacet@"settle"` | `issuer.SettlementFacet.settle` | mutate | auth = settlementAuthState → bad auth<br>principal >= 0 and interest >= 0 → amount<br>total = principal + interest → amount<br>isStablecoinPayment(payment) → asset | totalPrincipal = totalPrincipal - principal<br>supply = totalPrincipal - principal<br>reply = (true, principal, interest, interestPay) | peek settlementAuthState (arm)<br>peek burnAuthState (helper:settleCore)<br>consume issuerState (helper:settleCore)<br>post issuerState (helper:settleCore) | amount (pre)<br>asset (pre)<br>bad auth (pre)<br>not a stablecoin payment (pre)<br>supply (pre) | S1<br>S3<br>S7<br>S9 | verified | contracts/src/deploy/v3/31_issuer.rho:465 |
 
 ### CustodyFacet
 
@@ -116,8 +116,8 @@ stateDiagram-v2
 
 | arm | transition | kind | guards | effects | access | refusals | invariants | status | source |
 |---|---|---|---|---|---|---|---|---|---|
-| `CustodyFacet@"deposit"` | `issuer.CustodyFacet.deposit` | read | auth = custodyAuthState → bad auth<br>isRevPayment(payment) → not a REV payment | reply = (true, amount) | peek custodyAuthState (arm) | bad auth (pre)<br>not a REV payment (pre) | S7 | blocked | contracts/src/deploy/v3/31_issuer.rho:471 |
-| `CustodyFacet@"withdraw"` | `issuer.CustodyFacet.withdraw` | read | auth = custodyAuthState → bad auth<br>amount > 0 → amount | reply = (true, payment) | peek custodyAuthState (arm) | amount (pre)<br>bad auth (pre) | S7 | blocked | contracts/src/deploy/v3/31_issuer.rho:477 |
+| `CustodyFacet@"deposit"` | `issuer.CustodyFacet.deposit` | read | auth = custodyAuthState → bad auth<br>isRevPayment(payment) → not a REV payment | reply = (true, amount) | peek custodyAuthState (arm) | bad auth (pre)<br>not a REV payment (pre) | S7 | verified | contracts/src/deploy/v3/31_issuer.rho:471 |
+| `CustodyFacet@"withdraw"` | `issuer.CustodyFacet.withdraw` | read | auth = custodyAuthState → bad auth<br>amount > 0 → amount | reply = (true, payment) | peek custodyAuthState (arm) | amount (pre)<br>bad auth (pre) | S7 | verified | contracts/src/deploy/v3/31_issuer.rho:477 |
 
 ### FacetShop
 
@@ -132,8 +132,8 @@ stateDiagram-v2
 
 | arm | transition | kind | guards | effects | access | refusals | invariants | status | source |
 |---|---|---|---|---|---|---|---|---|---|
-| `FacetShop@"isFacet"` | `issuer.FacetShop.isFacet` | read | kind in mint, burn, settle, custody → kind | reply = (true, registered) | — | kind (pre) | — | blocked | contracts/src/deploy/v3/31_issuer.rho:483 |
-| `FacetShop@"provision"` | `issuer.FacetShop.provision` | mutate | sponsorHex = shopCfg.sponsor → sponsor<br>Verifier.sigOk(Codec.hash(rcash:provision:v1, values)) → bad sponsor signature<br>kindsValid(kinds) → kind<br>now <= deadline → expired<br>shopState.nonces.get(nonce) = Nil → replay | shopState.nonces = nonces.set(nonce, true)<br>shopState.rev = rev + 1<br>reply = (true, provisioned) | consume shopState (arm)<br>post shopState (arm) | bad sponsor signature (pre)<br>expired (pre)<br>kind (pre)<br>replay (pre, repost)<br>sponsor (pre) | S8<br>S9<br>S12 | blocked | contracts/src/deploy/v3/31_issuer.rho:587 |
+| `FacetShop@"isFacet"` | `issuer.FacetShop.isFacet` | read | — | reply = true or false | — | — | — | verified | contracts/src/deploy/v3/31_issuer.rho:483 |
+| `FacetShop@"provision"` | `issuer.FacetShop.provision` | mutate | sponsorHex = shopCfg.sponsor → sponsor<br>Verifier.sigOk(Codec.hash(rcash:provision:v1, values)) → bad sponsor signature<br>kindsValid(kinds) → kind<br>now <= deadline → expired<br>shopState.nonces.get(nonce) = Nil → replay | shopState.nonces = nonces.set(nonce, true)<br>shopState.rev = rev + 1<br>reply = (true, provisioned) | consume shopState (arm)<br>post shopState (arm) | bad sponsor signature (pre)<br>expired (pre)<br>kind (pre)<br>replay (pre, repost)<br>sponsor (pre) | S8<br>S9<br>S12 | verified | contracts/src/deploy/v3/31_issuer.rho:587 |
 
 ### RiskParameters
 
@@ -151,8 +151,8 @@ stateDiagram-v2
 
 | arm | transition | kind | guards | effects | access | refusals | invariants | status | source |
 |---|---|---|---|---|---|---|---|---|---|
-| `RiskParameters@"params"` | `issuer.RiskParameters.params` | read | — | reply = (true, params) | peek paramsState (arm) | — | — | blocked | contracts/src/deploy/v3/31_params.rho:56 |
-| `RiskParameters@"info"` | `issuer.RiskParameters.info` | read | — | reply = (true, {params, paramsHash, currentHash, genesis, rev}) | peek paramsState (arm) | — | — | blocked | contracts/src/deploy/v3/31_params.rho:60 |
-| `RiskParameters@"scheduleParams"` | `issuer.RiskParameters.scheduleParams` | create | Bounds.checkIssuer(newParams) → params hash<br>argsHash = H(rcash:stablecoin-params:v2, values) → params hash | governor.pending = pending[stablecoin:currency, nonce] = {action: setRiskParams, argsHash, args: newParams} | — | — | S12 | blocked | contracts/src/deploy/v3/31_params.rho:68 |
-| `RiskParameters@"applyParams"` | `issuer.RiskParameters.applyParams` | mutate | action = setRiskParams → action<br>argsHash = H(rcash:stablecoin-params:v2, values) → params hash<br>Bounds.checkIssuer(args) → params hash | paramsState.params = args<br>paramsState.hash = H(rcash:stablecoin-params:v2, values(args))<br>paramsState.rev = rev + 1<br>reply = (true, {params: args, currentHash: hash}) | consume paramsState (arm)<br>post paramsState (arm) | action (pre)<br>params hash (pre) | S12 | blocked | contracts/src/deploy/v3/31_params.rho:104 |
-| `RiskParameters@"attest"` | `issuer.RiskParameters.attest` | read | — | reply = (true, {currency, paramsHash, sponsor, kind:params}) | — | — | — | blocked | contracts/src/deploy/v3/31_params.rho:156 |
+| `RiskParameters@"params"` | `issuer.RiskParameters.params` | read | — | reply = (true, params) | peek paramsState (arm) | — | — | verified | contracts/src/deploy/v3/31_params.rho:56 |
+| `RiskParameters@"info"` | `issuer.RiskParameters.info` | read | — | reply = (true, {params, paramsHash, currentHash, genesis, rev}) | peek paramsState (arm) | — | — | verified | contracts/src/deploy/v3/31_params.rho:60 |
+| `RiskParameters@"scheduleParams"` | `issuer.RiskParameters.scheduleParams` | create | Bounds.checkIssuer(newParams) → params hash<br>argsHash = H(rcash:stablecoin-params:v2, values) → params hash | governor.pending = pending[stablecoin:currency, nonce] = {action: setRiskParams, argsHash, args: newParams} | — | — | S12 | verified | contracts/src/deploy/v3/31_params.rho:68 |
+| `RiskParameters@"applyParams"` | `issuer.RiskParameters.applyParams` | mutate | action = setRiskParams → action<br>argsHash = H(rcash:stablecoin-params:v2, values) → params hash<br>Bounds.checkIssuer(args) → params hash | paramsState.params = args<br>paramsState.hash = H(rcash:stablecoin-params:v2, values(args))<br>paramsState.rev = rev + 1<br>reply = (true, {params: args, currentHash: hash}) | consume paramsState (arm)<br>post paramsState (arm) | action (pre)<br>params hash (pre) | S12 | verified | contracts/src/deploy/v3/31_params.rho:104 |
+| `RiskParameters@"attest"` | `issuer.RiskParameters.attest` | read | — | reply = (true, {currency, paramsHash, sponsor, kind:params}) | — | — | — | verified | contracts/src/deploy/v3/31_params.rho:156 |

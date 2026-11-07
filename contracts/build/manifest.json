@@ -121,10 +121,10 @@
       "brace_depth": 25,
       "contracts": 21,
       "grammar_depth": 42,
-      "minified_bytes": 13941,
+      "minified_bytes": 13904,
       "operator_run": 5,
-      "sha256": "b369646308acc4d811c4da8c0b50ffedadbc32d342875b6f94829eb4dbb8f6a7",
-      "source_bytes": 24848
+      "sha256": "d2f4d63160ffc9ce0c9a12943da258ba6df4f8c394dd9b61492411150bd3046b",
+      "source_bytes": 24811
     },
     "contracts/build/deploy/v3/31_feed.rho": {
       "brace_depth": 26,
@@ -139,10 +139,10 @@
       "brace_depth": 26,
       "contracts": 27,
       "grammar_depth": 44,
-      "minified_bytes": 13529,
+      "minified_bytes": 13455,
       "operator_run": 5,
-      "sha256": "f5e73410f1128634a0837a2ea3d98a7d72ba3bd3684dd64c68b0e349c6b2f87a",
-      "source_bytes": 26502
+      "sha256": "34ec182394e26e2ad9a2adb2432c5fc615d3d93375d16facf1e297b227d7e654",
+      "source_bytes": 26428
     },
     "contracts/build/deploy/v3/31_params.rho": {
       "brace_depth": 23,

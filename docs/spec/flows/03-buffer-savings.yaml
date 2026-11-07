@@ -419,16 +419,12 @@ components:
     lean: Rholphin.Model.BufferSavings.bufferFacetShop_isFacet
     kind: read
     source: {file: contracts/src/deploy/v3/31_buffer_savings.rho, line: 609}
-    guards:
-    - {id: kind, expr: kind = "buffer", refusal: {reason: action, phase: pre}}
-    - {id: identity, expr: facet = BufferOperatorFacet, refusal: {reason: unknown, phase: pre}}
+    guards: []
     effects:
-    - {target: reply, formula: '(true, "buffer")'}
+    - {target: reply, formula: 'true or false'}
     access: []
     nested_calls: []
-    refusals:
-    - {reason: action, phase: pre, reposts: false, fail: false}
-    - {reason: unknown, phase: pre, reposts: false, fail: false}
+    refusals: []
     invariants: []
     status: verified
     acceptance:

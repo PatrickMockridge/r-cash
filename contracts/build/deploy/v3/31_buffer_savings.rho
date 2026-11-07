@@ -607,10 +607,10 @@ in {
   } |
 
   contract BufferFacetShop(@"isFacet", @kind, @facet, ret) = {
-    if (kind != "buffer") { ret!((false, "action")) }
+    if (kind != "buffer") { ret!(false) }
     else {
-      if (facet != *BufferOperatorFacet) { ret!((false, "unknown")) }
-      else { ret!((true, "buffer")) }
+      if (facet != *BufferOperatorFacet) { ret!(false) }
+      else { ret!(true) }
     }
   } |
 

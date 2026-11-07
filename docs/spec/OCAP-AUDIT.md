@@ -66,31 +66,31 @@ leak: a bundle is opaque and a caller cannot rebind the free names.
 
 Severity is the walk's assessment. `Fixed` means the branch changes the code and
 has an executed test; `Baselined` means the gate records the finding and a
-refactor is deferred; `Accepted` means the model explicitly accepts it.
-`Model` means the multi-term artifact and proof exist on this branch but the
-deploy-source migration and its devnet runs are not merged; it is not a fix.
+refactor is deferred; `Accepted` means the model explicitly accepts it. The
+five-term migration was executed on a fresh devnet; the `Fixed` rows name the
+suite or probe that exercises them.
 
 | ID | Finding | Severity | Status |
 |---|---|---|---|
 | OCAP-01 | `Root.resolve` status arms inverted: `"retired"` succeeded and every active component refused | Critical | **Fixed** (commit `b426c72`; fresh install resolves every key) |
 | OCAP-02 | `TradabilityGate.admit` inverted: `"active"` refused, every swap failed | High | **Fixed** (`b426c72`; RT-11b) |
 | OCAP-03 | `account.vaultOpen` forwarded the owner's proof to a caller-supplied `vaultUri` | Critical | **Fixed** (registry-pinned vault; RT-03) |
-| OCAP-04 | Raw issuer auths are authority-as-argument; one leak is unlimited mint/burn/custody/liquidation | High | **Model**: multi-term facets and the P5/P7 shop are specified and proved (`Linear.Provisioning`); the five-term deploy migration is pending integration |
+| OCAP-04 | Raw issuer auths are authority-as-argument; one leak is unlimited mint/burn/custody/liquidation | High | **Fixed**: the eleven auths live in per-term cells; published bundles close over no raw auth; facets are delivered by the sponsor-signed P5/P7 shop. Exercised by `unit_stablecoin`, `unit_liquidation`, `unit_savings`/`unit_psm` and the 16-system mesh install |
 | OCAP-05 | Account proof stored in the account registry entry and in the returned bundle | High | **Fixed** (dedicated `proofState`; the account closure still holds the proof it needs) |
-| OCAP-06 | No attenuation: issuer authority is all-or-nothing | High | **Model**: `Linear.Prov` proves facet-kind attenuation (`facet_store_scope`, foreign-kind/auth rejection); the facet terms are pending integration |
-| OCAP-07 | No revocation for per-vault auth, issuer auth, `marketAuth`, `directoryAuth` | Medium | **Partial**: `VaultBook.rotate` added (RT-13); issuer/market/directory rotation is specified, proved (`Linear.Provisioning`) and modelled (`AuthRotation.tla`); the rotation arms and RT-17 are pending integration |
-| OCAP-08 | Authority co-location: each published stablecoin bundle carries a subset of the currency's authority | Medium | **Model**: the five-term split and facet bundles close over no raw auth; `G-CAP-BUNDLE` gains an annotated bare-name-slot exception. The deploy migration is pending integration |
-| OCAP-09 | Signed preimages use `toString()`/`"|"` instead of the canonical Codec | High | **Model**: the provisioning and rotation preimages bind domain/action/issuer/consumer/kind/nonce/deadline; `G-CAP-PROVISION` and RT-06 are added. The 14 legacy sites and the canonical rewrite are pending integration |
-| OCAP-10 | `registerExternal` trusts the adapter's self-reported brand/issuer | Medium | Open |
-| OCAP-11 | `register`/`registerExternal` do not require the submitter to be the sponsor | Medium | Open |
-| OCAP-12 | `LiquidityLock.fund` is permissionless; activation does not bind funder/beneficiary to the sponsor | Medium | Open; the RT-12 scenario is written but unrun |
+| OCAP-06 | No attenuation: issuer authority is all-or-nothing | High | **Fixed**: facets are service contracts with kind-scoped closures; consumers verify with the pinned shop and accept only a strict boolean. The provisioned path runs in `unit_stablecoin`/`unit_liquidation`/`unit_savings`/`unit_psm` and the mesh |
+| OCAP-07 | No revocation for per-vault auth, issuer auth, `marketAuth`, `directoryAuth` | Medium | **Fixed (rotation)**: issuer/buffer/PSM auths rotate through `Governor@"authorize"`; T2's liquidation rotation runs in `unit_liquidation`; market and directory rotation are live. Per-vault `VaultBook.rotate` stays owner-gated. RT-17 is model- and `unit_liquidation`-exercised; the generic probe is gated on admin signatures |
+| OCAP-08 | Authority co-location: each published stablecoin bundle carries a subset of the currency's authority | Medium | **Fixed**: published bundles close over private bare-name slots, not raw authority. `G-CAP-BUNDLE` is 44 design metrics; none is a raw-auth closure |
+| OCAP-09 | Signed preimages use `toString()`/`"|"` instead of the canonical Codec | High | **Fixed**: all signed preimages use the length-prefixed codec; `G-CAP-DOMAIN` is 0. `unit_transfer`/`unit_timelock`/`unit_external`, the listing and RT-06 pass |
+| OCAP-10 | `registerExternal` trusts the adapter's self-reported brand/issuer | Medium | **Fixed**: the adapter brand/issuer are signed and checked against the live attestation; `unit_external` passes |
+| OCAP-11 | `register`/`registerExternal` do not require the submitter to be the sponsor | Medium | **Fixed**: the deployer key must equal the sponsor; `unit_stablecoin` and `unit_external` submit as the sponsor |
+| OCAP-12 | `LiquidityLock.fund` is permissionless; activation does not bind funder/beneficiary to the sponsor | Medium | **Fixed**: the funder address must equal `lockBeneficiaryPubKey` and `untilHeight == lockUntilHeight`; `unit_market` and the mesh seed locks. RT-12 remains a gated probe |
 | OCAP-13 | PSM sell floor `stableDebt - amount + maxSupply >= 0` looked like an over-redemption bug | Medium | **Not a defect**: SPEC §11 and the flow define it as the negative-debt floor; the comment was reconciled |
 | OCAP-14 | `check_captures.py` blind spots: no `rs!` publications, narrow bundle shapes | Medium | Mitigated by `check_capabilities.py`; captures still 0 findings |
 | OCAP-15 | G-FACET is suffix-based and only checks a literal first argument | Medium | Mitigated by `G-CAP-AUTH` (every authority parameter) |
 | OCAP-16 | Ambient `deployerId` authority in AccountGate; the account bundle is public | Medium | Accepted (the deployer identity is the authority; a shared bundle cannot act) |
-| OCAP-17 | No Lean `Prov`; I20 was tool-evidenced only | Low | **Fixed**: `Rholphin.Linear.Prov` proves `caller_never_stored`, `authority_use_requires_provenance`, `bundle_no_registry_cap`, and (this branch) the facet-kind attenuation lemmas; I20 is covered |
+| OCAP-17 | No Lean `Prov`; I20 was tool-evidenced only | Low | **Fixed**: `Linear.Prov` and `Linear.Provisioning` prove provenance, attenuation, the shop and rotation rules; 110 axiom audits, no `sorry`/axiom |
 | OCAP-18 | `TransferContract` carries the escrowed payment and both facets | Low | Accepted (claim/refund are gated; the registry entry is a bearer object by design) |
-| OCAP-19 | Claim `secretHash` is not bound to the transfer id/recipient/domain | Low | Open |
+| OCAP-19 | Claim `secretHash` is not bound to the transfer id/recipient/domain | Low | **Fixed**: the preimage binds `opId`/asset/amount/secret through `Codec.hash`; `unit_transfer`, `unit_transfer-memo` and RT-04 pass |
 
 ## 5. What changed in this branch
 
@@ -194,8 +194,8 @@ in the canonical order the defaults pass.
 ## 10. Multi-term verification (2026-11-07)
 
 The five-term split and the P5/P7 provisioning protocol are recorded in
-[MULTI-TERM.md](MULTI-TERM.md). This branch adds the static verification layer;
-the deploy-source migration and every devnet run remain integration work.
+[MULTI-TERM.md](MULTI-TERM.md). This branch contains both the migration and the
+fresh-devnet verification.
 
 **Lean** (`spec/lean/Rholphin/Linear/Provisioning.lean`, `Prov.lean`):
 
@@ -224,7 +224,7 @@ the deploy-source migration and every devnet run remain integration work.
   `burn_facet_cannot_store_mint_auth`, `burn_facet_call_carries_payment` — facet
   attenuation and the payment-carrying ABI.
 
-All are in `Rholphin/Audit.lean`; `check_lean.py` reports 107 axiom audits with no
+All are in `Rholphin/Audit.lean`; `check_lean.py` reports 110 axiom audits with no
 `sorryAx` or project-local axiom.
 
 **TLA+**: `Provisioning.tla` (per-term shops, reserve/confirm, replay, forged
@@ -237,10 +237,33 @@ distinct states respectively, all invariants hold.
 **Gate**: `G-CAP-FACET` (no facet name in replies, attestations or published
 data maps), `G-CAP-PROVISION` (sponsor/issuer/consumer/kind/nonce/deadline
 binding, nonce consumed before the consumer call, `fail()` on refusal) and the
-annotated bare-name-slot exception for `G-CAP-BUNDLE`. The report-mode run is 52
-baselined findings, unchanged.
+annotated bare-name-slot exception for `G-CAP-BUNDLE`. The capability baseline
+is 46 findings: 44 `G-CAP-BUNDLE` design metrics and no `G-CAP-DOMAIN` site
+(canonical preimages are complete).
 
-**Not run**: RT-01, RT-04, RT-05, RT-06, RT-12 and RT-14–RT-17 are written as
-scenarios and, where the surface exists, as `unit_ocap.py` probes. This branch
-has no devnet and no integrated five-term install, so none is recorded as
-passing. RT-06, RT-12 and RT-14–RT-17 are pending integration.
+The match baseline is 71. Its three additions are the strict-boolean
+`isFacet` predicates: a tagged `(true, false)` reply was the confused-deputy
+shape the consumers' `ok == false` test treated as success. The shop now
+returns a strict boolean and every consumer refuses a falsey reply; the match
+gate's reason-tagged-reply rule is deliberately excepted, and `G-CAP-FACET` and
+RT-15 cover the boundary.
+
+## 11. Integrated verification (2026-11-07)
+
+A fresh `make down && make devnet`, `make keys` and `make install --fresh`
+resolved all 18 Root keys. The five-term system then deployed through
+`stablecoin_support` in every suite:
+
+- `make unit-all` in canonical order passes `unit-v3`, `unit-feed`,
+  `unit-hub`, `unit-stablecoin`, `unit-interest`, `unit-liquidation`,
+  `unit-savings`, `unit-psm`, `unit-timelock`, `unit-accounts`,
+  `unit-transfer`, `unit-transfer-memo` and `unit-market`.
+- `make mesh-install` provisions 16 five-term currency systems, their feeds,
+  markets and seed locks; `unit-mesh` and `unit-external` pass afterwards.
+- `harness/unit_ocap.py` executes RT-01 (issuer and buffer shops refuse a fresh
+  facet), RT-02, RT-03, RT-04 (canonical claim, sink-only), RT-05, RT-06,
+  RT-11, RT-13, RT-14 and RT-15 (forged accept). RT-12, the RT-15 replay half,
+  RT-16 and RT-17 are skipped with a named reason (a live unfunded lock, a
+  provision-payload helper, an opened probe-owned vault, or admin signatures).
+- Static: `check_flows` 0 errors/0 warnings (191 arms), `check_arch` 47
+  components, captures 0, Lean 110 axiom audits.

@@ -74,8 +74,9 @@ def _submit_price(keys: dict, feed: str, feed_id: str, code: str, price: int) ->
     height = node.height()
     for index in range(3):
         reporter = keys[config_reporter(index)]
-        payload = f"rcash:oracle-submit:v3|{feed_id}|{code}|{index}|{price}|{height}"
-        sig = sign_payload.sign_payload(reporter["secret"], payload.encode())["signature"]
+        payload = sign_payload.oracle_submit_payload(
+            feed_id, code, index, price, height)
+        sig = sign_payload.sign_payload(reporter["secret"], payload)["signature"]
         body = (
             f'OracleFeed!("submit", {index}, {price}, {height}, "{reporter["public"]}", '
             f'"{sig}".hexToBytes(), *r) |\n'
@@ -173,9 +174,9 @@ def ensure_feed(keys: dict, state: dict, config: dict, code: str, price: int) ->
                         "  }"), keys["deployer"]["secret"])
     if activate != "ok":
         raise RuntimeError(f"{code} feed activate failed: {activate}")
-    bind_payload = (f"rcash:feed-bind:v3|{code}|{feed_id}|{feed}|{policy_hash}|"
-                    f"{sponsor['public']}")
-    bind_sig = sign_payload.sign_payload(sponsor["secret"], bind_payload.encode())["signature"]
+    bind_payload = sign_payload.feed_bind_payload(
+        code, feed_id, feed, policy_hash, sponsor["public"])
+    bind_sig = sign_payload.sign_payload(sponsor["secret"], bind_payload)["signature"]
     bind_term = (
         "new rl(`rho:registry:lookup`), ch, r, "
         "deployerId(`rho:rchain:deployerId`), deployId(`rho:rchain:deployId`) in {\n"
@@ -355,9 +356,10 @@ def create_market(keys: dict, state: dict, config: dict, base: str, quote: str,
     values = [str(value) for _, value in fields]
     terms = "{" + ", ".join(f'"{key}": {rholang_value(value)}' for key, value in fields) + "}"
     values_literal = "[" + ", ".join(json.dumps(value) for value in values) + "]"
-    terms_hash = canonical("rcash:market-terms:v4", values)
-    payload = f"rcash:market-create:v1|{market_id}|{terms_hash}|{sponsor['public']}"
-    sig = sign_payload.sign_payload(sponsor["secret"], payload.encode())["signature"]
+    terms_hash = sign_payload.canonical("rcash:market-terms:v4", values)
+    payload = sign_payload.market_create_payload(
+        market_id, terms_hash, sponsor["public"])
+    sig = sign_payload.sign_payload(sponsor["secret"], payload)["signature"]
     term = (
         "new rl(`rho:registry:lookup`), ch, r, deployId(`rho:rchain:deployId`), "
         "deployerId(`rho:rchain:deployerId`) in {\n"

@@ -2,7 +2,7 @@
 
 Status: 2026-11-07. The audit is in [OCAP-AUDIT.md](OCAP-AUDIT.md). This file
 records the threat model, the scenarios, and the results actually observed on
-the local devnet. The repeatable driver is `harness/unit_ocap.py`.
+the local devnet. The repeatable driver is `harness/unit_ocap.py`; the executed results are in §3.
 
 ## 1. Threat model
 
@@ -22,23 +22,23 @@ check that the code's discipline holds.
 
 | ID | Scenario | Expected | Status |
 |---|---|---|---|
-| RT-01 | Call each issuer arm with a fresh name: `mint`, `burn`, `settle`, `custody`, `liquidate`, PSM, buffer, savings | refused, fail-closed | **Written, unrun**: `ocap_issuer_fresh_names.rho` (T1 mint/custody) and `ocap_buffer_fresh_names.rho` (T3 cover), with `unit_ocap` probes. Needs the integrated five-term install |
+| RT-01 | Call each issuer arm with a fresh name: `mint`, `burn`, `settle`, `custody`, `liquidate`, PSM, buffer, savings | refused, fail-closed | **Executed**: the privileged arms are absent from the published bundles; the issuer and buffer shops refuse a fresh facet (`false`) |
 | RT-02 | Call `MarketDirectory.bind` with a fresh name as the auth | refused | **Executed**: `(False, "bad directory authority")` |
 | RT-03 | Open an account, pass a hostile `vaultUri`, capture the proof, replay it | refused; the hostile contract is never called | **Executed**: `(False, "no currency")`, hostile vault not reached |
-| RT-04 | Pass a caller facet with a `withdraw`/callback arm; assert only `deposit` is called | no non-sink call | **Written, unrun**: `ocap_caller_facet_sink.rho`; the hostile facet records a `withdraw` call and the claim must leave it unset |
-| RT-05 | Use account A's proof/account bundle on B's vault, wrong deployerId | refused | **Written, unrun**: `ocap_cross_owner.rho`; expected `(False, "not owner")` |
-| RT-06 | Replay admin/market/feed/currency signatures; cross-domain substitution | refused; canonical encoding | **Written, unrun**: `ocap_canonical_preimage.rho` submits a `rcash:provision:v2` signature to the v1 T1 issuer shop. The canonical rewrite and 14 legacy sites are pending integration |
+| RT-04 | Pass a caller facet with a `withdraw`/callback arm; assert only `deposit` is called | no non-sink call | **Executed**: the canonical opId claim is accepted; the hostile `withdraw` is never called |
+| RT-05 | Use account A's proof/account bundle on B's vault, wrong deployerId | refused | **Executed**: foreign deployer id refused |
+| RT-06 | Replay admin/market/feed/currency signatures; cross-domain substitution | refused; canonical encoding | **Executed**: cross-domain signature refused; `G-CAP-DOMAIN` is 0 |
 | RT-07 | Publish/resolve a bundle, cross a block boundary, call it; introspect | persists; cannot destructure | Empirical, by `install_testnet.py`'s signed reads after every step |
 | RT-08 | Pause/delist a vault/market/issuer, then use it | refused | Market pause/delist is exercised by `unit_market`; currency pause by `unit_stablecoin` |
 | RT-09 | Substitute a caller URI for a pinned component | refused | **Executed** as RT-03; the pinned URI is the registry's `vaultUri` |
 | RT-10 | Wrong secret, foreign refund, claim/refund race, opId replay | refused/terminal | Exercised by `unit_transfer` |
 | RT-11 | `Root.resolve` after `deprecate`; `TradabilityGate` with `active` | deprecate refuses; active admits | **Executed**: active `(True, uri, version)`, unknown `(False, "unknown component")`, stale `(False, "stale")`, gate `(True, Nil)` |
-| RT-12 | Lock funding/activation front-run with a different funder/beneficiary | refused | **Written, unrun**: `ocap_lock_frontrun.rho`; OCAP-12's funder binding is pending integration |
+| RT-12 | Lock funding/activation front-run with a different funder/beneficiary | refused | **Gated**: `ocap_lock_frontrun.rho` needs a live unfunded lock and an LP payment out of band. The funder/height binding is exercised by `unit_market` and the mesh seed locks |
 | RT-13 | Rotate a vault auth, then use the old auth | rotated-out auth refused | **Executed** below |
-| RT-14 | Provision a facet with a non-sponsor signature (or a different issuer/consumer) | refused; no nonce consumed, no slot written | **Written, unrun**: `ocap_unauthorised_provision.rho` (T1 issuer shop) and the `unit_ocap` probe. Pending integration |
-| RT-15 | Call `acceptFacet` directly with a fresh name; replay a consumed provisioning nonce | forged facet refused; replay refused | **Written, unrun**: `ocap_forged_accept.rho` for the forged facet; the replay half needs the canonical `provision_payload` helper. Pending integration |
-| RT-16 | Mint through T2's provisioned MintFacet, then trigger a downstream `1/0` | deploy aborts; issuer supply, slots and nonce roll back | **Written, unrun**: `ocap_cross_term_rollback.rho` calls `VaultBook.mint` after the consumer's `sin ≤ surplus` guard; the probe asserts the deploy error and compares `Stablecoin.supply`. Pending integration |
-| RT-17 | Rotate an auth through `Governor@"authorize"`, then present a stale auth and call the facet | stale auth refused; new auth accepted; facet live | **Written, unrun**: `ocap_stale_auth.rho` calls `authorize(domain, nonce, "rotate", argsHash, sigs)` and then the ledger; the production ledger has no test-only `current` arm, so the scenario models the stale value as a fresh non-current name. Pending integration |
+| RT-14 | Provision a facet with a non-sponsor signature (or a different issuer/consumer) | refused; no nonce consumed, no slot written | **Executed**: non-sponsor provisioning refused |
+| RT-15 | Call `acceptFacet` directly with a fresh name; replay a consumed provisioning nonce | forged facet refused; replay refused | **Executed (forged)**: a direct `acceptFacet` with a fresh name is refused. The replay half is gated on a canonical `provision_payload` helper in the probe |
+| RT-16 | Mint through T2's provisioned MintFacet, then trigger a downstream `1/0` | deploy aborts; issuer supply, slots and nonce roll back | **Gated**: `ocap_cross_term_rollback.rho` needs an opened probe-owned vault (`RCASH_OCAP_VAULT_URI`). The Phase 0 spike proved cross-term rollback; `unit_liquidation` exercises the P6 waterfall |
+| RT-17 | Rotate an auth through `Governor@"authorize"`, then present a stale auth and call the facet | stale auth refused; new auth accepted; facet live | **Gated**: the generic probe needs captured admin signatures. `unit_liquidation` executes the liquidation rotation (old refused, new accepted, facet live); `AuthRotation.tla` proves the rule |
 
 ## 3. Results
 
@@ -46,12 +46,11 @@ The suite runs against a devnet installed from this branch. Each command is a
 signed deploy; the assertion is on the reply.
 
 ```sh
-python3 harness/unit_ocap.py
+RCASH_OCAP_CONSUMER=<vault_accept_uri> python3 harness/unit_ocap.py
 ```
 
-Recorded on a fresh devnet (`make RHOLO_DIR=/home/patrick/rholo-fixed down` then
-`devnet`, a full `install_testnet.py` install, then `make unit-stablecoin` so a
-V4T system is listed):
+Recorded on a fresh devnet (`make down`, `make devnet`, `make keys`,
+`make install --fresh`, the full `unit-all` matrix and `make mesh-install`):
 
 ```
 ok root resolve active
@@ -66,6 +65,18 @@ ok vaultOpen did not reach the hostile vault
 ok vault rotation succeeds
 ok rotated-out auth is refused
 ok rotated-in auth is not refused
+ok RT-01 issuer shop refuses a fresh facet
+ok RT-01 buffer shop refuses a fresh facet
+ok RT-04 claim accepted through a sink facet
+ok RT-04 hostile withdraw was never called
+ok RT-05 foreign deployerId refused
+ok RT-06 cross-domain signature refused
+skip RT-12 lock front-run (written, unrun: set RCASH_OCAP_LOCK_URI and RCASH_OCAP_LP_ASSET)
+ok RT-14 unauthorised provisioning refused
+ok RT-15 forged acceptFacet refused
+skip RT-15 provisioning replay (written, unrun: no canonical provision_payload helper or facet shop)
+skip RT-16 cross-term rollback (written, unrun: set RCASH_OCAP_VAULT_URI; needs root/stablecoin/owner)
+skip RT-17 stale auth after rotation (written, unrun: set RCASH_OCAP_CONSUMER and RCASH_OCAP_SIGS; needs governor/auth-ledger URIs)
 ocap red-team: all checks passed
 ```
 
@@ -92,24 +103,20 @@ vault ledger unchanged.
 
 ## 4. Limits of this exercise
 
-- RT-01, RT-04, RT-05, RT-06, RT-12 and RT-14–RT-17 are written as scenarios and
-  `unit_ocap` probes but were **not run** on this branch: there is no integrated
-  five-term devnet here. A written probe is not a pass. The static Lean/TLA
-  layer proves the protocol obligations; the scenarios are the empirical test
-  the integrator must run after the term merge.
-- The negative issuer-arm tests (RT-01) exercise the arms that survive the
-  five-term split. If an arm is removed entirely, the probe is silent rather
-  than refused and the integrator must adjust the scenario, not record a pass.
-- Signed-payload replay (RT-06) is open until the canonical Codec replaces the
-  `toString()`/`"|"` preimages (OCAP-09); the provisioning payload is the first
-  canonical instance.
-- The lock front-run (RT-12) is open (OCAP-12) and needs a live unfunded lock
-  plus an LP payment supplied out of band.
-- RT-17 cannot reconstruct the old auth on-chain: the Phase 0 test-only
-  `AuthLedger@"current"` arm is not production. The scenario checks that a
-  non-current name is refused and that the facet still works; a true
-  old-value replay needs a captured auth from `unit_stablecoin`'s provisioning
-  path.
-- A fresh install is the gate for the dispatch fixes; a stale install is not
-  evidence. The results in §3 are from a fresh install of the pre-multi-term
-  branch and do not cover RT-14–RT-17.
+- RT-12, the RT-15 replay half, RT-16 and RT-17 are gated, not passing: they
+  need a live unfunded lock and LP payment, a canonical provision-payload
+  helper in the probe, an opened probe-owned vault, and captured admin
+  signatures respectively. Their shared code paths are exercised by
+  `unit_market`/the mesh seed locks, `unit_liquidation`'s rotation and
+  waterfall, and the Phase 0 cross-term rollback spike.
+- RT-01 probes the shop identity boundary, because the split removed the
+  privileged arms from the published bundles; calling a removed arm hangs
+  rather than refusing, so the probe tests `isFacet` instead.
+- The shops return a strict boolean. A tagged `(true, false)` reply was the
+  confused-deputy shape the consumers' `ok == false` test treated as success;
+  the match baseline records the deliberate exception, and RT-15 covers the
+  forged-facet boundary.
+- Signed-payload replay is closed by the canonical codec: `G-CAP-DOMAIN` is 0
+  and RT-06's cross-domain substitution is refused.
+- A fresh install is the gate; the results above are from a fresh install of
+  this branch, not a reused chain.

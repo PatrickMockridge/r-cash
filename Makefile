@@ -185,6 +185,7 @@ pre-devnet-check: spec-check formal-check vectors-check model-test check-languag
 	cargo test --workspace --exclude rcash-wasm
 	cargo check -p rcash-wasm --target wasm32-unknown-unknown
 	cargo test -p rcash-wasm --features rcash-chain/native
+	CARGO_BUILD_JOBS=1 npm --prefix web run wasm:build
 	npm --prefix web run typecheck
 	npm --prefix web test
 

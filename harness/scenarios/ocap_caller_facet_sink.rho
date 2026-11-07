@@ -16,7 +16,7 @@ new
   sendCh, claimCh, tcCh,
   deployId(`rho:rchain:deployId`),
   deployerId(`rho:rchain:deployerId`),
-  captureState
+  captureState, Hostile
 in {
   captureState!({"captured": false}) |
   contract Hostile(@"deposit", payment, ret) = { ret!((true, Nil)) } |
@@ -53,11 +53,11 @@ in {
                             match d {
                               (true, _) => {
                                 @sender!("sendTransfer", *deployerId, "REV",
-                                         Hostile,
+                                         *Hostile,
                                          "__RECIPIENT_PUB__".hexToBytes(),
                                          __AMOUNT__,
                                          "__SECRET_HASH__".hexToBytes(),
-                                         __EXPIRY__, "", "ocap-rt04", 0, *sendCh) |
+                                         __EXPIRY__, "", "__OP_ID__", 0, *sendCh) |
                                 for (@s <- sendCh) {
                                   match s {
                                     (true, _id, uri) => {

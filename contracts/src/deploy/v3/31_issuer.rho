@@ -483,22 +483,22 @@ in {
         contract FacetShop(@"isFacet", @kind, facet, ret2) = {
           match kind {
             "mint" => {
-              if (*facet == *MintFacet) { ret2!((true, true)) }
-              else { ret2!((true, false)) }
+              if (*facet == *MintFacet) { ret2!(true) }
+              else { ret2!(false) }
             }
             "burn" => {
-              if (*facet == *BurnFacet) { ret2!((true, true)) }
-              else { ret2!((true, false)) }
+              if (*facet == *BurnFacet) { ret2!(true) }
+              else { ret2!(false) }
             }
             "settle" => {
-              if (*facet == *SettlementFacet) { ret2!((true, true)) }
-              else { ret2!((true, false)) }
+              if (*facet == *SettlementFacet) { ret2!(true) }
+              else { ret2!(false) }
             }
             "custody" => {
-              if (*facet == *CustodyFacet) { ret2!((true, true)) }
-              else { ret2!((true, false)) }
+              if (*facet == *CustodyFacet) { ret2!(true) }
+              else { ret2!(false) }
             }
-            _ => { ret2!((false, "kind")) }
+            _ => { ret2!(false) }
           }
         } |
 

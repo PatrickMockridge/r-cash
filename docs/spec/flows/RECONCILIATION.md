@@ -17,28 +17,28 @@
 
 | arm | transition | access modes | after-consume purity | effects | Lean | status | blocker / fix |
 |---|---|---|---|---|---|---|---|
-| `Stablecoin@"brand"` | `issuer.Stablecoin.brand` | — | OK | — | `Rholphin.Model.Issuer.stablecoin_brand` | blocked | devnet unit_stablecoin and provisioning gate not run in this branch |
-| `Stablecoin@"issuer"` | `issuer.Stablecoin.issuer` | — | OK | — | `Rholphin.Model.Issuer.stablecoin_issuer` | blocked | devnet unit_stablecoin and provisioning gate not run in this branch |
-| `Stablecoin@"supply"` | `issuer.Stablecoin.supply` | peek:1 | OK | — | `Rholphin.Model.Issuer.stablecoin_supply` | blocked | devnet unit_stablecoin and provisioning gate not run in this branch |
-| `Stablecoin@"amountOf"` | `issuer.Stablecoin.amountOf` | — | OK | — | `Rholphin.Model.Issuer.stablecoin_amountOf` | blocked | devnet unit_stablecoin and provisioning gate not run in this branch |
-| `Stablecoin@"info"` | `issuer.Stablecoin.info` | peek:1 | OK | — | `Rholphin.Model.Issuer.stablecoin_info` | blocked | devnet unit_stablecoin and provisioning gate not run in this branch |
-| `Stablecoin@"attest"` | `issuer.Stablecoin.attest` | — | OK | yes | `Rholphin.Model.Issuer.stablecoin_attest` | blocked | devnet unit_stablecoin and provisioning gate not run in this branch |
-| `CollateralCustody@"balance"` | `issuer.CollateralCustody.balance` | — | OK | yes | `Rholphin.Model.Issuer.collateralCustody_balance` | blocked | devnet unit_stablecoin and provisioning gate not run in this branch |
-| `CollateralCustody@"attest"` | `issuer.CollateralCustody.attest` | — | OK | yes | `Rholphin.Model.Issuer.collateralCustody_attest` | blocked | devnet unit_stablecoin and provisioning gate not run in this branch |
-| `AuthLedger@"check"` | `issuer.AuthLedger.check` | peek:4 | OK | yes | `Rholphin.Model.Issuer.authLedger_check` | blocked | devnet unit_stablecoin and provisioning gate not run in this branch |
-| `AuthLedger@"rotate"` | `issuer.AuthLedger.rotate` | consume:4, post:4 | OK | yes | `Rholphin.Model.Issuer.authLedger_rotate` | blocked | devnet unit_stablecoin and provisioning gate not run in this branch |
-| `MintFacet@"mint"` | `issuer.MintFacet.mint` | peek:1, consume:1, post:1 | OK | yes | `Rholphin.Model.Issuer.mintFacet_mint` | blocked | devnet unit_stablecoin and provisioning gate not run in this branch |
-| `BurnFacet@"burn"` | `issuer.BurnFacet.burn` | peek:1, consume:1, post:1 | OK | yes | `Rholphin.Model.Issuer.burnFacet_burn` | blocked | devnet unit_stablecoin and provisioning gate not run in this branch |
-| `SettlementFacet@"settle"` | `issuer.SettlementFacet.settle` | peek:2, consume:1, post:1 | OK | yes | `Rholphin.Model.Issuer.settlementFacet_settle` | blocked | devnet unit_stablecoin and provisioning gate not run in this branch |
-| `CustodyFacet@"deposit"` | `issuer.CustodyFacet.deposit` | peek:1 | OK | yes | `Rholphin.Model.Issuer.custodyFacet_deposit` | blocked | devnet unit_stablecoin and provisioning gate not run in this branch |
-| `CustodyFacet@"withdraw"` | `issuer.CustodyFacet.withdraw` | peek:1 | OK | yes | `Rholphin.Model.Issuer.custodyFacet_withdraw` | blocked | devnet unit_stablecoin and provisioning gate not run in this branch |
-| `FacetShop@"isFacet"` | `issuer.FacetShop.isFacet` | — | OK | yes | `Rholphin.Model.Issuer.facetShop_isFacet` | blocked | devnet unit_stablecoin and provisioning gate not run in this branch |
-| `FacetShop@"provision"` | `issuer.FacetShop.provision` | consume:1, post:1 | OK | yes | `Rholphin.Model.Issuer.facetShop_provision` | blocked | devnet unit_stablecoin and provisioning gate not run in this branch |
-| `RiskParameters@"params"` | `issuer.RiskParameters.params` | peek:1 | OK | yes | `Rholphin.Model.Issuer.riskParameters_params` | blocked | devnet unit_stablecoin and provisioning gate not run in this branch |
-| `RiskParameters@"info"` | `issuer.RiskParameters.info` | peek:1 | OK | yes | `Rholphin.Model.Issuer.riskParameters_info` | blocked | devnet unit_stablecoin and provisioning gate not run in this branch |
-| `RiskParameters@"scheduleParams"` | `issuer.RiskParameters.scheduleParams` | — | OK | yes | `Rholphin.Model.Issuer.riskParameters_scheduleParams` | blocked | devnet unit_stablecoin and provisioning gate not run in this branch |
-| `RiskParameters@"applyParams"` | `issuer.RiskParameters.applyParams` | consume:1, post:1 | OK | yes | `Rholphin.Model.Issuer.riskParameters_applyParams` | blocked | devnet unit_stablecoin and provisioning gate not run in this branch |
-| `RiskParameters@"attest"` | `issuer.RiskParameters.attest` | — | OK | yes | `Rholphin.Model.Issuer.riskParameters_attest` | blocked | devnet unit_stablecoin and provisioning gate not run in this branch |
+| `Stablecoin@"brand"` | `issuer.Stablecoin.brand` | — | OK | — | `Rholphin.Model.Issuer.stablecoin_brand` | verified |  |
+| `Stablecoin@"issuer"` | `issuer.Stablecoin.issuer` | — | OK | — | `Rholphin.Model.Issuer.stablecoin_issuer` | verified |  |
+| `Stablecoin@"supply"` | `issuer.Stablecoin.supply` | peek:1 | OK | — | `Rholphin.Model.Issuer.stablecoin_supply` | verified |  |
+| `Stablecoin@"amountOf"` | `issuer.Stablecoin.amountOf` | — | OK | — | `Rholphin.Model.Issuer.stablecoin_amountOf` | verified |  |
+| `Stablecoin@"info"` | `issuer.Stablecoin.info` | peek:1 | OK | — | `Rholphin.Model.Issuer.stablecoin_info` | verified |  |
+| `Stablecoin@"attest"` | `issuer.Stablecoin.attest` | — | OK | yes | `Rholphin.Model.Issuer.stablecoin_attest` | verified |  |
+| `CollateralCustody@"balance"` | `issuer.CollateralCustody.balance` | — | OK | yes | `Rholphin.Model.Issuer.collateralCustody_balance` | verified |  |
+| `CollateralCustody@"attest"` | `issuer.CollateralCustody.attest` | — | OK | yes | `Rholphin.Model.Issuer.collateralCustody_attest` | verified |  |
+| `AuthLedger@"check"` | `issuer.AuthLedger.check` | peek:4 | OK | yes | `Rholphin.Model.Issuer.authLedger_check` | verified |  |
+| `AuthLedger@"rotate"` | `issuer.AuthLedger.rotate` | consume:4, post:4 | OK | yes | `Rholphin.Model.Issuer.authLedger_rotate` | blocked | T1 rotation is model-checked; the RT-17 devnet probe is gated on admin signatures |
+| `MintFacet@"mint"` | `issuer.MintFacet.mint` | peek:1, consume:1, post:1 | OK | yes | `Rholphin.Model.Issuer.mintFacet_mint` | verified |  |
+| `BurnFacet@"burn"` | `issuer.BurnFacet.burn` | peek:1, consume:1, post:1 | OK | yes | `Rholphin.Model.Issuer.burnFacet_burn` | verified |  |
+| `SettlementFacet@"settle"` | `issuer.SettlementFacet.settle` | peek:2, consume:1, post:1 | OK | yes | `Rholphin.Model.Issuer.settlementFacet_settle` | verified |  |
+| `CustodyFacet@"deposit"` | `issuer.CustodyFacet.deposit` | peek:1 | OK | yes | `Rholphin.Model.Issuer.custodyFacet_deposit` | verified |  |
+| `CustodyFacet@"withdraw"` | `issuer.CustodyFacet.withdraw` | peek:1 | OK | yes | `Rholphin.Model.Issuer.custodyFacet_withdraw` | verified |  |
+| `FacetShop@"isFacet"` | `issuer.FacetShop.isFacet` | — | OK | yes | `Rholphin.Model.Issuer.facetShop_isFacet` | verified |  |
+| `FacetShop@"provision"` | `issuer.FacetShop.provision` | consume:1, post:1 | OK | yes | `Rholphin.Model.Issuer.facetShop_provision` | verified |  |
+| `RiskParameters@"params"` | `issuer.RiskParameters.params` | peek:1 | OK | yes | `Rholphin.Model.Issuer.riskParameters_params` | verified |  |
+| `RiskParameters@"info"` | `issuer.RiskParameters.info` | peek:1 | OK | yes | `Rholphin.Model.Issuer.riskParameters_info` | verified |  |
+| `RiskParameters@"scheduleParams"` | `issuer.RiskParameters.scheduleParams` | — | OK | yes | `Rholphin.Model.Issuer.riskParameters_scheduleParams` | verified |  |
+| `RiskParameters@"applyParams"` | `issuer.RiskParameters.applyParams` | consume:1, post:1 | OK | yes | `Rholphin.Model.Issuer.riskParameters_applyParams` | verified |  |
+| `RiskParameters@"attest"` | `issuer.RiskParameters.attest` | — | OK | yes | `Rholphin.Model.Issuer.riskParameters_attest` | verified |  |
 | `VaultBook@"rotate"` | `vault.VaultBook.rotate` | consume:1, post:1 | OK | yes | `Rholphin.Model.Vault.vaultBook_rotate` | verified |  |
 | `VaultBook@"open"` | `vault.VaultBook.open` | peek:1, consume:1, post:1 | OK | yes | `Rholphin.Model.Vault.vaultBook_open` | verified |  |
 | `VaultBook@"deposit"` | `vault.VaultBook.deposit` | peek:2, consume:1, post:1 | OK | yes | `Rholphin.Model.Vault.vaultBook_deposit` | verified |  |
