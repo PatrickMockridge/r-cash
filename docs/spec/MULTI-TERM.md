@@ -20,7 +20,7 @@ contracts.
 | Term | File | Published components | Authority |
 |---|---|---|---|
 | T1 issuer | `31_issuer.rho` | `Stablecoin`, `CollateralCustody`, `AuthLedger`, `FacetShop` | `mintAuth`, `burnAuth`, `settlementAuth`, `custodyAuth` |
-| T2 vault | `31_vault.rho` | `VaultBook`, `LiquidationEngine` | `liquidationAuth`, per-vault auths |
+| T2 vault | `31_vault.rho` | `VaultBook`, `LiquidationEngine`, `VaultAccept` | `liquidationAuth`, per-vault auths |
 | T3 buffer/savings | `31_buffer_savings.rho` | `SavingsPool`, `SurplusBuffer`, `BufferFacetShop` | `bufferDepositAuth`, `bufferPayAuth`, `bufferCoverAuth`, `savingsNotifyAuth` |
 | T4 PSM | `31_psm.rho` | `PegStabilityModule` | `psmMintAuth`, `psmBurnAuth` |
 | T5 params | `31_params.rho` | `RiskParameters` | none |
@@ -36,11 +36,14 @@ internal `rootAuthorize` helper (which cannot be reached from another term):
 Governor!("authorize", domain, nonce, "rotate", argsHash, sigs, ret)
 ```
 
-`domain` is unique per auth set (`auth:<currency>:<kind>`), and the ledger
-creates a fresh auth internally — no new auth is supplied by the caller, so it
-cannot leak. The ledger then takes and posts the cell, so the old value is
-refused and the facet keeps working. `Governor` is resolved through
-`component:governor` at arm entry, never captured in a bundle.
+`domain` is unique per auth set (`auth:<currency>:<kind>`; `auth:market`;
+`auth:registry:directory`), and the ledger creates a fresh auth internally — no
+new auth is supplied by the caller, so it cannot leak. The ledger then takes
+and posts the cell, so the old value is refused and the facet keeps working.
+`Governor` is resolved through `component:governor` at arm entry, never
+captured in a bundle. T2 owns a `LiquidationAuthLedger`
+(`auth:<currency>:liquidation`); the per-vault auth keeps its owner-gated
+`VaultBook@"rotate"`.
 
 ## 3. Facets
 
@@ -64,6 +67,18 @@ BufferOperatorFacet!("deposit", payment, ret)
 BufferOperatorFacet!("paySavings", @amount, ret)
 BufferOperatorFacet!("cover", @amount, ret)
 ```
+
+`SettlementFacet` does not touch T3. It burns the principal in T1 and returns
+the interest to its holder:
+
+```
+(true, principal, Nil)           when interest == 0
+(true, principal, interestPay)   when interest > 0
+(false, reason, payment)         on refusal
+```
+
+T2 deposits `interestPay` through `BufferOperatorFacet`. This replaces the old
+in-term `SurplusBuffer.deposit` call from `Stablecoin.settle`.
 
 The facet names are fresh names created by `new` in the owning term. They are
 never published, returned in a reply, written to a data map, or logged.
@@ -104,7 +119,10 @@ same trust anchor that creates the currency today.
 maps each kind to the shop pinned for it (`__ISSUER_SHOP_URI__` or
 `__BUFFER_SHOP_URI__`) and verifies the received facet with that shop's
 `isFacet`. T1 cannot issue a facet that lives in T3's closure, so a single
-central shop is not an option.
+central shop is not an option. The provisioning endpoint is the consumer's
+dedicated contract: `VaultAccept` for T2's five kinds, `SurplusBuffer` for T3's
+burn facet, `PegStabilityModule` for T4's mint/burn facets. Those endpoints are
+published; the facets they receive are not.
 
 ## 5. The bare-name slot (the Phase 0 finding)
 
@@ -139,6 +157,12 @@ all effect callees are pinned placeholders. This breaks the T2/T4 URI cycle.
 L6 is amended: one named atomic cluster may span pinned components within a
 single deploy; the guarantee is restored at deploy end, and a failure aborts
 the whole deploy. Cross-deploy operations use P5.
+
+The `sin > surplus` recapitalisation guard and the `maxSupply` check move with
+the mint capability. T1's `MintFacet` is thin and cannot see T3's buffer cell,
+so every provisioned mint consumer (T2 `VaultBook@"mint"`, T4
+`PegStabilityModule@"buyStable"`) reads `SurplusBuffer@"info"` and
+`Stablecoin@"info"` at arm entry and refuses before calling the facet.
 
 ## 7. Registry listing
 
