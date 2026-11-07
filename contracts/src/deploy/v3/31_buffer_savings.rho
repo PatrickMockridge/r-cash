@@ -12,7 +12,7 @@ new
   SavingsPool, savingsState, savingsPurse,
   SurplusBuffer, bufferState, bufferPurse,
   BufferOperatorFacet, BufferAuthLedger, BufferFacetShop,
-  bufferProvisionState, bufferShopUriState,
+  bufferNonceState, bufferShopUriState,
   bufferCancelled, callerOwner, savingsNotifyCheck, vaultGovernor,
   savingsNotifyAuthCell, bufferDepositAuthCell, bufferPayAuthCell, bufferCoverAuthCell,
   burnSlot, bufferFacetState,
@@ -540,7 +540,7 @@ in {
   // T3 owns BufferOperatorFacet, so T1's shop cannot issue it. This shop runs
   // the same sponsor-signed one-shot protocol as MULTI-TERM.md section 4 and
   // publishes only the local facet. The canonical preimage is
-  // rcash:provision:v1 over [shopUri, consumerUri, consumerTag, kinds,
+  // rcash:provision:v1 over [issuerUri, consumerUri, consumerTag, kinds,
   // nonce, deadline, sponsor]; `kinds` is a comma-separated string and this
   // shop accepts only "buffer".
   contract BufferFacetShop(@"provision", @consumerUri, @consumerTag, @kinds, @nonce, @deadline, @sponsorHex, @sig, ret) = {
@@ -552,14 +552,14 @@ in {
         for (@(true, codecUri, _) <- codecCh; @(true, verUri, _) <- verCh) {
           rl!(codecUri, *cc) | rl!(verUri, *vc) |
           for (Codec <- cc; Verifier <- vc) {
-            for (@shopUri <- bufferShopUriState) {
-              bufferShopUriState!(shopUri) |
+            for (@issuerUri <- bufferShopUriState) {
+              bufferShopUriState!(issuerUri) |
               if (sponsorHex != "__SPONSOR_PUB__") { ret!((false, "bad sponsor")) }
               else {
                 if (kinds != "buffer") { ret!((false, "action")) }
                 else {
                   Codec!("hash", "rcash:provision:v1",
-                         [shopUri, consumerUri, consumerTag, kinds,
+                         [issuerUri, consumerUri, consumerTag, kinds,
                           nonce.toString(), deadline.toString(), sponsorHex], *digestCh) |
                   for (@digest <- digestCh) {
                     Verifier!("sigOk", digest, sig, sponsorHex.hexToBytes(), *okCh) |
@@ -570,10 +570,10 @@ in {
                         for (@height, @sender, @ts <- nowCh) {
                           if (deadline < height) { ret!((false, "expired")) }
                           else {
-                            for (@s <- bufferProvisionState) {
+                            for (@s <- bufferNonceState) {
                               match s.get("nonces").get(nonce) {
                                 Nil => {
-                                  bufferProvisionState!(s.set("nonces",
+                                  bufferNonceState!(s.set("nonces",
                                     s.get("nonces").set(nonce, true))) |
                                   rl!(consumerUri, *consumerCh) |
                                   for (Consumer <- consumerCh) {
@@ -588,7 +588,7 @@ in {
                                   }
                                 }
                                 _ => {
-                                  bufferProvisionState!(s) | ret!((false, "replay"))
+                                  bufferNonceState!(s) | ret!((false, "replay"))
                                 }
                               }
                             }
@@ -629,18 +629,18 @@ in {
                 "savingsShareBps": __SAVINGS_SHARE_BPS__,
                 "rev": 0}) |
   bufferFacetState!({"burn": false}) |
-  bufferProvisionState!({"nonces": {}}) |
+  bufferNonceState!({"nonces": {}}) |
 
   rs!(bundle+{*SavingsPool}, *uriSavingsCh) |
   rs!(bundle+{*SurplusBuffer}, *uriBufferCh) |
   rs!(bundle+{*BufferFacetShop}, *uriShopCh) |
   for (@savingsUri <- uriSavingsCh; @bufferUri <- uriBufferCh;
-       @shopUri <- uriShopCh) {
-    bufferShopUriState!(shopUri) |
+       @issuerUri <- uriShopCh) {
+    bufferShopUriState!(issuerUri) |
     SavingsPool!("attest", *attSavingsCh) |
     SurplusBuffer!("attest", *attBufferCh) |
     for (@attS <- attSavingsCh; @attB <- attBufferCh) {
-      deployId!([savingsUri, bufferUri, shopUri, attS, attB])
+      deployId!([savingsUri, bufferUri, issuerUri, attS, attB])
     }
   }
 

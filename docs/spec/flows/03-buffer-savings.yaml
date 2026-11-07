@@ -402,8 +402,8 @@ components:
     access:
     - {cell: bufferShopUriState, mode: consume, actor: arm, phase: commit}
     - {cell: bufferShopUriState, mode: post, actor: arm, phase: commit}
-    - {cell: bufferProvisionState, mode: consume, actor: arm, phase: commit}
-    - {cell: bufferProvisionState, mode: post, actor: arm, phase: commit}
+    - {cell: bufferNonceState, mode: consume, actor: arm, phase: commit}
+    - {cell: bufferNonceState, mode: post, actor: arm, phase: commit}
     nested_calls: []
     refusals:
     - {reason: action, phase: pre, reposts: false, fail: false}
