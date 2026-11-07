@@ -3,7 +3,7 @@
 # Flow: buffer
 
 Schema: `rcash.flows/v1`
-Source: `contracts/src/deploy/v3/31_stablecoin.rho`
+Source: `contracts/src/deploy/v3/31_buffer_savings.rho`
 
 ### SavingsPool
 
@@ -15,38 +15,86 @@ stateDiagram-v2
   Empty --> Funded: buffer.SavingsPool.notify
   Empty --> Empty: buffer.SavingsPool.info
   Empty --> Empty: buffer.SavingsPool.position
+  Empty --> Empty: buffer.SavingsPool.attest
 ```
 
 #### SavingsPool arms
 
 | arm | transition | kind | guards | effects | access | refusals | invariants | status | source |
 |---|---|---|---|---|---|---|---|---|---|
-| `SavingsPool@"deposit"` | `buffer.SavingsPool.deposit` | mutate | amount > 0 → amount<br>isStablecoinPayment(payment) → asset<br>shares = (amount if totalShares = 0 else floor(amount * totalShares / totalAssets)) > 0 → shares | shares[ownerId] = held + shares<br>totalShares = totalShares + shares<br>totalAssets = totalAssets + amount | consume savingsState (arm)<br>post savingsState (arm) | amount (pre)<br>asset (pre)<br>shares (pre) | S10 | verified | contracts/src/deploy/v3/31_stablecoin.rho:1487 |
-| `SavingsPool@"withdraw"` | `buffer.SavingsPool.withdraw` | mutate | shares[ownerId] = held → shares<br>0 < shares <= held and totalShares > 0 and totalAssets > 0 → shares<br>savingsPurse.withdraw ok → payment | amount = floor(totalAssets * shares / totalShares)<br>shares[ownerId] = held - shares<br>totalShares = totalShares - shares<br>totalAssets = totalAssets - amount | consume savingsState (arm)<br>post savingsState (arm) | payment (pre)<br>shares (pre) | S10 | verified | contracts/src/deploy/v3/31_stablecoin.rho:1540 |
-| `SavingsPool@"notify"` | `buffer.SavingsPool.notify` | mutate | auth = savingsNotifyAuth → bad savings authority<br>isStablecoinPayment(payment) → asset | totalAssets = totalAssets + amount<br>rev = rev + 1 | consume savingsState (arm)<br>post savingsState (arm) | asset (pre)<br>bad savings authority (pre)<br>no shares (after_consume, repost) | S10 | verified | contracts/src/deploy/v3/31_stablecoin.rho:1576 |
-| `SavingsPool@"info"` | `buffer.SavingsPool.info` | read | — | reply = (true, {totalShares, totalAssets, shareValueE8: floor(totalAssets * 1e8 / totalShares), rev}) | peek savingsState (arm) | — | S10 | verified | contracts/src/deploy/v3/31_stablecoin.rho:1611 |
-| `SavingsPool@"position"` | `buffer.SavingsPool.position` | read | — | reply = (true, shares[ownerId]) | peek savingsState (arm) | — | S10 | verified | contracts/src/deploy/v3/31_stablecoin.rho:1628 |
+| `SavingsPool@"deposit"` | `buffer.SavingsPool.deposit` | mutate | amount > 0 → amount<br>isStablecoinPayment(payment) → asset<br>shares = (amount if totalShares = 0 else floor(amount * totalShares / totalAssets)) > 0 → shares | shares[ownerId] = held + shares<br>totalShares = totalShares + shares<br>totalAssets = totalAssets + amount | consume savingsState (arm)<br>post savingsState (arm) | amount (pre)<br>asset (pre)<br>shares (pre) | S10 | verified | contracts/src/deploy/v3/31_buffer_savings.rho:82 |
+| `SavingsPool@"withdraw"` | `buffer.SavingsPool.withdraw` | mutate | shares[ownerId] = held → shares<br>0 < shares <= held and totalShares > 0 and totalAssets > 0 → shares<br>savingsPurse.withdraw ok → payment | amount = floor(totalAssets * shares / totalShares)<br>shares[ownerId] = held - shares<br>totalShares = totalShares - shares<br>totalAssets = totalAssets - amount | consume savingsState (arm)<br>post savingsState (arm) | payment (pre)<br>shares (pre) | S10 | verified | contracts/src/deploy/v3/31_buffer_savings.rho:135 |
+| `SavingsPool@"notify"` | `buffer.SavingsPool.notify` | mutate | auth = savingsNotifyAuth → bad savings authority<br>isStablecoinPayment(payment) → asset | totalAssets = totalAssets + amount<br>rev = rev + 1 | consume savingsState (arm)<br>post savingsState (arm) | asset (pre)<br>bad savings authority (pre)<br>no shares (pre, repost) | S10 | verified | contracts/src/deploy/v3/31_buffer_savings.rho:171 |
+| `SavingsPool@"info"` | `buffer.SavingsPool.info` | read | — | reply = (true, {totalShares, totalAssets, shareValueE8: floor(totalAssets * 1e8 / totalShares), rev}) | peek savingsState (arm) | — | S10 | verified | contracts/src/deploy/v3/31_buffer_savings.rho:211 |
+| `SavingsPool@"position"` | `buffer.SavingsPool.position` | read | — | reply = (true, shares[ownerId]) | peek savingsState (arm) | — | S10 | verified | contracts/src/deploy/v3/31_buffer_savings.rho:228 |
+| `SavingsPool@"attest"` | `buffer.SavingsPool.attest` | read | — | reply = (true, {currency, paramsHash, sponsor, kind: "savings"}) | — | — | — | verified | contracts/src/deploy/v3/31_buffer_savings.rho:237 |
 
 ### SurplusBuffer
 
 ```mermaid
 stateDiagram-v2
   [*] --> Idle
-  Idle --> Idle: buffer.SurplusBuffer.deposit
-  Idle --> Idle: buffer.SurplusBuffer.paySavings
-  Idle --> Idle: buffer.SurplusBuffer.cover
+  Idle --> Idle: buffer.SurplusBuffer.acceptFacet
   Idle --> Idle: buffer.SurplusBuffer.info
   Idle --> Idle: buffer.SurplusBuffer.scheduleShare
   Idle --> Idle: buffer.SurplusBuffer.applyShare
+  Idle --> Idle: buffer.SurplusBuffer.attest
 ```
 
 #### SurplusBuffer arms
 
 | arm | transition | kind | guards | effects | access | refusals | invariants | status | source |
 |---|---|---|---|---|---|---|---|---|---|
-| `SurplusBuffer@"deposit"` | `buffer.SurplusBuffer.deposit` | mutate | auth = bufferDepositAuth → bad buffer authority<br>isStablecoinPayment(payment) → asset | surplus = surplus + amount<br>rev = rev + 1 | consume bufferState (arm)<br>post bufferState (arm) | asset (pre)<br>bad buffer authority (pre) | S3<br>S9 | verified | contracts/src/deploy/v3/31_stablecoin.rho:1637 |
-| `SurplusBuffer@"paySavings"` | `buffer.SurplusBuffer.paySavings` | mutate | auth = bufferPayAuth → bad buffer authority | move = floor(surplus * savingsShareBps / 10000)<br>surplus = surplus - (move if move > 0 and savings.totalShares > 0 else 0)<br>savings.totalAssets = totalAssets + (move if move > 0 and savings.totalShares > 0 else 0) | peek bufferState (arm)<br>consume bufferState (arm)<br>post bufferState (arm) | bad buffer authority (pre)<br>no shares (pre)<br>payment (pre) | S9<br>S10 | verified | contracts/src/deploy/v3/31_stablecoin.rho:1665 |
-| `SurplusBuffer@"cover"` | `buffer.SurplusBuffer.cover` | mutate | auth = bufferCoverAuth → bad buffer authority<br>badDebt >= 0 → amount<br>bufferPurse.withdraw ok → payment | newSin = sin + badDebt<br>cancelled = min(surplus, newSin)<br>sin = newSin - cancelled<br>surplus = surplus - cancelled<br>supply = supply - cancelled<br>rev = rev + 1 | peek bufferState (arm)<br>consume bufferState (arm)<br>post bufferState (arm) | amount (pre)<br>bad buffer authority (pre)<br>payment (pre) | S3<br>S6<br>S9 | verified | contracts/src/deploy/v3/31_stablecoin.rho:1714 |
-| `SurplusBuffer@"info"` | `buffer.SurplusBuffer.info` | read | — | reply = (true, {surplus, sin, savingsShareBps, rev}) | peek bufferState (arm) | — | S3 | verified | contracts/src/deploy/v3/31_stablecoin.rho:1770 |
-| `SurplusBuffer@"scheduleShare"` | `buffer.SurplusBuffer.scheduleShare` | create | 0 <= bps <= 10000 → bps | governor.pending = pending[stablecoin:currency, nonce] = {action: setSavingsShare, argsHash: bps.toString()} | — | bps (pre) | S12 | verified | contracts/src/deploy/v3/31_stablecoin.rho:1778 |
-| `SurplusBuffer@"applyShare"` | `buffer.SurplusBuffer.applyShare` | mutate | action = "setSavingsShare" → action<br>0 <= args <= 10000 → bps<br>argsHash = args.toString() → params hash | savingsShareBps = args<br>rev = rev + 1 | consume bufferState (arm)<br>post bufferState (arm) | action (pre)<br>bps (pre)<br>params hash (pre) | S12 | verified | contracts/src/deploy/v3/31_stablecoin.rho:1797 |
+| `SurplusBuffer@"acceptFacet"` | `buffer.SurplusBuffer.acceptFacet` | mutate | kind = "burn" → action<br>not bufferFacetState.burn → duplicate | bufferFacetState.burn = true<br>burnSlot = facet | consume bufferFacetState (arm)<br>post bufferFacetState (arm) | action (pre)<br>duplicate (pre, repost)<br>verify failed (pre) | — | verified | contracts/src/deploy/v3/31_buffer_savings.rho:248 |
+| `SurplusBuffer@"info"` | `buffer.SurplusBuffer.info` | read | — | reply = (true, {surplus, sin, savingsShareBps, rev}) | peek bufferState (arm) | — | S3 | verified | contracts/src/deploy/v3/31_buffer_savings.rho:274 |
+| `SurplusBuffer@"scheduleShare"` | `buffer.SurplusBuffer.scheduleShare` | create | 0 <= bps <= 10000 → bps | governor.pending = pending[stablecoin:currency, nonce] = {action: setSavingsShare, argsHash: bps.toString()} | — | bps (pre) | S12 | verified | contracts/src/deploy/v3/31_buffer_savings.rho:282 |
+| `SurplusBuffer@"applyShare"` | `buffer.SurplusBuffer.applyShare` | mutate | action = "setSavingsShare" → action<br>0 <= args <= 10000 → bps<br>argsHash = args.toString() → params hash | savingsShareBps = args<br>rev = rev + 1 | consume bufferState (arm)<br>post bufferState (arm) | action (pre)<br>bps (pre)<br>params hash (pre) | S12 | verified | contracts/src/deploy/v3/31_buffer_savings.rho:301 |
+| `SurplusBuffer@"attest"` | `buffer.SurplusBuffer.attest` | read | — | reply = (true, {currency, paramsHash, sponsor, kind: "buffer"}) | — | — | — | verified | contracts/src/deploy/v3/31_buffer_savings.rho:333 |
+
+### BufferOperatorFacet
+
+```mermaid
+stateDiagram-v2
+  [*] --> Idle
+  Idle --> Idle: buffer.BufferOperatorFacet.deposit
+  Idle --> Idle: buffer.BufferOperatorFacet.paySavings
+  Idle --> Idle: buffer.BufferOperatorFacet.cover
+```
+
+#### BufferOperatorFacet arms
+
+| arm | transition | kind | guards | effects | access | refusals | invariants | status | source |
+|---|---|---|---|---|---|---|---|---|---|
+| `BufferOperatorFacet@"deposit"` | `buffer.BufferOperatorFacet.deposit` | mutate | isStablecoinPayment(payment) → asset | surplus = surplus + amount<br>rev = rev + 1 | consume bufferState (arm)<br>post bufferState (arm) | asset (pre) | S3<br>S9 | verified | contracts/src/deploy/v3/31_buffer_savings.rho:344 |
+| `BufferOperatorFacet@"paySavings"` | `buffer.BufferOperatorFacet.paySavings` | mutate | bufferPayAuthCell → payment<br>bufferPurse.withdraw ok → payment | move = floor(surplus * savingsShareBps / 10000)<br>surplus = surplus - (move if move > 0 and savings.totalShares > 0 else 0)<br>savings.totalAssets = totalAssets + (move if move > 0 and savings.totalShares > 0 else 0)<br>rev = rev + 1 | peek bufferState (arm)<br>consume bufferState (arm)<br>post bufferState (arm) | no shares (pre)<br>payment (pre) | S9<br>S10 | verified | contracts/src/deploy/v3/31_buffer_savings.rho:373 |
+| `BufferOperatorFacet@"cover"` | `buffer.BufferOperatorFacet.cover` | mutate | badDebt >= 0 → amount<br>bufferPurse.withdraw ok → payment | newSin = sin + badDebt<br>cancelled = min(surplus, newSin)<br>sin = newSin - cancelled<br>surplus = surplus - cancelled<br>supply = supply - cancelled<br>rev = rev + 1 | peek bufferState (arm)<br>consume bufferState (arm)<br>post bufferState (arm) | amount (pre)<br>payment (pre) | S3<br>S6<br>S9 | verified | contracts/src/deploy/v3/31_buffer_savings.rho:425 |
+
+### BufferAuthLedger
+
+```mermaid
+stateDiagram-v2
+  [*] --> Live
+  Live --> Live: buffer.BufferAuthLedger.rotate
+```
+
+#### BufferAuthLedger arms
+
+| arm | transition | kind | guards | effects | access | refusals | invariants | status | source |
+|---|---|---|---|---|---|---|---|---|---|
+| `BufferAuthLedger@"rotate"` | `buffer.BufferAuthLedger.rotate` | create | Governor.authorize ok → replay<br>kind = "bufferDeposit" or kind = "bufferPay" or kind = "bufferCover" or kind = "savingsNotify" → action | auth = fresh new-bound auth | — | action (pre) | — | verified | contracts/src/deploy/v3/31_buffer_savings.rho:492 |
+
+### BufferFacetShop
+
+```mermaid
+stateDiagram-v2
+  [*] --> Live
+  Live --> Live: buffer.BufferFacetShop.provision
+  Live --> Live: buffer.BufferFacetShop.isFacet
+```
+
+#### BufferFacetShop arms
+
+| arm | transition | kind | guards | effects | access | refusals | invariants | status | source |
+|---|---|---|---|---|---|---|---|---|---|
+| `BufferFacetShop@"provision"` | `buffer.BufferFacetShop.provision` | mutate | sponsorHex = sponsorPublic → bad sponsor<br>kinds = "buffer" → action<br>sigOk over canonical payload → bad sponsor signature<br>deadline >= block height → expired<br>nonce unused → replay | nonces[nonce] = consumed<br>facet = BufferOperatorFacet | consume bufferShopUriState (arm)<br>post bufferShopUriState (arm)<br>consume bufferProvisionState (arm)<br>post bufferProvisionState (arm) | action (pre)<br>bad sponsor (pre)<br>bad sponsor signature (pre)<br>expired (pre)<br>replay (pre, repost) | — | verified | contracts/src/deploy/v3/31_buffer_savings.rho:546 |
+| `BufferFacetShop@"isFacet"` | `buffer.BufferFacetShop.isFacet` | read | kind = "buffer" → action<br>facet = BufferOperatorFacet → unknown | reply = (true, "buffer") | — | action (pre)<br>unknown (pre) | — | verified | contracts/src/deploy/v3/31_buffer_savings.rho:609 |

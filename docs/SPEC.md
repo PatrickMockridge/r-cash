@@ -868,8 +868,8 @@ surplus. `psmDebt` is signed. `badDebt` is a cumulative memo outside the identit
 ### 18.3 Refusal strings
 
 ```
-action  age  already active  amount  amount mismatch  asset  asset mismatch  bad attestation
-bad buffer authority  bad burn authority  bad custody authority  bad directory authority  bad index
+action  age  already active  already provisioned  amount  amount mismatch  asset  asset mismatch  bad attestation
+bad auth  bad buffer authority  bad burn authority  bad custody authority  bad directory authority  bad index
 bad index authority  bad liquidation authority  bad mint authority  bad savings authority
 bad secret  bad settlement authority  bad signature  bad sponsor  bad sponsor signature
 bad vault auth  bad version  balance  band  base feed  base feed policy  base spread  below MCR
@@ -877,17 +877,17 @@ below threshold  bonus  book expiry  bps  brand mismatch  buffer  burn  ceiling 
 closed  conflict  currency mismatch  custody  default expiry  deposit  depth  depth floor  duplicate  early
 exists  expired  expiry  external attestation  external decimals  external kind  feed attestation
 feed inactive  feed info  first deposit balance  frozen  funded  future price  healthy  height
-height not monotonic  issuer mismatch  kind mismatch  lock beneficiary  lock height  lock too short  lock unfunded  locked  max debt
+height not monotonic  issuer mismatch  kind  kind mismatch  lock beneficiary  lock height  lock too short  lock unfunded  locked  max debt
 max expiry  max memo  max op id  max stipend  max supply  max trade  mcr  memo  min amount  min debt
 min liquidity  min rev  min stable  min ticket  minimum  no account  no attestation  no currency
 no feed  no lock  no market  no purse  no rate  no shares  no slot  no system  no terms  no vault  not LP
-not a REV payment  not a stablecoin payment  not active  not an LP payment  not base
+not a REV payment  not a facet  not a stablecoin payment  not active  not an LP payment  not base
 not beneficiary  not draft  not expired  not funder  not installer  not owner  not quote
 not reporter  not sealed  not seeded  not sender  not this asset  opId  oracle age  output  pair
 pair active  params hash  paused  payment  pending  psm fee  psm floor  quorum  quote feed
 quote feed policy  rate  recapitalise  replay  reporter not allowlisted  reporters  retired
 savings share  sealed  seed mismatch  shares  shares mismatch  skew  slippage  slug
-sponsor mismatch  sponsor owner  sponsor slots  spread  stale  stale feed  stale submit  stipend
+sponsor  sponsor mismatch  sponsor owner  sponsor slots  spread  stale  stale feed  stale submit  stipend
 supply  terms fields  terms mismatch  threshold  timelock  tolerance  transition  trial
 trial submits  underwater repayment  unfunded  unknown  unknown admin action  unknown asset
 unknown component  verify failed  version

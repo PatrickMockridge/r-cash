@@ -316,73 +316,72 @@ in {
     new settleCh in {
       settleFacet!("settle", payment, principalPaid, interestPaid, *settleCh) |
       for (@st <- settleCh) {
-        match st {
-          (true, p, interestPayment) => {
-            new depCh, depOk in {
-              if (interestPaid > 0) {
-                bufferFacet!("deposit", interestPayment, *depCh) |
-                for (@dep <- depCh) {
-                  match dep {
-                    (true, _) => { depOk!(true) }
-                    _ => { depOk!(false) }
-                  }
+        new depCh, settleDone in {
+          match st {
+            (true, p, Nil) => { settleDone!(true) }
+            (true, p, interestPayment) => {
+              bufferFacet!("deposit", interestPayment, *depCh) |
+              for (@dep <- depCh) {
+                match dep {
+                  (true, _) => { settleDone!(true) }
+                  _ => { settleDone!(false) }
                 }
-              } else { depOk!(true) } |
-              for (@ok <- depOk) {
-                if (ok == true) {
-                  new coverCh in {
-                    bufferFacet!("cover", 0, *coverCh) |
-                    for (@cv <- coverCh) {
-                      match cv {
-                        (true, cancelled, sinOut) => {
-                          new payCh in {
-                            bufferFacet!("paySavings", 0, *payCh) |
-                            for (@pv <- payCh) {
-                              match pv {
-                                (true, moved, left) => {
-                                  new vcCh in {
-                                    vaultCommit!(s, ownerId, v.get("auth"), {
-                                      "auth": v.get("auth"),
-                                      "collateral": v.get("collateral"),
-                                      "debt": accrued - amount,
-                                      "lastHeight": now2
-                                    }, s.get("totalDebt") + (accrued - v.get("debt")) - amount,
-                                    s.get("totalAccruedInterest")
-                                       + (accrued - v.get("debt")) - interestPaid,
-                                    s.get("totalCollateral"),
-                                    s.get("badDebt"), *vcCh) |
-                                    for (@vc <- vcCh) {
-                                      match vc {
-                                        (true, _) => {
-                                          ret2!((true, {
-                                            "debt": accrued - amount,
-                                            "repaid": amount,
-                                            "principalPaid": principalPaid,
-                                            "interestPaid": interestPaid,
-                                            "cancelled": cancelled,
-                                            "savingsPaid": moved
-                                          }))
-                                        }
-                                        _ => { ret2!(1 / 0) }
-                                      }
-                                    }
-                                  }
-                                }
-                                _ => { ret2!(1 / 0) }
-                              }
-                            }
-                          }
-                        }
-                        _ => { ret2!(1 / 0) }
-                      }
-                    }
-                  }
-                } else { ret2!(1 / 0) }
               }
             }
+            (false, why, returned) => { ret2!((false, why, returned)) }
+            _ => { ret2!(1 / 0) }
+          } |
+          for (@ok <- settleDone) {
+            if (ok == true) {
+              new coverCh in {
+                bufferFacet!("cover", 0, *coverCh) |
+                for (@cv <- coverCh) {
+                  match cv {
+                    (true, cancelled, sinOut) => {
+                      new payCh in {
+                        bufferFacet!("paySavings", 0, *payCh) |
+                        for (@pv <- payCh) {
+                          match pv {
+                            (true, moved, left) => {
+                              new vcCh in {
+                                vaultCommit!(s, ownerId, v.get("auth"), {
+                                  "auth": v.get("auth"),
+                                  "collateral": v.get("collateral"),
+                                  "debt": accrued - amount,
+                                  "lastHeight": now2
+                                }, s.get("totalDebt") + (accrued - v.get("debt")) - amount,
+                                s.get("totalAccruedInterest")
+                                   + (accrued - v.get("debt")) - interestPaid,
+                                s.get("totalCollateral"),
+                                s.get("badDebt"), *vcCh) |
+                                for (@vc <- vcCh) {
+                                  match vc {
+                                    (true, _) => {
+                                      ret2!((true, {
+                                        "debt": accrued - amount,
+                                        "repaid": amount,
+                                        "principalPaid": principalPaid,
+                                        "interestPaid": interestPaid,
+                                        "cancelled": cancelled,
+                                        "savingsPaid": moved
+                                      }))
+                                    }
+                                    _ => { ret2!(1 / 0) }
+                                  }
+                                }
+                              }
+                            }
+                            _ => { ret2!(1 / 0) }
+                          }
+                        }
+                      }
+                    }
+                    _ => { ret2!(1 / 0) }
+                  }
+                }
+              }
+            } else { ret2!(1 / 0) }
           }
-          (false, why, returned) => { ret2!((false, why, returned)) }
-          _ => { ret2!(1 / 0) }
         }
       }
     }

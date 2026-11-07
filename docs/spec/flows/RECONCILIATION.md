@@ -6,7 +6,7 @@
 
 | ID | arm / subject | defect | required fix | status |
 |---|---|---|---|---|
-| D2.1 | VaultBook@"mint" via vaultMintCommit | takes vaultState and returns (false, recapitalise) without reposting | vaultState!(s2) before the refusal | fixed |
+| D2.1 | VaultBook@"mint" via vaultMintCommit | takes vaultState and returns (false, recapitalise) without reposting | the mint halt is validated on a buffer read before the effect; no vaultState take is live' | fixed |
 | D2.2 | PegStabilityModule@"applyPolicy" | takes psmState and returns (false, ceiling) without reposting | psmState!(s) before the refusal | fixed |
 | P1 | PegStabilityModule@"sellStable" | no -maxSupply lower bound on signed stableDebt despite SPEC §11 | enforce the floor or withdraw the claim in the same commit | fixed |
 | D1.1 | CurrencyRegistry@"setPaused" | peeks currencyState and posts it on the no-currency branch without consuming | delete the post on that branch | fixed |
@@ -17,56 +17,72 @@
 
 | arm | transition | access modes | after-consume purity | effects | Lean | status | blocker / fix |
 |---|---|---|---|---|---|---|---|
-| `Stablecoin@"brand"` | `issuer.Stablecoin.brand` | — | OK | yes | `Rholphin.Model.Issuer.stablecoin_brand` | verified |  |
-| `Stablecoin@"issuer"` | `issuer.Stablecoin.issuer` | — | OK | yes | `Rholphin.Model.Issuer.stablecoin_issuer` | verified |  |
-| `Stablecoin@"supply"` | `issuer.Stablecoin.supply` | peek:1 | OK | yes | `Rholphin.Model.Issuer.stablecoin_supply` | verified |  |
-| `Stablecoin@"mint"` | `issuer.Stablecoin.mint` | peek:2, consume:1, post:1 | OK | yes | `Rholphin.Model.Issuer.stablecoin_mint` | verified |  |
-| `Stablecoin@"burn"` | `issuer.Stablecoin.burn` | peek:1, consume:1, post:1 | OK | yes | `Rholphin.Model.Issuer.stablecoin_burn` | verified |  |
-| `Stablecoin@"settle"` | `issuer.Stablecoin.settle` | — | OK | yes | `Rholphin.Model.Issuer.stablecoin_settle` | verified |  |
-| `Stablecoin@"amountOf"` | `issuer.Stablecoin.amountOf` | — | OK | yes | `Rholphin.Model.Issuer.stablecoin_amountOf` | verified |  |
-| `Stablecoin@"attest"` | `issuer.Stablecoin.attest` | — | OK | yes | `Rholphin.Model.Issuer.stablecoin_attest` | verified |  |
-| `CollateralCustody@"deposit"` | `issuer.CollateralCustody.deposit` | — | OK | yes | `Rholphin.Model.Issuer.collateralCustody_deposit` | verified |  |
-| `CollateralCustody@"withdraw"` | `issuer.CollateralCustody.withdraw` | — | OK | yes | `Rholphin.Model.Issuer.collateralCustody_withdraw` | verified |  |
-| `CollateralCustody@"balance"` | `issuer.CollateralCustody.balance` | — | OK | yes | `Rholphin.Model.Issuer.collateralCustody_balance` | verified |  |
-| `CollateralCustody@"attest"` | `issuer.CollateralCustody.attest` | — | OK | yes | `Rholphin.Model.Issuer.collateralCustody_attest` | verified |  |
-| `RiskParameters@"params"` | `issuer.RiskParameters.params` | peek:1 | OK | yes | `Rholphin.Model.Issuer.riskParameters_params` | verified |  |
-| `RiskParameters@"info"` | `issuer.RiskParameters.info` | peek:1 | OK | yes | `Rholphin.Model.Issuer.riskParameters_info` | verified |  |
-| `RiskParameters@"scheduleParams"` | `issuer.RiskParameters.scheduleParams` | — | OK | yes | `Rholphin.Model.Issuer.riskParameters_scheduleParams` | verified |  |
-| `RiskParameters@"applyParams"` | `issuer.RiskParameters.applyParams` | consume:1, post:1 | OK | yes | `Rholphin.Model.Issuer.riskParameters_applyParams` | verified |  |
-| `RiskParameters@"attest"` | `issuer.RiskParameters.attest` | — | OK | yes | `Rholphin.Model.Issuer.riskParameters_attest` | verified |  |
+| `Stablecoin@"brand"` | `issuer.Stablecoin.brand` | — | OK | — | `Rholphin.Model.Issuer.stablecoin_brand` | blocked | devnet unit_stablecoin and provisioning gate not run in this branch |
+| `Stablecoin@"issuer"` | `issuer.Stablecoin.issuer` | — | OK | — | `Rholphin.Model.Issuer.stablecoin_issuer` | blocked | devnet unit_stablecoin and provisioning gate not run in this branch |
+| `Stablecoin@"supply"` | `issuer.Stablecoin.supply` | peek:1 | OK | — | `Rholphin.Model.Issuer.stablecoin_supply` | blocked | devnet unit_stablecoin and provisioning gate not run in this branch |
+| `Stablecoin@"amountOf"` | `issuer.Stablecoin.amountOf` | — | OK | — | `Rholphin.Model.Issuer.stablecoin_amountOf` | blocked | devnet unit_stablecoin and provisioning gate not run in this branch |
+| `Stablecoin@"info"` | `issuer.Stablecoin.info` | peek:1 | OK | — | `Rholphin.Model.Issuer.stablecoin_info` | blocked | devnet unit_stablecoin and provisioning gate not run in this branch |
+| `Stablecoin@"attest"` | `issuer.Stablecoin.attest` | — | OK | yes | `Rholphin.Model.Issuer.stablecoin_attest` | blocked | devnet unit_stablecoin and provisioning gate not run in this branch |
+| `CollateralCustody@"balance"` | `issuer.CollateralCustody.balance` | — | OK | yes | `Rholphin.Model.Issuer.collateralCustody_balance` | blocked | devnet unit_stablecoin and provisioning gate not run in this branch |
+| `CollateralCustody@"attest"` | `issuer.CollateralCustody.attest` | — | OK | yes | `Rholphin.Model.Issuer.collateralCustody_attest` | blocked | devnet unit_stablecoin and provisioning gate not run in this branch |
+| `AuthLedger@"check"` | `issuer.AuthLedger.check` | peek:4 | OK | yes | `Rholphin.Model.Issuer.authLedger_check` | blocked | devnet unit_stablecoin and provisioning gate not run in this branch |
+| `AuthLedger@"rotate"` | `issuer.AuthLedger.rotate` | consume:4, post:4 | OK | yes | `Rholphin.Model.Issuer.authLedger_rotate` | blocked | devnet unit_stablecoin and provisioning gate not run in this branch |
+| `MintFacet@"mint"` | `issuer.MintFacet.mint` | peek:1, consume:1, post:1 | OK | yes | `Rholphin.Model.Issuer.mintFacet_mint` | blocked | devnet unit_stablecoin and provisioning gate not run in this branch |
+| `BurnFacet@"burn"` | `issuer.BurnFacet.burn` | peek:1, consume:1, post:1 | OK | yes | `Rholphin.Model.Issuer.burnFacet_burn` | blocked | devnet unit_stablecoin and provisioning gate not run in this branch |
+| `SettlementFacet@"settle"` | `issuer.SettlementFacet.settle` | peek:2, consume:1, post:1 | OK | yes | `Rholphin.Model.Issuer.settlementFacet_settle` | blocked | devnet unit_stablecoin and provisioning gate not run in this branch |
+| `CustodyFacet@"deposit"` | `issuer.CustodyFacet.deposit` | peek:1 | OK | yes | `Rholphin.Model.Issuer.custodyFacet_deposit` | blocked | devnet unit_stablecoin and provisioning gate not run in this branch |
+| `CustodyFacet@"withdraw"` | `issuer.CustodyFacet.withdraw` | peek:1 | OK | yes | `Rholphin.Model.Issuer.custodyFacet_withdraw` | blocked | devnet unit_stablecoin and provisioning gate not run in this branch |
+| `FacetShop@"isFacet"` | `issuer.FacetShop.isFacet` | — | OK | yes | `Rholphin.Model.Issuer.facetShop_isFacet` | blocked | devnet unit_stablecoin and provisioning gate not run in this branch |
+| `FacetShop@"provision"` | `issuer.FacetShop.provision` | consume:1, post:1 | OK | yes | `Rholphin.Model.Issuer.facetShop_provision` | blocked | devnet unit_stablecoin and provisioning gate not run in this branch |
+| `RiskParameters@"params"` | `issuer.RiskParameters.params` | peek:1 | OK | yes | `Rholphin.Model.Issuer.riskParameters_params` | blocked | devnet unit_stablecoin and provisioning gate not run in this branch |
+| `RiskParameters@"info"` | `issuer.RiskParameters.info` | peek:1 | OK | yes | `Rholphin.Model.Issuer.riskParameters_info` | blocked | devnet unit_stablecoin and provisioning gate not run in this branch |
+| `RiskParameters@"scheduleParams"` | `issuer.RiskParameters.scheduleParams` | — | OK | yes | `Rholphin.Model.Issuer.riskParameters_scheduleParams` | blocked | devnet unit_stablecoin and provisioning gate not run in this branch |
+| `RiskParameters@"applyParams"` | `issuer.RiskParameters.applyParams` | consume:1, post:1 | OK | yes | `Rholphin.Model.Issuer.riskParameters_applyParams` | blocked | devnet unit_stablecoin and provisioning gate not run in this branch |
+| `RiskParameters@"attest"` | `issuer.RiskParameters.attest` | — | OK | yes | `Rholphin.Model.Issuer.riskParameters_attest` | blocked | devnet unit_stablecoin and provisioning gate not run in this branch |
 | `VaultBook@"rotate"` | `vault.VaultBook.rotate` | consume:1, post:1 | OK | yes | `Rholphin.Model.Vault.vaultBook_rotate` | verified |  |
 | `VaultBook@"open"` | `vault.VaultBook.open` | peek:1, consume:1, post:1 | OK | yes | `Rholphin.Model.Vault.vaultBook_open` | verified |  |
 | `VaultBook@"deposit"` | `vault.VaultBook.deposit` | peek:2, consume:1, post:1 | OK | yes | `Rholphin.Model.Vault.vaultBook_deposit` | verified |  |
-| `VaultBook@"mint"` | `vault.VaultBook.mint` | peek:3, consume:1, post:1 | OK | yes | `Rholphin.Model.Vault.vaultBook_mint` | verified |  |
+| `VaultBook@"mint"` | `vault.VaultBook.mint` | peek:2, consume:1, post:1 | OK | yes | `Rholphin.Model.Vault.vaultBook_mint` | verified |  |
 | `VaultBook@"withdraw"` | `vault.VaultBook.withdraw` | peek:2, consume:1, post:1 | OK | yes | `Rholphin.Model.Vault.vaultBook_withdraw` | verified |  |
 | `VaultBook@"repay"` | `vault.VaultBook.repay` | peek:2, consume:1, post:1 | OK | yes | `Rholphin.Model.Vault.vaultBook_repay` | verified |  |
-| `VaultBook@"liquidate"` | `vault.VaultBook.liquidate` | peek:2, consume:1, post:1 | OK | yes | `Rholphin.Model.Vault.vaultBook_liquidate` | verified |  |
-| `VaultBook@"vault"` | `vault.VaultBook.vault` | peek:2 | OK | yes | `Rholphin.Model.Vault.vaultBook_vault` | verified |  |
+| `VaultBook@"liquidate"` | `vault.VaultBook.liquidate` | peek:3, consume:1, post:1 | OK | yes | `Rholphin.Model.Vault.vaultBook_liquidate` | verified |  |
+| `VaultBook@"vault"` | `vault.VaultBook.vault` | peek:1 | OK | yes | `Rholphin.Model.Vault.vaultBook_vault` | verified |  |
 | `VaultBook@"vaults"` | `vault.VaultBook.vaults` | peek:1 | OK | yes | `Rholphin.Model.Vault.vaultBook_vaults` | verified |  |
-| `VaultBook@"totals"` | `vault.VaultBook.totals` | peek:3 | OK | yes | `Rholphin.Model.Vault.vaultBook_totals` | verified |  |
-| `VaultBook@"params"` | `vault.VaultBook.params` | peek:1 | OK | yes | `Rholphin.Model.Vault.vaultBook_params` | verified |  |
+| `VaultBook@"totals"` | `vault.VaultBook.totals` | peek:1 | OK | yes | `Rholphin.Model.Vault.vaultBook_totals` | verified |  |
+| `VaultBook@"params"` | `vault.VaultBook.params` | — | OK | yes | `Rholphin.Model.Vault.vaultBook_params` | verified |  |
 | `VaultBook@"pause"` | `vault.VaultBook.pause` | peek:1, consume:1, post:1 | OK | yes | `Rholphin.Model.Vault.vaultBook_pause` | verified |  |
 | `VaultBook@"attest"` | `vault.VaultBook.attest` | — | OK | yes | `Rholphin.Model.Vault.vaultBook_attest` | verified |  |
-| `LiquidationEngine@"liquidate"` | `vault.LiquidationEngine.liquidate` | — | OK | yes | `Rholphin.Model.Vault.liquidationEngine_liquidate` | verified |  |
+| `LiquidationEngine@"liquidate"` | `vault.LiquidationEngine.liquidate` | peek:1 | OK | yes | `Rholphin.Model.Vault.liquidationEngine_liquidate` | verified |  |
 | `LiquidationEngine@"attest"` | `vault.LiquidationEngine.attest` | — | OK | yes | `Rholphin.Model.Vault.liquidationEngine_attest` | verified |  |
+| `LiquidationAuthLedger@"rotate"` | `vault.LiquidationAuthLedger.rotate` | consume:1, post:1 | OK | yes | `Rholphin.Model.Vault.liquidationAuthLedger_rotate` | verified |  |
+| `VaultAccept@"acceptFacet"` | `vault.VaultAccept.acceptFacet` | peek:1, consume:1, post:1 | OK | yes | `Rholphin.Model.Vault.vaultAccept_acceptFacet` | verified |  |
 | `SavingsPool@"deposit"` | `buffer.SavingsPool.deposit` | consume:1, post:1 | OK | yes | `Rholphin.Model.BufferSavings.savingsPool_deposit` | verified |  |
 | `SavingsPool@"withdraw"` | `buffer.SavingsPool.withdraw` | consume:1, post:1 | OK | yes | `Rholphin.Model.BufferSavings.savingsPool_withdraw` | verified |  |
 | `SavingsPool@"notify"` | `buffer.SavingsPool.notify` | consume:1, post:1 | OK | yes | `Rholphin.Model.BufferSavings.savingsPool_notify` | verified |  |
 | `SavingsPool@"info"` | `buffer.SavingsPool.info` | peek:1 | OK | yes | `Rholphin.Model.BufferSavings.savingsPool_info` | verified |  |
 | `SavingsPool@"position"` | `buffer.SavingsPool.position` | peek:1 | OK | yes | `Rholphin.Model.BufferSavings.savingsPool_position` | verified |  |
-| `SurplusBuffer@"deposit"` | `buffer.SurplusBuffer.deposit` | consume:1, post:1 | OK | yes | `Rholphin.Model.BufferSavings.surplusBuffer_deposit` | verified |  |
-| `SurplusBuffer@"paySavings"` | `buffer.SurplusBuffer.paySavings` | peek:1, consume:1, post:1 | OK | yes | `Rholphin.Model.BufferSavings.surplusBuffer_paySavings` | verified |  |
-| `SurplusBuffer@"cover"` | `buffer.SurplusBuffer.cover` | peek:1, consume:1, post:1 | OK | yes | `Rholphin.Model.BufferSavings.surplusBuffer_cover` | verified |  |
+| `SavingsPool@"attest"` | `buffer.SavingsPool.attest` | — | OK | yes | `Rholphin.Model.BufferSavings.savingsPool_attest` | verified |  |
+| `SurplusBuffer@"acceptFacet"` | `buffer.SurplusBuffer.acceptFacet` | consume:1, post:1 | OK | yes | `Rholphin.Model.BufferSavings.surplusBuffer_acceptFacet` | verified |  |
 | `SurplusBuffer@"info"` | `buffer.SurplusBuffer.info` | peek:1 | OK | yes | `Rholphin.Model.BufferSavings.surplusBuffer_info` | verified |  |
 | `SurplusBuffer@"scheduleShare"` | `buffer.SurplusBuffer.scheduleShare` | — | OK | yes | `Rholphin.Model.BufferSavings.surplusBuffer_scheduleShare` | verified |  |
 | `SurplusBuffer@"applyShare"` | `buffer.SurplusBuffer.applyShare` | consume:1, post:1 | OK | yes | `Rholphin.Model.BufferSavings.surplusBuffer_applyShare` | verified |  |
+| `SurplusBuffer@"attest"` | `buffer.SurplusBuffer.attest` | — | OK | yes | `Rholphin.Model.BufferSavings.surplusBuffer_attest` | verified |  |
+| `BufferOperatorFacet@"deposit"` | `buffer.BufferOperatorFacet.deposit` | consume:1, post:1 | OK | yes | `Rholphin.Model.BufferSavings.surplusBuffer_deposit` | verified |  |
+| `BufferOperatorFacet@"paySavings"` | `buffer.BufferOperatorFacet.paySavings` | peek:1, consume:1, post:1 | OK | yes | `Rholphin.Model.BufferSavings.surplusBuffer_paySavings` | verified |  |
+| `BufferOperatorFacet@"cover"` | `buffer.BufferOperatorFacet.cover` | peek:1, consume:1, post:1 | OK | yes | `Rholphin.Model.BufferSavings.surplusBuffer_cover` | verified |  |
+| `BufferAuthLedger@"rotate"` | `buffer.BufferAuthLedger.rotate` | — | OK | yes | `Rholphin.Model.BufferSavings.bufferAuthLedger_rotate` | verified |  |
+| `BufferFacetShop@"provision"` | `buffer.BufferFacetShop.provision` | consume:2, post:2 | OK | yes | `Rholphin.Model.BufferSavings.bufferFacetShop_provision` | verified |  |
+| `BufferFacetShop@"isFacet"` | `buffer.BufferFacetShop.isFacet` | — | OK | yes | `Rholphin.Model.BufferSavings.bufferFacetShop_isFacet` | verified |  |
+| `PegStabilityModule@"acceptFacet"` | `psm.PegStabilityModule.acceptFacet` | consume:1, post:1 | OK | yes | `Rholphin.Model.Psm.pegStabilityModule_acceptFacet` | verified |  |
 | `PegStabilityModule@"fundRev"` | `psm.PegStabilityModule.fundRev` | — | OK | yes | `Rholphin.Model.Psm.pegStabilityModule_fundRev` | verified |  |
-| `PegStabilityModule@"sellStable"` | `psm.PegStabilityModule.sellStable` | peek:3, consume:1, post:1 | OK | yes | `Rholphin.Model.Psm.pegStabilityModule_sellStable` | verified |  |
-| `PegStabilityModule@"buyStable"` | `psm.PegStabilityModule.buyStable` | peek:3, consume:1, post:1 | OK | yes | `Rholphin.Model.Psm.pegStabilityModule_buyStable` | verified |  |
+| `PegStabilityModule@"sellStable"` | `psm.PegStabilityModule.sellStable` | peek:1, consume:1, post:1 | OK | yes | `Rholphin.Model.Psm.pegStabilityModule_sellStable` | verified |  |
+| `PegStabilityModule@"buyStable"` | `psm.PegStabilityModule.buyStable` | peek:1, consume:1, post:1 | OK | yes | `Rholphin.Model.Psm.pegStabilityModule_buyStable` | verified |  |
 | `PegStabilityModule@"schedulePolicy"` | `psm.PegStabilityModule.schedulePolicy` | — | OK | yes | `Rholphin.Model.Psm.pegStabilityModule_schedulePolicy` | verified |  |
 | `PegStabilityModule@"applyPolicy"` | `psm.PegStabilityModule.applyPolicy` | consume:1, post:1 | OK | yes | `Rholphin.Model.Psm.pegStabilityModule_applyPolicy` | verified |  |
 | `PegStabilityModule@"info"` | `psm.PegStabilityModule.info` | peek:1 | OK | yes | `Rholphin.Model.Psm.pegStabilityModule_info` | verified |  |
 | `PegStabilityModule@"debt"` | `psm.PegStabilityModule.debt` | peek:1 | OK | yes | `Rholphin.Model.Psm.pegStabilityModule_debt` | verified |  |
+| `PegStabilityModule@"attest"` | `psm.PegStabilityModule.attest` | — | OK | yes | `Rholphin.Model.Psm.pegStabilityModule_attest` | verified |  |
+| `PsmAuthLedger@"rotate"` | `psm.PsmAuthLedger.rotate` | — | OK | yes | `Rholphin.Model.Psm.psmAuthLedger_rotate` | verified |  |
 | `Root@"resolve"` | `registry.Root.resolve` | peek:1 | OK | yes | `Rholphin.Model.Registry.root_resolve` | verified |  |
 | `Root@"get"` | `registry.Root.get` | peek:1 | OK | yes | `Rholphin.Model.Registry.root_get` | verified |  |
 | `Root@"keys"` | `registry.Root.keys` | peek:1 | OK | yes | `Rholphin.Model.Registry.root_keys` | verified |  |
@@ -75,14 +91,15 @@
 | `Root@"deprecate"` | `registry.Root.deprecate` | peek:1, consume:1, post:1 | OK | yes | `Rholphin.Model.Registry.root_deprecate` | verified |  |
 | `Root@"freeze"` | `registry.Root.freeze` | peek:1, consume:1, post:1 | OK | yes | `Rholphin.Model.Registry.root_freeze` | verified |  |
 | `Root@"admin"` | `registry.Root.admin` | peek:1, consume:1, post:1 | OK | yes | `Rholphin.Model.Registry.root_admin` | verified |  |
-| `StablecoinDirectory@"register"` | `registry.StablecoinDirectory.register` | consume:1, post:1 | OK | yes | `Rholphin.Model.Registry.stablecoinDirectory_register` | verified |  |
+| `StablecoinDirectory@"register"` | `registry.StablecoinDirectory.register` | peek:1, consume:1, post:1 | OK | yes | `Rholphin.Model.Registry.stablecoinDirectory_register` | verified |  |
 | `StablecoinDirectory@"lookup"` | `registry.StablecoinDirectory.lookup` | peek:1 | OK | yes | `Rholphin.Model.Registry.stablecoinDirectory_lookup` | verified |  |
 | `StablecoinDirectory@"entries"` | `registry.StablecoinDirectory.entries` | peek:1 | OK | yes | `Rholphin.Model.Registry.stablecoinDirectory_entries` | verified |  |
-| `CurrencyRegistry@"register"` | `registry.CurrencyRegistry.register` | peek:1, consume:1, post:1 | OK | yes | `Rholphin.Model.Registry.currencyRegistry_register` | verified |  |
+| `CurrencyRegistry@"register"` | `registry.CurrencyRegistry.register` | peek:2, consume:1, post:1 | OK | yes | `Rholphin.Model.Registry.currencyRegistry_register` | verified |  |
 | `CurrencyRegistry@"currency"` | `registry.CurrencyRegistry.currency` | peek:1 | OK | yes | `Rholphin.Model.Registry.currencyRegistry_currency` | verified |  |
 | `CurrencyRegistry@"currencies"` | `registry.CurrencyRegistry.currencies` | peek:1 | OK | yes | `Rholphin.Model.Registry.currencyRegistry_currencies` | verified |  |
+| `CurrencyRegistry@"rotateDirectoryAuth"` | `registry.CurrencyRegistry.rotateDirectoryAuth` | consume:1, post:1 | OK | yes | `Rholphin.Model.Registry.currencyRegistry_rotateDirectoryAuth` | verified |  |
 | `CurrencyRegistry@"setPaused"` | `registry.CurrencyRegistry.setPaused` | peek:1, consume:1, post:1 | OK | yes | `Rholphin.Model.Registry.currencyRegistry_setPaused` | verified |  |
-| `CurrencyRegistry@"registerExternal"` | `registry.CurrencyRegistry.registerExternal` | peek:1, consume:1, post:1 | OK | yes | `Rholphin.Model.Registry.currencyRegistry_registerExternal` | verified |  |
+| `CurrencyRegistry@"registerExternal"` | `registry.CurrencyRegistry.registerExternal` | peek:2, consume:1, post:1 | OK | yes | `Rholphin.Model.Registry.currencyRegistry_registerExternal` | verified |  |
 | `AssetResolver@"issuer"` | `registry.AssetResolver.issuer` | — | OK | yes | `Rholphin.Model.Registry.assetResolver_issuer` | verified |  |
 | `AssetResolver@"kind"` | `registry.AssetResolver.kind` | — | OK | yes | `Rholphin.Model.Registry.assetResolver_kind` | verified |  |
 | `TransferBook@"send"` | `transfer.TransferBook.send` | peek:1, post:1 | OK | yes | `Rholphin.Model.Transfer.transferBook_send` | verified |  |

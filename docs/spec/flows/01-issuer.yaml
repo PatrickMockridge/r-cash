@@ -7,7 +7,6 @@
 schema: rcash.flows/v1
 subsystem: issuer
 source_globs:
-- contracts/src/deploy/v3/31_stablecoin.rho
 - contracts/src/deploy/v3/31_params.rho
 - contracts/src/deploy/v3/31_issuer.rho
 invariants: {}
@@ -436,39 +435,6 @@ components:
     - {reason: sponsor, phase: pre, reposts: false, fail: false}
     invariants:
     - S8
-    - S9
-    - S12
-    status: blocked
-    blocked_reason: devnet unit_stablecoin and provisioning gate not run in this branch
-    acceptance:
-    - AC-SPEC-ISS-01.1
-  states:
-  - Live
-  initial: Live
-- name: FacetConsumer
-  lean_module: Rholphin.Model.Issuer
-  arms:
-  - arm: FacetConsumer@"acceptFacet"
-    transition: issuer.FacetConsumer.acceptFacet
-    lean: Rholphin.Model.Issuer.facetConsumer_acceptFacet
-    kind: mutate
-    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 541}
-    guards:
-    - {id: facet_kind, expr: 'kind in mint, burn, settle, custody, buffer', refusal: {reason: kind, phase: pre}}
-    - {id: slot_write_once, expr: 'consumerState.kind = false', refusal: {reason: already provisioned, phase: pre}}
-    effects:
-    - {target: consumerState.kind, formula: 'true'}
-    - {target: facetSlot, formula: 'facet'}
-    - {target: reply, formula: '(true, provisioned)'}
-    access:
-    - {cell: consumerState, mode: consume, actor: arm, phase: commit}
-    - {cell: consumerState, mode: post, actor: arm, phase: commit}
-    nested_calls: []
-    refusals:
-    - {reason: already provisioned, phase: pre, reposts: true, fail: false}
-    - {reason: kind, phase: pre, reposts: true, fail: false}
-    - {reason: not a facet, phase: pre, reposts: false, fail: false}
-    invariants:
     - S9
     - S12
     status: blocked

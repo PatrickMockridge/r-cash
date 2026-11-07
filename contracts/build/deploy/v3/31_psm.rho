@@ -10,8 +10,8 @@
 //               (init/fallback only), __MAX_ORACLE_AGE__.
 new
   PegStabilityModule, psmState, psmRevPurse, PsmAuthLedger,
-  psmSellCommit, psmBuyCommit, feeCeil, vaultPrice, vaultGovernor, psmRisk,
-  psmMintCheck, psmBurnCheck, psmIssuerInfo,
+  psmSellCommit, psmBuyCommit, feeCeil, vaultPrice, vaultGovernor, vaultCodec, psmRisk,
+  psmIssuerInfo,
   psmMintAuthCell, psmBurnAuthCell, mintSlot, burnSlot, psmFacetState,
   rl(`rho:registry:lookup`),
   rs(`rho:registry:insertArbitrary`),
@@ -80,6 +80,21 @@ in {
     }
   } |
 
+  contract vaultCodec(ret2) = {
+    new rCh, cCh in {
+      rl!(`__ROOT_URI__`, *rCh) |
+      for (Root <- rCh) {
+        Root!("resolve", "component:codec", 1, *cCh) |
+        for (@(true, codecUri, v) <- cCh) {
+          new cc in {
+            rl!(codecUri, *cc) |
+            for (Codec <- cc) { ret2!(*Codec) }
+          }
+        }
+      }
+    }
+  } |
+
   // Pause and the recapitalisation bound belong to T2. Resolve vaultUri and
   // bufferUri through CurrencyRegistry at arm entry; the live VaultBook and
   // SurplusBuffer capabilities are used immediately and never stored. Returns
@@ -124,22 +139,6 @@ in {
           }
         }
       }
-    }
-  } |
-
-  // Read the current local auth cell per call. Rotation replaces the cell, so
-  // the next call uses the new value and keeps the module live.
-  contract psmMintCheck(ret) = {
-    for (current <- psmMintAuthCell) {
-      psmMintAuthCell!(*current) |
-      ret!(true)
-    }
-  } |
-
-  contract psmBurnCheck(ret) = {
-    for (current <- psmBurnAuthCell) {
-      psmBurnAuthCell!(*current) |
-      ret!(true)
     }
   } |
 
@@ -326,11 +325,9 @@ in {
   } |
 
   contract PegStabilityModule(@"sellStable", payment, revFacet, @minRev, ret2) = {
-    new burnCh, infoCh, amtCh, rateCh, balCh, grossCh, feeCh in {
-      psmBurnCheck!(*burnCh) |
-      for (@_ready <- burnCh) {
-        psmIssuerInfo!(*infoCh) |
-        for (@(maxSupply, _supply) <- infoCh) {
+    new infoCh, amtCh, rateCh, balCh, grossCh, feeCh in {
+      psmIssuerInfo!(*infoCh) |
+      for (@(maxSupply, _supply) <- infoCh) {
         @issuer!("getAmountOf", *payment, *amtCh) |
         for (@a <- amtCh) {
           match a {
@@ -382,16 +379,13 @@ in {
             _ => { ret2!((false, "asset", *payment)) }
           }
         }
-        }
       }
     }
   } |
 
   contract PegStabilityModule(@"buyStable", payment, stableFacet, @minStable, ret2) = {
-    new mintCh, amtCh, riskCh, infoCh, rateCh, grossCh, feeCh in {
-      psmMintCheck!(*mintCh) |
-      for (@_ready <- mintCh) {
-        @revIssuer!("getAmountOf", *payment, *amtCh) |
+    new amtCh, riskCh, infoCh, rateCh, grossCh, feeCh in {
+      @revIssuer!("getAmountOf", *payment, *amtCh) |
         for (@a <- amtCh) {
           match a {
             (true, amount) => {
@@ -456,7 +450,6 @@ in {
           }
         }
       }
-    }
   } |
 
   contract PegStabilityModule(@"schedulePolicy", @feeBps, @ceiling, @nonce, @sigs, ret2) = {
@@ -464,16 +457,24 @@ in {
     else {
       if (ceiling < 0) { ret2!((false, "ceiling")) }
       else {
-        new gCh, sCh in {
+        new gCh, sCh, cc, cCh in {
           vaultGovernor!(*gCh) |
-          for (Governor <- gCh) {
-            Governor!("schedule", "stablecoin:" ++ "__CURRENCY__", nonce, "setPsmPolicy",
-                      feeBps.toString() ++ "|" ++ ceiling.toString(),
-                      {"feeBps": feeBps, "ceiling": ceiling}, sigs, *sCh) |
-            for (@gv <- sCh) {
-              match gv {
-                (true, readyAt) => { ret2!((true, readyAt)) }
-                _ => { ret2!(gv) }
+          vaultCodec!(*cc) |
+          for (Codec <- cc) {
+            // OCAP-09: length-prefixed canonical policy payload; the
+            // Governor binds this argsHash into the admin preimage.
+            Codec!("canonical", "rcash:psm-policy:v1",
+                   [feeBps.toString(), ceiling.toString()], *cCh) |
+            for (@argsHash <- cCh) {
+              for (Governor <- gCh) {
+                Governor!("schedule", "stablecoin:" ++ "__CURRENCY__", nonce, "setPsmPolicy",
+                          argsHash, {"feeBps": feeBps, "ceiling": ceiling}, sigs, *sCh) |
+                for (@gv <- sCh) {
+                  match gv {
+                    (true, readyAt) => { ret2!((true, readyAt)) }
+                    _ => { ret2!(gv) }
+                  }
+                }
               }
             }
           }
@@ -483,34 +484,45 @@ in {
   } |
 
   contract PegStabilityModule(@"applyPolicy", @nonce, ret2) = {
-    new gCh, eCh in {
+    new gCh, eCh, cc in {
       vaultGovernor!(*gCh) |
-      for (Governor <- gCh) {
-        Governor!("execute", "stablecoin:" ++ "__CURRENCY__", nonce, *eCh) |
-        for (@ex <- eCh) {
-          match ex {
-            (true, action, argsHash, args) => {
-              match action {
-              "setPsmPolicy" => {
-                match (args.get("feeBps")) {
-                  feeBps => {
-                    match (args.get("ceiling")) {
-                      ceiling => {
-                        if (feeBps < 0 || feeBps > 1000) { ret2!((false, "psm fee")) }
-                        else {
-                          if (ceiling < 0) { ret2!((false, "ceiling")) }
-                          else {
-                            if (argsHash != feeBps.toString() ++ "|" ++ ceiling.toString()) {
-                              ret2!((false, "params hash"))
-                            } else {
-                              for (@s <- psmState) {
-                                if (ceiling < s.get("stableDebt")) {
-                                  psmState!(s) | ret2!((false, "ceiling"))
-                                } else {
-                                  psmState!(s.set("feeBps", feeBps)
-                                    .set("ceiling", ceiling)
-                                    .set("rev", s.get("rev") + 1)) |
-                                  ret2!((true, {"feeBps": feeBps, "ceiling": ceiling}))
+      vaultCodec!(*cc) |
+      for (Codec <- cc) {
+            for (Governor <- gCh) {
+              Governor!("execute", "stablecoin:" ++ "__CURRENCY__", nonce, *eCh) |
+              for (@ex <- eCh) {
+                match ex {
+                  (true, action, argsHash, args) => {
+                    match action {
+                    "setPsmPolicy" => {
+                      match (args.get("feeBps")) {
+                        feeBps => {
+                          match (args.get("ceiling")) {
+                            ceiling => {
+                              if (feeBps < 0 || feeBps > 1000) { ret2!((false, "psm fee")) }
+                              else {
+                                if (ceiling < 0) { ret2!((false, "ceiling")) }
+                                else {
+                                  new hCh in {
+                                    Codec!("canonical", "rcash:psm-policy:v1",
+                                           [feeBps.toString(), ceiling.toString()], *hCh) |
+                                    for (@expected <- hCh) {
+                                      if (argsHash != expected) {
+                                        ret2!((false, "params hash"))
+                                      } else {
+                                        for (@s <- psmState) {
+                                          if (ceiling < s.get("stableDebt")) {
+                                            psmState!(s) | ret2!((false, "ceiling"))
+                                          } else {
+                                            psmState!(s.set("feeBps", feeBps)
+                                              .set("ceiling", ceiling)
+                                              .set("rev", s.get("rev") + 1)) |
+                                            ret2!((true, {"feeBps": feeBps, "ceiling": ceiling}))
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
                                 }
                               }
                             }
@@ -518,16 +530,14 @@ in {
                         }
                       }
                     }
+                    _ => { ret2!((false, "action")) }
                   }
+                  }
+                  _ => { ret2!(ex) }
                 }
               }
-              _ => { ret2!((false, "action")) }
             }
-            }
-            _ => { ret2!(ex) }
-          }
         }
-      }
     }
   } |
 

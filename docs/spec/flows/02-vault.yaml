@@ -4,16 +4,11 @@
 # acceptance IDs, model/vector and invariants are the authored content; status is
 # not a synonym for tested. See README.md for the schema and protocol labels.
 #
-# T2 transition: 31_vault.rho is the vault term. The monolith still carries the
-# same VaultBook/LiquidationEngine arms on this branch, so the inventory reports
-# duplicate arm keys until the integrator deletes 31_stablecoin.rho. The source
-# globs below intentionally list both files; arm-level checks resolve against
-# 31_vault.rho (last file wins in the inventory).
+# T2 transition: 31_vault.rho is the vault term.
 
 schema: rcash.flows/v1
 subsystem: vault
 source_globs:
-- contracts/src/deploy/v3/31_stablecoin.rho
 - contracts/src/deploy/v3/31_vault.rho
 invariants: {}
 defects:

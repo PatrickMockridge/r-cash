@@ -13,7 +13,6 @@
 schema: rcash.flows/v1
 subsystem: psm
 source_globs:
-- contracts/src/deploy/v3/31_stablecoin.rho
 - contracts/src/deploy/v3/31_psm.rho
 invariants: {}
 defects:

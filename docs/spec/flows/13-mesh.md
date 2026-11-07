@@ -10,7 +10,7 @@ Schema: `rcash.flows/v1`
 stateDiagram-v2
   [*] --> Unlisted
   Unlisted --> FeedActive: mesh.currency.feed: three reporters submit and the sponsor binds a feed
-  FeedActive --> SystemListed: mesh.currency.stablecoin: 31_stablecoin deployed and CurrencyRegistry.register accepts the attestation
+  FeedActive --> SystemListed: mesh.currency.stablecoin: the five currency terms deployed, facets provisioned, and CurrencyRegistry.register accepts the eight attestations
   FeedActive --> ExternalListed: mesh.currency.external: registerExternal accepts an 8-decimal adapter attestation
   SystemListed --> Draft: mesh.market.draft: MarketFactory.createMarket signs 25 terms and stages the pair
   Draft --> Seeded: mesh.market.seed: LP addLiquidity and LiquidityLock.fund meet the seed terms
@@ -24,7 +24,7 @@ stateDiagram-v2
 | transition | from | to | trigger | requirement |
 |---|---|---|---|---|
 | `mesh.currency.feed` | Unlisted | FeedActive | three reporters submit and the sponsor binds a feed | `SPEC-ORA-01` |
-| `mesh.currency.stablecoin` | FeedActive | SystemListed | 31_stablecoin deployed and CurrencyRegistry.register accepts the attestation | `SPEC-REG-01` |
+| `mesh.currency.stablecoin` | FeedActive | SystemListed | the five currency terms deployed, facets provisioned, and CurrencyRegistry.register accepts the eight attestations | `SPEC-REG-01` |
 | `mesh.currency.external` | FeedActive | ExternalListed | registerExternal accepts an 8-decimal adapter attestation | `SPEC-DEX-05` |
 | `mesh.market.draft` | SystemListed | Draft | MarketFactory.createMarket signs 25 terms and stages the pair | `SPEC-MKT-03` |
 | `mesh.market.seed` | Draft | Seeded | LP addLiquidity and LiquidityLock.fund meet the seed terms | `SPEC-DEX-08` |
