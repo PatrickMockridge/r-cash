@@ -86,7 +86,7 @@ refactor is deferred; `Accepted` means the model explicitly accepts it.
 | OCAP-14 | `check_captures.py` blind spots: no `rs!` publications, narrow bundle shapes | Medium | Mitigated by `check_capabilities.py`; captures still 0 findings |
 | OCAP-15 | G-FACET is suffix-based and only checks a literal first argument | Medium | Mitigated by `G-CAP-AUTH` (every authority parameter) |
 | OCAP-16 | Ambient `deployerId` authority in AccountGate; the account bundle is public | Medium | Accepted (the deployer identity is the authority; a shared bundle cannot act) |
-| OCAP-17 | No Lean `Prov`; I20 is tool-evidenced only | Low | Open |
+| OCAP-17 | No Lean `Prov`; I20 was tool-evidenced only | Low | **Fixed**: `Rholphin.Linear.Prov` proves `caller_never_stored`, `authority_use_requires_provenance` and `bundle_no_registry_cap`; I20 is covered |
 | OCAP-18 | `TransferContract` carries the escrowed payment and both facets | Low | Accepted (claim/refund are gated; the registry entry is a bearer object by design) |
 | OCAP-19 | Claim `secretHash` is not bound to the transfer id/recipient/domain | Low | Open |
 
@@ -112,6 +112,10 @@ refactor is deferred; `Accepted` means the model explicitly accepts it.
    and `pre-devnet-check`.
 5. **Added the red-team suite** (`32863c3`) and **per-vault rotation**
    (`56543c9`).
+6. **Added the provenance model** (`Rholphin/Linear/Prov.lean`): the provenance
+   inductive, the store/call/bundle rules and the three theorems behind I20.
+   `check_lean` now audits 74 declarations and I20 moves from `tool` to
+   `covered`.
 
 ## 6. Why the facet refactor was not applied
 

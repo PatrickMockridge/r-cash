@@ -4,6 +4,7 @@ import Rholphin.Linear.Prim
 import Rholphin.Linear.Deploy
 import Rholphin.Linear.Serial
 import Rholphin.Linear.Interleave
+import Rholphin.Linear.Prov
 import Rholphin.Prim.EDSL
 import Rholphin.Crypto.Hash
 import Rholphin.Crypto.Sig
@@ -39,6 +40,9 @@ output containing `sorryAx` or a project-local axiom.
 #print axioms Rholphin.h2a_caller_token
 #print axioms Rholphin.runPrim_cell
 #print axioms Rholphin.CellArm.preserves
+#print axioms Rholphin.Linear.caller_never_stored
+#print axioms Rholphin.Linear.authority_use_requires_provenance
+#print axioms Rholphin.Linear.bundle_no_registry_cap
 #print axioms Rholphin.take_put_balance
 #print axioms Rholphin.refuse_quiescent
 #print axioms Rholphin.fail_aborts
