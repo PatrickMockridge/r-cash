@@ -6,6 +6,12 @@ redemption is refused, a par buy mints the stablecoin and increases the signed
 debt, and a redemption of vault-issued stablecoin drives the signed debt
 negative — the peg mechanism.
 
+In the multi-term split `psmUri` names T4 (`31_psm.rho`). Buy and sell call the
+T1 `MintFacet`/`BurnFacet` from bare-name slots, delivered by the sponsor-signed
+provisioning protocol (MULTI-TERM.md §4). `unit_stablecoin` owns those deploys
+through `stablecoin_support.py`; this suite checks the term attestation and calls
+`ensure_provisioned` when the support module exposes it.
+
 Usage:
     python3 harness/unit_psm.py
 """
@@ -60,6 +66,35 @@ def supply(sc_uri: str, secret: str) -> int:
                secret)[1]
 
 
+def attest(uri: str, binding: str, secret: str) -> dict:
+    return one(call(uri, binding,
+                    f'{binding}!("attest", *r) | for (@x <- r) {{ deployId!(x) }}'),
+               secret)[1]
+
+
+def ensure_provisioned() -> None:
+    """Ensure the T1 mint/burn facets were delivered to T4.
+
+    `unit_stablecoin` performs the three provisioning deploys (T2 five kinds,
+    T4 two, T3 one) through `stablecoin_support.py`. If the support helper
+    exists, use it so a standalone run cannot hang on an unfilled bare-name
+    slot. Missing helper: report, do not reimplement the sponsor-signed
+    preimage here.
+    """
+    try:
+        import stablecoin_support
+    except ImportError:
+        print("note: stablecoin_support.py missing; assuming unit_stablecoin "
+              "provisioned the T4 mint and burn facets")
+        return
+    ensure = getattr(stablecoin_support, "ensure_provisioned", None)
+    if ensure is None:
+        print("note: stablecoin_support.ensure_provisioned missing; assuming "
+              "unit_stablecoin provisioned the T4 mint and burn facets")
+        return
+    ensure(KEYS, "V4T")
+
+
 def fee_ceil(amount: int) -> int:
     return (amount * FEE_BPS + 9999) // 10000
 
@@ -81,6 +116,10 @@ def main() -> int:
     check("V4T listed", entry[0], True)
     entry = entry[1]
     vault, psm, stablecoin = entry["vaultUri"], entry["psmUri"], entry["stablecoinUri"]
+    ensure_provisioned()
+    psm_att = attest(psm, "PegStabilityModule", deployer)
+    check("psm term kind", psm_att.get("kind"), "psm")
+    check("psm term currency", psm_att.get("currency"), "V4T")
 
     actor = keys["key14"]
     funder = keys["key15"]

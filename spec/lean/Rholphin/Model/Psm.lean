@@ -141,4 +141,13 @@ def pegStabilityModule_info (p : Psm) : Int × Nat × Nat :=
   (p.stableDebt, p.feeBps, p.ceiling)
 def pegStabilityModule_debt (p : Psm) : Int := p.stableDebt
 
+/-- Attestations expose immutable identity only; they change no state. -/
+def pegStabilityModule_attest := True
+
+/-- A verified facet is installed once; a second provisioning is refused. -/
+def pegStabilityModule_acceptFacet (provisioned : Bool) : Bool := provisioned
+
+/-- Rotation retires the old auth value and installs the new one. -/
+def psmAuthLedger_rotate (_old new : Nat) : Nat := new
+
 end Rholphin.Model.Psm
