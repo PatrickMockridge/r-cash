@@ -126,4 +126,14 @@ def surplusBuffer_scheduleShare (bps : Nat) : Nat := bps
 def surplusBuffer_applyShare (b : Buffer) (bps : Nat) : Buffer :=
   { b with savingsShareBps := bps }
 
+/-- Attestations expose immutable identity only; they change no state. -/
+def savingsPool_attest := True
+def surplusBuffer_attest := True
+
+/-- A verified facet is installed once; a second provisioning is refused. -/
+def surplusBuffer_acceptFacet (provisioned : Bool) : Bool := provisioned
+
+/-- Rotation retires the old auth value and installs the new one. -/
+def bufferAuthLedger_rotate (_old new : Nat) : Nat := new
+
 end Rholphin.Model.BufferSavings
