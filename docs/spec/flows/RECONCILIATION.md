@@ -88,7 +88,7 @@
 | `TransferContract@"claim"` | `transfer.TransferContract.claim` | peek:1, consume:1, post:1 | OK | yes | `Rholphin.Model.Transfer.transferContract_claim` | verified |  |
 | `TransferContract@"refund"` | `transfer.TransferContract.refund` | peek:1, consume:1, post:1 | OK | yes | `Rholphin.Model.Transfer.transferContract_refund` | verified |  |
 | `TransferContract@"info"` | `transfer.TransferContract.info` | peek:1 | OK | yes | `Rholphin.Model.Transfer.transferContract_info` | verified |  |
-| `MarketTerms@"put"` | `market.MarketTerms.put` | consume:1, post:1 | OK | yes | `Rholphin.Model.Market.marketTerms_put` | verified |  |
+| `MarketTerms@"put"` | `market.MarketTerms.put` | consume:1, post:1 | OK | yes | `Rholphin.Model.Market.marketTerms_putChecked` | verified |  |
 | `MarketTerms@"get"` | `market.MarketTerms.get` | peek:1 | OK | yes | `Rholphin.Model.Market.marketTerms_get` | verified |  |
 | `MarketDirectory@"bind"` | `market.MarketDirectory.bind` | consume:1, post:1 | OK | yes | `Rholphin.Model.Market.marketDirectory_bind` | verified |  |
 | `MarketDirectory@"seal"` | `market.MarketDirectory.seal` | consume:1, post:1 | OK | yes | `Rholphin.Model.Market.marketDirectory_seal` | verified |  |

@@ -26,7 +26,7 @@ Create ==
     /\ index = "none"
     /\ slot' = "sealed"
     /\ index' = "staged"
-    /\ UNCHANGED refused
+    /\ UNCHANGED <<checked, refused>>
 
 \* Any refusal leaves the committed directory and index unchanged.
 Refuse ==

@@ -198,14 +198,14 @@ not omitted.
 | PRIM-05 | P4 | More | **withdrawn**: `release/cancel` read Clock and identity before the take | `51_pool.rho:583-658` | Closed | none — the earlier draft was wrong |
 | PRIM-06 | REV | No | `oracleRegState` had no `rev`; `issuerState` CAS is `totalPrincipal` | `12_oracle_registry.rho` | Medium | Fixed for oracle; document issuer CAS; G-REV |
 | PRIM-07 | REV | Less | not every mutation bumps its version field | `31_stablecoin.rho`, `51_pool.rho` | Medium | G-REV; Lean `rev_monotone` |
-| PRIM-08 | OPI | No | book accepts duplicate opId | `40_transfer.rho:244` | High | fix R3; G-OPI; Lean `opIndex` |
+| PRIM-08 | OPI | No | book accepts duplicate opId | `40_transfer.rho:244` | Accepted | the per-owner ledger is the supported path; a direct book call is a caller error, documented |
 | PRIM-09 | OPI/ERTP | Late | native transfer reply ignored while op commits | `09_identity.rho:263-277` | Fixed | reply matched, `1/0` on failure; G-NATIVE |
 | PRIM-10 | ERTP | Other than | no unsafe post-native catch-all found; remaining `_` branches are pre-effect | §3.11 of the audit | Closed | G-NATIVE prevents regression |
-| PRIM-11 | SIG | No | terms stored before sponsor check | `50_market.rho:122-161` | Medium | fix R4; Lean I5 |
-| PRIM-12 | SIG | Before | preimage has no domain/nonce/deadline | `50_market.rho:795-799` | Medium | fix R4 v2 |
+| PRIM-11 | SIG | No | terms stored before sponsor check | `50_market.rho:122-161` | Fixed | `put` verifies the sponsor signature before storing; Lean `marketTerms_putChecked` |
+| PRIM-12 | SIG | Before | preimage has no nonce/deadline | `50_market.rho:795-799` | Partial | domain is `rcash:market-create:v1`; a v2 nonce/deadline is a separate change |
 | PRIM-13 | Cap | As well as | caller name not mechanically restricted to sinks | all facet sites | Medium | G-FACET; Lean I20 |
-| PRIM-14 | DIR | Other than | read/write split not uniform; seal evidence weak | `50_market.rho:175-215`; `30-WIRING.md:204` | Medium | fix R6; Lean I6 |
-| PRIM-15 | P1 | Part of | pause+registry two cells; the CAS orders the mirror, but a direct `VaultBook.pause` can diverge | `32_currency_registry.rho:308-356` | Medium | R5 projection; Lean `commit_atomic` |
+| PRIM-14 | DIR | Other than | seal evidence was weaker than the wiring text | `50_market.rho:218`; `30-WIRING.md:204` | Closed | `seal(marketId, auth)` matches the wiring text; Lean I6 |
+| PRIM-15 | P1 | Part of | pause+registry two cells; the CAS orders the mirror, but a direct `VaultBook.pause` can diverge | `32_currency_registry.rho:308-356` | Accepted | governors must use `CurrencyRegistry.setPaused`; a projection is a separate design |
 | PRIM-16 | P2 | Late | snapshot can be used after an await unvalidated | all P2 arms | Medium | G-PHASE; Lean `p2` |
 | PRIM-17 | H2 | Other than | provenance asserted, not enforced | `09_identity`, `31_stablecoin` | Medium | Lean `Prov`; `check_captures` |
 | PRIM-18 | P6 | No | graceful refusal after a write not uniformly rejected | all `(false` sites | Medium | G-AFTER; Lean `p6` |
@@ -230,11 +230,12 @@ contention from a bug. The pre-effect path can return `"conflict"`; the post-eff
 must fail. The Lean obligation is a typed outcome (`Mode.refused reason` vs `Mode.aborted`),
 so a conflict cannot be reported as an abort by the model.
 
-**PRIM-08 — book-level opId.** `TransferBook.send` records the opId but does not consult an
-index. The per-owner ledger in `Account.sendTransfer` is the only dedupe, so a direct book
-call bypasses it. Either add a per-book `opIndex` cell (short take) or make the book arm
-unreachable except through `Account` and gate that. The Lean obligation is an `opIndex`
-map with `replay_returns_stored` and `no_second_transfer`.
+**PRIM-08 — book-level opId (accepted).** `TransferBook.send` records the opId but does not
+consult an index. The per-owner ledger in `Account.sendTransfer` is the supported dedupe; a
+direct book call bypasses it. A per-book index cell would serialise every send on one global
+cell, regressing the send concurrency that the per-transfer design provides, so this is an
+accepted caller discipline. The Lean `opIndex` obligation remains the shape to prove if a
+future book-level index is added.
 
 **PRIM-09 — ignored native reply (fixed).** `sendCommit` used to wait on the
 `revVault!transfer` channel with `for (_ <- vCh)`, ignoring `(false, …)`, then call
@@ -246,12 +247,13 @@ permanent guard is G-NATIVE: after a native send, a bare `_ =>` success is an er
 key and the REV address *before* `for (@s <- lockState)` (`51_pool.rho:583-658`). There is no
 hold across the Clock or a caller facet, so the earlier draft's PRIM-05 is withdrawn.
 
-**PRIM-11/12 — terms and sponsor.** `MarketTerms.put` is content-addressed and bounds-checked
-but not authenticated; the sponsor check happens later in `createMarket`. The preimage has
-no domain, nonce or deadline. The fix is to recompute the hash, verify the sponsor signature
-over a v2 preimage (`rcash:market-create:v2|factoryUri|marketId|termsHash|sponsor|nonce|deadline`),
-and only then store. The Lean obligations are `terms_put_integrity` (under
-`CollisionResistant`) and `verify_true_implies_signer` (under `Unforgeable`).
+**PRIM-11/12 — terms and sponsor.** `MarketTerms.put` is content-addressed, bounds-checked
+and now authenticated: it computes the canonical hash, rebuilds
+`rcash:market-create:v1|marketId|termsHash|sponsor`, verifies the sponsor signature with the
+same verifier the factory uses, and only then stores. The preimage is domain-separated but
+still has no nonce or deadline; a v2 preimage is a separate change. The Lean obligations are
+`marketTerms_putChecked_integrity` (under `CollisionResistant`) and
+`verify_true_implies_signer` (under `Unforgeable`).
 
 ---
 
@@ -297,9 +299,10 @@ Every row must have at least one obligation, fix, gate or accepted-risk referenc
 **Rholang fixes:** R1 primitive consistency; R2 native boundary; R3 idempotency; R4 authority;
 R5 multi-cell atomicity; R6 directory/docs. See the approved plan.
 
-**Gate status:** G-REV and G-NATIVE are now blocking in `make formal-check` via
-`tools/check_primitives.py`; G-AFTER is partial in `check_flows.py`; G-OPI, G-FACET,
-G-PHASE, G-GUARD and G-EFFECT are Phase 7 deliverables.
+**Gate status:** G-REV, G-NATIVE and G-FACET are blocking in `make formal-check` via
+`tools/check_primitives.py`; G-PHASE, G-EFFECT and G-GUARD are blocking via
+`tools/check_flows.py --phases --effects --guards`; G-AFTER is the existing after-consume
+check; G-OPI is an accepted caller discipline.
 
 ---
 
@@ -352,6 +355,8 @@ The HAZOP is **input**, not a parallel exercise:
 | Cryptography not proved | `CollisionResistant`/`Unforgeable`/`Binding` are explicit hypotheses, not axioms. |
 | Native ERTP not modelled | A `NativeTotal` step is assumed; I10/I15 are conditional on it. |
 | General conflict-serialisability | Only the disjoint-write case is proved; overlaps are a research question. |
+| Direct book call is not idempotent | The book has no shared cell by design; the per-owner ledger is the supported path. |
+| A direct `VaultBook.pause` can diverge from the registry | Governor procedure requires `CurrencyRegistry.setPaused`; the `pausedRev` CAS orders the mirror. |
 | Phlo/scheduler/liveness | Out of scope; the model is safety-only. |
 
 ---

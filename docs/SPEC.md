@@ -523,7 +523,9 @@ Every field is enforced:
 
 `MarketFactory.createMarket(terms, values, sponsor, sig, deployer)` verifies the signature,
 the terms and the feeds; the submitter's `deployerId` public key MUST equal `sponsor` (a
-third party cannot replay a signed create). `MarketIndex.checkStage` runs the stage guards
+third party cannot replay a signed create). `MarketTerms.put` verifies the same sponsor
+signature over `rcash:market-create:v1|marketId|termsHash|sponsor` before it stores the
+content-addressed terms, so a relayer cannot grow the store with unsigned payloads. `MarketIndex.checkStage` runs the stage guards
 before any write; `PoolTemplate.create` builds the pool and lock; `MarketDirectory.bind` is
 create-only (an exact retry is idempotent, a different slot refuses `"exists"`) and `seal`
 marks the slot; `MarketIndex.stage` creates a `draft`. A refusal after the directory write

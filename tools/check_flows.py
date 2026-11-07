@@ -31,6 +31,7 @@ import flowlib
 LEAN_ROOT = flowlib.ROOT / "spec" / "lean"
 MODEL_REGISTRY = flowlib.ROOT / "docs" / "spec" / "model.yaml"
 VECTORS = flowlib.ROOT / "tests" / "vectors" / "arith.json"
+CROSS_COMPONENT_EFFECTS = {"governor.pending"}
 MODEL_REQUIRED = {
     'CurrencyRegistry@"registerExternal"', 'CurrencyRegistry@"setPaused"',
     'MarketIndex@"pauseAsset"', 'MarketIndex@"stage"', 'MarketIndex@"marketFor"',
@@ -234,8 +235,101 @@ def check_models(arm: dict, where: str, report: Report) -> None:
             report.error("vector", f"{where}: vector {arm['vector']!r} is missing")
 
 
+def check_phases(source: Source, arm: dict, node: dict, where: str,
+                 report: Report) -> None:
+    """Compare the declared access phase with the expanded call order.
+
+    `pre` must occur before the first take; `commit` must follow it.  The
+    ordinal is the expansion order (the arm's own events, then its helpers),
+    not the source line, because a helper is defined elsewhere in the file.
+    """
+    sequence: list[dict] = []
+    for _, part in source.expand(node):
+        sequence.extend(part["events"])
+
+    def positions(kind: str, cell: str) -> list[int]:
+        return [index for index, event in enumerate(sequence)
+                if event["cell"] == cell and event["kind"] == kind]
+
+    for entry in arm.get("access") or []:
+        cell = entry.get("cell")
+        mode = entry.get("mode")
+        phase = entry.get("phase")
+        if not cell or mode not in {"peek", "consume", "post"} or not phase:
+            continue
+        takes = positions("take", cell)
+        if not takes:
+            continue
+        first_take = min(takes)
+        last_take = max(takes)
+        mine = positions(mode, cell)
+        if phase == "pre" and mode in {"peek", "consume"}:
+            if not any(index <= first_take for index in mine):
+                report.warn("phase", f"{where}: {cell} {mode} declared pre but "
+                                     f"occurs after the first take")
+        if phase == "commit" and mode == "post":
+            if not any(index >= first_take for index in mine):
+                report.warn("phase", f"{where}: {cell} post declared commit but "
+                                     f"occurs before the first take")
+        if phase == "commit" and mode == "consume":
+            peeks = positions("peek", cell)
+            if peeks and max(peeks) > last_take:
+                report.warn("phase", f"{where}: {cell} peek occurs after the "
+                                     f"commit take")
+
+
+GUARD_TOKEN = __import__("re").compile(r"[A-Za-z_][A-Za-z0-9_]{2,}")
+GUARD_NOISE = {"and", "or", "not", "true", "false", "Nil", "ok", "the", "must"}
+
+
+def check_guards(source: Source, arm: dict, node: dict, where: str,
+                 report: Report) -> None:
+    """Require each guard to name at least one identifier present in the source.
+
+    This is a typo/staleness check, not an expression parser.
+    """
+    text = ""
+    for _, part in source.expand(node):
+        path = flowlib.ROOT / part["file"]
+        if path.is_file():
+            text += path.read_text() + "\n"
+    for guard in arm.get("guards") or []:
+        expr = str(guard.get("expr") or "")
+        tokens = [token for token in GUARD_TOKEN.findall(expr)
+                  if token not in GUARD_NOISE]
+        if tokens and not any(token in text for token in tokens):
+            report.warn("guard", f"{where}: guard {guard.get('id')!r} names "
+                                 f"{tokens[0]!r}, which does not occur in the source")
+
+
+def check_effects(source: Source, arm: dict, node: dict, where: str,
+                  report: Report) -> None:
+    """Require a dotted effect target's final field to appear in the source.
+
+    This is a token check, not a formula parser: it catches an effect that
+    names a field no arm or helper in the path ever writes.
+    """
+    text = ""
+    for _, part in source.expand(node):
+        path = flowlib.ROOT / part["file"]
+        if path.is_file():
+            text += path.read_text() + "\n"
+    for effect in arm.get("effects") or []:
+        target = str(effect.get("target") or "")
+        if target == "reply" or "." not in target or target in CROSS_COMPONENT_EFFECTS:
+            continue
+        field = target.split(".")[-1].split("]")[-1].strip()
+        if not field:
+            continue
+        if f'"{field}"' not in text:
+            report.warn("effect", f"{where}: effect target {target} names "
+                                  f"field {field!r}, which no source in the "
+                                  f"path writes")
+
+
 def check_documents(docs: list[dict], source: Source, report: Report,
-                    strict: bool) -> None:
+                    strict: bool, phases: bool = False,
+                    effects: bool = False, guards: bool = False) -> None:
     catalogue = flowlib.refusal_catalogue()
     lean = flowlib.lean_names(LEAN_ROOT)
     seen_arms: dict[str, str] = {}
@@ -278,6 +372,12 @@ def check_documents(docs: list[dict], source: Source, report: Report,
                     report.error("source", f"{where}: line {src.get('line')} != {node['line']}")
 
                 check_models(arm, where, report)
+                if phases:
+                    check_phases(source, arm, node, where, report)
+                if effects:
+                    check_effects(source, arm, node, where, report)
+                if guards:
+                    check_guards(source, arm, node, where, report)
 
                 # 10. honesty about mutation
                 own_mutates = bool(node["events"]) and any(
@@ -508,13 +608,16 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--report", action="store_true")
     ap.add_argument("--check", action="store_true")
     ap.add_argument("--strict", action="store_true")
+    ap.add_argument("--phases", action="store_true")
+    ap.add_argument("--effects", action="store_true")
+    ap.add_argument("--guards", action="store_true")
     args = ap.parse_args(argv)
     source = Source(flowlib.inventory())
     docs = flowlib.documents()
     report = Report()
     if not docs:
         report.error("coverage", "no flow YAML documents")
-    check_documents(docs, source, report, args.strict)
+    check_documents(docs, source, report, args.strict, args.phases, args.effects, args.guards)
     check_mesh_gate(report)
     report.show(args.strict)
     if args.check and report.counts()[0]:

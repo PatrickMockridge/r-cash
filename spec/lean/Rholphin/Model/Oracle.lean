@@ -109,4 +109,66 @@ def oracleHub_reporters (entry : Option Nat) : Option Nat := entry
 
 def oracleHub_feedStatus (entry : Option Nat) : Option Nat := entry
 
+/-! ## I8: reporter set -/
+
+/-- Three distinct reporter keys, with the sponsor in at most one slot. -/
+def reportersOk (keys : List Nat) (sponsor : Nat) : Bool :=
+  decide (keys.Nodup ∧ keys.length = 3 ∧ (keys.filter (fun k => k = sponsor)).length ≤ 1)
+
+theorem reportersOk_nodup {keys : List Nat} {sponsor : Nat}
+    (h : reportersOk keys sponsor = true) : keys.Nodup := by
+  unfold reportersOk at h
+  exact (of_decide_eq_true h).1
+
+theorem reportersOk_length {keys : List Nat} {sponsor : Nat}
+    (h : reportersOk keys sponsor = true) : keys.length = 3 := by
+  unfold reportersOk at h
+  exact (of_decide_eq_true h).2.1
+
+theorem reportersOk_sponsor {keys : List Nat} {sponsor : Nat}
+    (h : reportersOk keys sponsor = true) :
+    (keys.filter (fun k => k = sponsor)).length ≤ 1 := by
+  unfold reportersOk at h
+  exact (of_decide_eq_true h).2.2
+
+/-! ## I9: pair freshness -/
+
+structure PairQuote where
+  baseRate : Nat
+  quoteRate : Nat
+  baseHeight : Nat
+  quoteHeight : Nat
+  now : Nat
+  maxAge : Nat
+
+def PairQuote.fresh (q : PairQuote) : Prop :=
+  q.baseHeight ≤ q.now ∧ q.quoteHeight ≤ q.now ∧
+    q.now - q.baseHeight ≤ q.maxAge ∧ q.now - q.quoteHeight ≤ q.maxAge
+
+def PairQuote.freshOk (q : PairQuote) : Bool :=
+  decide (q.baseHeight ≤ q.now ∧ q.quoteHeight ≤ q.now ∧
+    q.now - q.baseHeight ≤ q.maxAge ∧ q.now - q.quoteHeight ≤ q.maxAge)
+
+def pairRate (q : PairQuote) : Option Nat :=
+  if q.freshOk then some (oracleMath_rate q.baseRate q.quoteRate) else none
+
+theorem stale_pair_refused {q : PairQuote} (h : ¬ q.fresh) : pairRate q = none := by
+  unfold pairRate
+  have hok : q.freshOk = false := by
+    unfold PairQuote.freshOk
+    exact decide_eq_false (by simpa [PairQuote.fresh] using h)
+  simp [hok]
+
+theorem pair_rate_ages {q : PairQuote} {r : Nat} (h : pairRate q = some r) :
+    q.now - q.baseHeight ≤ q.maxAge ∧ q.now - q.quoteHeight ≤ q.maxAge := by
+  unfold pairRate at h
+  split at h
+  · rename_i hok
+    have hdec : decide (q.baseHeight ≤ q.now ∧ q.quoteHeight ≤ q.now ∧
+        q.now - q.baseHeight ≤ q.maxAge ∧ q.now - q.quoteHeight ≤ q.maxAge) = true := by
+      simpa [PairQuote.freshOk] using hok
+    have hf := of_decide_eq_true hdec
+    exact ⟨hf.2.2.1, hf.2.2.2⟩
+  · contradiction
+
 end Rholphin.Model.Oracle

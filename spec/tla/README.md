@@ -1,8 +1,8 @@
 # TLA+ models
 
 These finite models encode the safety properties of the v0.3 component calculus. They are
-specifications, not runtime code. The model checker (TLC) is optional and is not part of the
-required build; `make tla-check` runs it when it is on `PATH`.
+specifications, not runtime code. CI runs TLC over all seven models in the `tla` job
+(tla2tools 1.8.0); `make tla-check` remains the local runner and uses `TLC` (default `tlc`).
 
 | Model | Property |
 |---|---|
@@ -49,10 +49,11 @@ make tla-check
 The five original models were checked with TLC 2.19 (tla2tools 1.7.4) on 2026-10-23:
 `AdminNonce` 64 states, `CapabilityProvenance` 13, `CellLinearity` 5,
 `PoolConservation` 60586, `TransferExclusivity` 13. `MarketCreateAtomicity` and
-`PoolCriticalSection` were added with the 2026-11-03 HAZOP and have not yet been run under
-TLC in this checkout. The finite bounds are deliberately small; the models check the
-protocol shape, not production-scale state spaces. The v0.4 stablecoin issuer model is
-added with the issuer in Phase 1.
+`PoolCriticalSection` were added with the 2026-11-03 HAZOP; the CI `tla` job now checks all
+seven. The first CI run found an unconstrained `checked'` in `MarketCreateAtomicity.Create`
+and an unbounded `revLive` in `PoolCriticalSection`; both are fixed (the latter uses a
+two-value revision toggle so the state space is finite). The finite bounds are deliberately small; the models check the protocol shape,
+not production-scale state spaces.
 
 The models are abstractions. They do not model phlo, the node scheduler or the Rholang
 parser; those are covered by `tools/measure_contracts.py` and the devnet scenarios.

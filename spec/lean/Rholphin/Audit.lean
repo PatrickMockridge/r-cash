@@ -2,6 +2,7 @@ import Rholphin.Linear.Cell
 import Rholphin.Linear.Protocol
 import Rholphin.Linear.Prim
 import Rholphin.Linear.Deploy
+import Rholphin.Linear.Serial
 import Rholphin.Linear.Interleave
 import Rholphin.Prim.EDSL
 import Rholphin.Crypto.Hash
@@ -94,6 +95,8 @@ output containing `sorryAx` or a project-local axiom.
 #print axioms Rholphin.Model.Market.admit_max_trade
 #print axioms Rholphin.Model.Market.stage_writes_both
 #print axioms Rholphin.Model.Market.stage_refuses_active
+#print axioms Rholphin.Model.Market.marketTerms_putChecked_refuses_bad_sponsor
+#print axioms Rholphin.Model.Market.marketTerms_putChecked_integrity
 #print axioms Rholphin.Model.Market.delisted_accepts_nothing
 #print axioms Rholphin.Model.Pool.fund_refuses_short
 #print axioms Rholphin.Model.Pool.fxPool_attest_sound
@@ -106,5 +109,18 @@ output containing `sorryAx` or a project-local axiom.
 #print axioms Rholphin.Model.Pool.cancel_then_release_refused
 #print axioms Rholphin.Model.Governance.execute_not_early
 #print axioms Rholphin.Model.Oracle.activate_requires_trial
+#print axioms Rholphin.Model.Oracle.reportersOk_nodup
+#print axioms Rholphin.Model.Oracle.reportersOk_length
+#print axioms Rholphin.Model.Oracle.reportersOk_sponsor
+#print axioms Rholphin.Model.Oracle.stale_pair_refused
+#print axioms Rholphin.Model.Oracle.pair_rate_ages
+#print axioms Rholphin.Model.Market.bind_preserves_directory
+#print axioms Rholphin.Model.Market.seal_preserves_directory
+#print axioms Rholphin.Model.Registry.registerListed_refuses_no_root
+#print axioms Rholphin.Model.Registry.registerListed_preserves_S8
+#print axioms Rholphin.reject_no_effect
+#print axioms Rholphin.preOk_disjoint
+#print axioms Rholphin.commit_disjoint_does_not_block
+#print axioms Rholphin.apply_disjoint_values
 #print axioms Rholphin.Model.Identity.getOrCreate_verify
 #print axioms Rholphin.Model.Identity.gate_other

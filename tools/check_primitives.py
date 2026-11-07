@@ -28,6 +28,8 @@ DISCARDED_REPLY = re.compile(r"for\s*\(\s*_\s*<-")
 TAKE_CELL = re.compile(r"for\s*\(\s*@?\w+\s*<-\s*([A-Za-z_]\w*State)\b")
 SET_REV = re.compile(r"\.set\(\s*\"rev\"")
 ORACLE_INIT = re.compile(r"oracleRegState!\(\{(.*?)\}\)", re.S)
+FACET_CALL = re.compile(r'\b([A-Za-z_]\w*(?:Facet|Payment|payment))\s*!\s*\(\s*"([^"]*)"')
+FACET_ALLOWED = {"deposit", "depositFacet"}
 
 # Cells that carry a `rev` field and must be bumped on mutation.
 REV_CELLS = {
@@ -63,6 +65,14 @@ def check_file(path: Path, errors: list[str], warnings: list[str]) -> None:
             f"{relative}:{line_of(text, match.start())}: native reply discarded "
             f"with `for (_ <- ...)`; match the reply and fail closed"
         )
+
+    for match in FACET_CALL.finditer(text):
+        name, operation = match.group(1), match.group(2)
+        if operation not in FACET_ALLOWED:
+            errors.append(
+                f"{relative}:{line_of(text, match.start())}: caller-supplied {name} "
+                f"is called with {operation!r}; only sink facets are allowed"
+            )
 
     if "oracleRegState!({" in text:
         init = ORACLE_INIT.search(text)

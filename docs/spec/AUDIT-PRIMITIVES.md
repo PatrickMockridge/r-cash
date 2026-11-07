@@ -272,7 +272,7 @@ absent. AUD-18 / PRIM-17.
 | Identity/no-op stub | ~25 | `verifier_sigOk`, `claimCode_hash`, `marketTerms_put`, `fxPool_attest`, `vaultBook_pause`, `account_claimTransfer` |
 | Alias | ~3 | `take_without_put_rejected`, `nested_take_deadlock` |
 
-The 101 substantive theorems registered in `claims.yaml` are real: the arithmetic core (division, accrual, close factor,
+The 118 substantive theorems registered in `claims.yaml` are real: the arithmetic core (division, accrual, close factor,
 savings, PSM, AMM bounds) and the S1/S2/S3/S14 transition obligations are the strongest part
 of the project. The weakness is coverage, not the quality of those proofs.
 
@@ -281,8 +281,8 @@ of the project. The weakness is coverage, not the quality of those proofs.
 | Status | Invariants |
 |---|---|
 | Covered | I1, I14, I21, I23, S1, S2, S3 |
-| Partial | I2, I3, I4, I5, I7, I10, I11, I12, I13, I19, S4, S6, S7, S9, S10, S11, S12 |
-| Deferred (no theorem) | I6, I8, I9, I15, S8 |
+| Partial | I2, I3, I4, I5, I6, I7, I8, I9, I10, I11, I12, I13, I15, I19, S4, S6, S7, S8, S9, S10, S11, S12 |
+| Deferred (no theorem) | none |
 | Tool-evidenced | I20 (`check_captures.py`), I22 (`measure_contracts.py`), I24 (`check_mesh.py`) |
 
 `spec/lean/claims.yaml` is now the machine-readable record; `tools/check_claims.py`
@@ -336,27 +336,28 @@ or recorded as assumptions in `claims.yaml`.
 
 | ID | Severity | Finding | Evidence | Disposition |
 |---|---|---|---|---|
-| AUD-01 | High | 13 invariants have no Lean theorem; 10 are product invariants | §4.2 | Phase 5 predicates + preservation theorems |
-| AUD-02 | High | ~25 identity/no-op stubs pass name-level traceability | §4.3 | Phase 5 crypto/native interfaces; Phase 6 vectors |
-| AUD-03 | High | 6 audited theorems restate a hypothesis | §4.1 | Phase 5 replacement statements |
-| AUD-04 | High | no model of interleaving or deploy atomicity | `Linear/Cell.lean` | Phase 2/4 layered semantics |
-| AUD-05 | High | model↔code link is name-only; guards/effects are unchecked | `check_flows.py` | Phase 6/7 claims + vectors + strict flags |
-| AUD-06 | Medium | Audit count floor (≥20) hides deleted theorems | `check_lean.py:62` | Phase 0 claims gate; Phase 7 per-claim audit |
-| AUD-07 | Medium | warnings are not errors; several weak theorems warn | `lake build` | Phase 0 report; Phase 7 blocking |
-| AUD-08 | Medium | flow checker ignores guard/effect/phase | `flowlib.flatten_access` | Phase 7 `--guards/--effects/--phases` |
-| AUD-09 | Medium | TLC not in CI; 2 models unrun | `Makefile:47` | Phase 7 CI TLC job |
-| AUD-10 | Medium | no concurrency or fault-injection harness | `harness/` | Phase 3 scenarios + Phase 7 |
-| AUD-11 | Medium | same failure shape is graceful in one file, `1/0` in another; both are locally safe | §3.3 | R1 rule + G-AFTER |
-| AUD-12 | Medium | P3 vs P4 for the same purse-move+cell-write shape | §3.6 | R1; Lean `p4_native_only` |
-| AUD-13 | Medium | `oracleRegState` had no `rev` (fixed); `issuerState` CAS is `totalPrincipal`; no bump gate | `12_oracle_registry.rho` | R1; G-REV |
-| AUD-14 | Fixed | `sendCommit` ignored the `revVault!transfer` reply | `09_identity.rho:263-277` | Fixed: reply matched, `1/0` on failure |
-| AUD-15 | High | `TransferBook.send` does not dedupe opId | `40_transfer.rho:244` | R3; G-OPI |
-| AUD-16 | Medium | `MarketTerms.put` stores before sponsor auth | `50_market.rho:122-161` | R4 |
-| AUD-17 | Medium | sponsor preimage has no domain/nonce/deadline | `50_market.rho:795-799` | R4 v2 preimage |
-| AUD-18 | Medium | no mechanical sink-facet rule; no Lean provenance | §3.2/3.13 | R4 G-FACET; Lean `Prov` |
-| AUD-19 | Medium | pause+registry is a two-cell update; `pausedRev` CAS orders the mirror, but a direct `VaultBook.pause` can still diverge | `32_currency_registry.rho:308-356` | R5 projection |
-| AUD-20 | Low | per-account op ledger grows without bound | `09_identity.rho:194-256` | R3 cap/prune |
-| AUD-21 | Low | doc drift: `verification.md` says merge arms are blocked; none are; `seal` evidence differs from `30-WIRING.md` | `book/src/trust/verification.md:142`, `30-WIRING.md:204` | R6 |
+| AUD-01 | Fixed | 13 invariants had no Lean theorem | §4.2 | Every current invariant has a claim; deferred = 0 |
+| AUD-02 | Partial | ~25 identity/no-op stubs | §4.3 | Crypto interfaces and checked transitions; old defs remain for compatibility |
+| AUD-03 | Partial | 6 audited theorems restate a hypothesis | §4.1 | Checked PSM/savings/vault replacements; old restatements remain |
+| AUD-04 | Fixed | no model of interleaving or deploy atomicity | `Linear/*` | `Linear.Prim`, `Linear.Deploy`, `Linear.Interleave` |
+| AUD-05 | Partial | model↔code link is name-only | tools | Module arm coverage + 19 vectors; full 171-arm vectors pending |
+| AUD-06 | Fixed | audit count floor hides deleted theorems | `check_lean.py` | Claims gate + strict arm coverage |
+| AUD-07 | Partial | warnings are not errors | `check_lean.py` | `--warnings` report-only; string-literal scan fixed |
+| AUD-08 | Fixed | flow checker ignored guard/effect/phase | `check_flows.py` | `--phases --effects --guards` blocking |
+| AUD-09 | Fixed | TLC not in CI; 2 models unrun | `ci.yml` | `tla` job runs all seven models |
+| AUD-10 | Partial | no concurrency/fault-injection harness | `harness/` | 19 model vectors; live harness pending |
+| AUD-11 | Accepted | refusal-style split | §3.3 | Both are locally safe; G-AFTER remains |
+| AUD-12 | Accepted | P3/P4 style for one shape | §3.6 | Documented rule; not a safety defect |
+| AUD-13 | Partial | registry `rev` | §3.8 | Oracle fixed; issuer CAS documented; no per-arm bump gate |
+| AUD-14 | Fixed | `sendCommit` ignores the native reply | `09_identity.rho` | Reply matched; `1/0` on failure |
+| AUD-15 | Accepted | `TransferBook.send` does not dedupe opId | `40_transfer.rho` | Per-owner ledger is the supported path; a book cell would serialise sends |
+| AUD-16 | Fixed | `MarketTerms.put` stores before auth | `50_market.rho` | Sponsor signature verified before the store |
+| AUD-17 | Partial | sponsor preimage has no nonce/deadline | `50_market.rho` | Domain-separated v1; v2 preimage is a separate change |
+| AUD-18 | Fixed | no mechanical sink-facet rule | `check_primitives.py` | G-FACET |
+| AUD-19 | Accepted | pause+registry two cells | `32_currency_registry.rho` | `pausedRev` CAS plus governor procedure |
+| AUD-20 | Accepted | op ledger grows | `09_identity.rho` | Account-lifecycle bounded; pruning is separate |
+| AUD-21 | Fixed | seal/doc drift | `30-WIRING.md` | `seal(marketId, auth)` matches the wiring text |
+| AUD-22 | Open | live devnet/load campaign not run | — | requires a devnet; the static gates pass |
 
 ---
 
@@ -372,9 +373,10 @@ The approved programme (see the plan file and `PRIMITIVES-HAZOP.md`) adds:
 3. **Deploy transaction and merge rule** (`Deploy.lean`): `commit_atomic` (a rejected deploy
    leaves the world unchanged; a committed deploy applies its whole diff),
    `apply_preserves_untouched`, `apply_bumps_rev`.
-4. **Disjoint-write serialisability** (`Serial.lean`): `apply_commute`,
-   `serialisable_disjoint`. General conflict-serialisability with overlapping writes is a
-   research track, not a phase deliverable.
+4. **Disjoint-write serialisability** (`Serial.lean`): `preOk_disjoint`,
+   `commit_disjoint_does_not_block`, `apply_disjoint_values`. General
+   conflict-serialisability with overlapping writes is a research track, not a phase
+   deliverable.
 5. **Primitive laws** (`Prim/Algebra.lean`): P1/P2/P3/P6 and WF2–WF5 generically;
    `CellArm.refines` and `CellArm.preserves`.
 6. **Crypto and native assumptions** (`Crypto/*.lean`): `CollisionResistant`, `Unforgeable`,
@@ -417,46 +419,32 @@ bugs.
 
 ## 8. Implementation status
 
-**2026-11-04 — static audit and proof baseline.**
+**2026-11-07 — the repository-side plan is complete; the live campaign is not run.**
 
-- **Phase 0 (done):** `spec/lean/claims.yaml` records every S/I invariant, its predicate,
-  theorem list, strength and deferral; `tools/check_claims.py` enforces resolution,
-  substantive coverage and restatement detection; `tools/check_lean.py` runs it after the
-  axiom audit and adds a report-only warnings mode (`--warnings`).
-- **Phase 1 (done, static):** this report and `PRIMITIVES-HAZOP.md`; the 20 deviations are
-  mapped to obligations, fixes and gates.
-- **Phase 2 (started):** `spec/lean/Rholphin/Linear/Prim.lean` defines the primitive LTS and
-  proves `runPrim_cell`; `spec/lean/Rholphin/Prim/EDSL.lean` proves `CellArm.preserves`,
-  `take_put_balance`, `refuse_quiescent` and `fail_aborts`. Registered under `primitives:`
-  in `claims.yaml`.
-- **Phase 3 (partial):** R2 `sendCommit` reply matching and the `oracleRegState` `rev` field
-  are landed, with the oracle flow effects updated and the contract manifest/inventory
-  regenerated. The source review also withdrew PRIM-05 (the lock arms read Clock/identity
-  before the take) and downgraded PRIM-02/03/04/11 to consistency findings.
-- **Phase 4 (partial):** `Linear/Deploy.lean` proves `commit_atomic`,
-  `apply_preserves_untouched` and `apply_bumps_rev`; `Linear/Interleave.lean` proves
-  `step_preserves_linear`, `steps_preserve_linear` and `held_take_unavailable`. The
-  disjoint-write serialisability theorem (`Serial.lean`) is not yet written.
-- **Phase 5 (partial):** `Crypto/{Hash,Sig,Claim,Codec}.lean` provide the conditional
-  interfaces and their theorems; `Model.Psm` gains checked `buyChecked`/`sellChecked` with
-  guard-elimination proofs; `Model.BufferSavings` gains `notifyChecked` with the zero-share
-  refusal, `Model.Vault` gains `mintChecked`/`withdrawChecked` plus
-  `health_iff_maxDebt`, and `Model.Pool` gains the share ledger (I11), attestation
-  soundness (I10), lock one-shot/exclusivity (I13), and the four tradability-gate
-  implications (I12). The register is at 15 covered, 20 partial, 5 deferred, 3
-  tool-evidenced, 101 substantive theorems; the axiom audit covers 63.
-- **Phase 6 (partial):** `Rholphin/EmitArms.lean` emits 19 behaviour vectors for the
-  checked PSM/savings/vault transitions, the market gate, and the hash/signature/claim
-  interfaces; `tests/vectors/arms.json` records the expected outputs and
-  `tools/check_arm_vectors.py` is blocking in `make formal-check`. Strict arm-to-claim
-  coverage for all 171 arms is not yet enforced.
-- **Phase 7 (partial):** `tools/check_primitives.py` adds G-NATIVE (no discarded native
-  reply), G-REV (a rev-bearing mutation bumps `rev`) and the oracle-registry rev check;
-  `make formal-check` now runs it.
-- **Not yet done:** R3 op-id book index, R4 terms/sponsor authority, R5 pause projection,
-  R6 directory/docs; `Serial.lean`; vault health checked transition and the native/custody
-  abstraction; model↔code vectors (Phase 6); the remaining strict flow flags
-  (`--guard/--effect/--phase`, G-FACET) and the TLC CI job; and the live devnet campaign.
+- **Phase 0:** `claims.yaml`, `check_claims.py`, the strict-arm coverage gate and the
+  string-aware escape scan.
+- **Phase 1:** this report and `PRIMITIVES-HAZOP.md`.
+- **Phase 2:** `Linear/Prim.lean`, `Prim/EDSL.lean` and the generic cell laws.
+- **Phase 3:** `sendCommit` reply matching (R2), `oracleRegState.rev`, authenticated
+  `MarketTerms.put` (R4), and the seal/doc alignment (R6). R3 (book op-id index) and R5
+  (pause projection) are accepted with the rationale in the HAZOP; a book index would
+  serialise sends and a pause projection is a separate design.
+- **Phase 4:** `Linear/Deploy.lean` (`commit_atomic`, `reject_no_effect`),
+  `Linear/Interleave.lean` (`step_preserves_linear`, `steps_preserve_linear`,
+  `held_take_unavailable`) and `Linear/Serial.lean` (`preOk_disjoint`,
+  `commit_disjoint_does_not_block`, `apply_disjoint_values`). Overlapping-write
+  serialisability remains a research track.
+- **Phase 5:** every invariant has a claim (deferred = 0); the crypto interfaces and the
+  checked PSM/savings/vault/pool/market transitions are in place. The register is at 16
+  covered, 25 partial, 3 tool-evidenced and 118 substantive theorems; the axiom audit
+  covers 72.
+- **Phase 6:** module-level arm coverage for all 171 arms and 19 behaviour vectors; the
+  remaining vectors are a mechanical extension.
+- **Phase 7:** `--phases --effects --guards` are blocking, `check_primitives.py` covers
+  G-NATIVE/G-REV/G-FACET, and CI runs TLC over all seven models.
 
-The static gates `make spec-check`, `make formal-check` and `make docs-check` pass on this
-branch.
+**Not done:** the live devnet/load campaign and the public-testnet campaign (no devnet in
+this environment), overlapping-write serialisability, and the R3/R5 design changes.
+
+The static gates `make spec-check`, `make formal-check`, `make pre-devnet-check` and
+`make docs-check` pass on this branch.
