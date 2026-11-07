@@ -20,7 +20,7 @@ components:
     transition: pool.PoolTemplate.create
     lean: Rholphin.Model.Pool.poolTemplate_create
     kind: mutate
-    source: {file: contracts/src/deploy/v3/51_pool.rho, line: 692}
+    source: {file: contracts/src/deploy/v3/51_pool.rho, line: 722}
     guards:
     - {id: terms, expr: termsHash = H(terms), refusal: {reason: terms fields, phase: pre}}
     - {id: base, expr: AssetResolver.issuer(base) ok, refusal: {reason: not base, phase: pre}}
@@ -52,7 +52,7 @@ components:
     transition: pool.FxPool.pair
     lean: Rholphin.Model.Pool.fxPool_pair
     kind: read
-    source: {file: contracts/src/deploy/v3/51_pool.rho, line: 245}
+    source: {file: contracts/src/deploy/v3/51_pool.rho, line: 251}
     guards: []
     effects:
     - {target: reply, formula: '(true, base, quote)'}
@@ -67,7 +67,7 @@ components:
     transition: pool.FxPool.reserves
     lean: Rholphin.Model.Pool.fxPool_reserves
     kind: read
-    source: {file: contracts/src/deploy/v3/51_pool.rho, line: 248}
+    source: {file: contracts/src/deploy/v3/51_pool.rho, line: 254}
     guards: []
     effects:
     - {target: reply, formula: '(true, {rb, rq, totalShares, seeded})'}
@@ -84,7 +84,7 @@ components:
     transition: pool.FxPool.balances
     lean: Rholphin.Model.Pool.fxPool_balances
     kind: read
-    source: {file: contracts/src/deploy/v3/51_pool.rho, line: 255}
+    source: {file: contracts/src/deploy/v3/51_pool.rho, line: 261}
     guards: []
     effects:
     - {target: reply, formula: '(true, basePurse.balance, quotePurse.balance)'}
@@ -100,7 +100,7 @@ components:
     transition: pool.FxPool.attest
     lean: Rholphin.Model.Pool.fxPool_attest
     kind: read
-    source: {file: contracts/src/deploy/v3/51_pool.rho, line: 263}
+    source: {file: contracts/src/deploy/v3/51_pool.rho, line: 269}
     guards: []
     effects:
     - {target: reply, formula: '(true, {marketId, termsHash, base, quote, rb, rq, totalShares, seeded})'}
@@ -118,7 +118,7 @@ components:
     transition: pool.FxPool.quote
     lean: Rholphin.Model.Pool.fxPool_quote
     kind: read
-    source: {file: contracts/src/deploy/v3/51_pool.rho, line: 277}
+    source: {file: contracts/src/deploy/v3/51_pool.rho, line: 283}
     guards:
     - {id: active, expr: market active, refusal: {reason: not active, phase: pre}}
     - {id: fresh, expr: fresh and rate > 0, refusal: {reason: stale feed, phase: pre}}
@@ -143,7 +143,7 @@ components:
     transition: pool.FxPool.swap
     lean: Rholphin.Model.Pool.fxPool_swap
     kind: mutate
-    source: {file: contracts/src/deploy/v3/51_pool.rho, line: 313}
+    source: {file: contracts/src/deploy/v3/51_pool.rho, line: 325}
     guards:
     - {id: active, expr: market active, refusal: {reason: not active, phase: pre}}
     - {id: fresh, expr: fresh and rate > 0, refusal: {reason: stale feed, phase: pre}}
@@ -185,7 +185,7 @@ components:
     transition: pool.FxPool.addLiquidity
     lean: Rholphin.Model.Pool.fxPool_addLiquidity
     kind: mutate
-    source: {file: contracts/src/deploy/v3/51_pool.rho, line: 422}
+    source: {file: contracts/src/deploy/v3/51_pool.rho, line: 449}
     guards:
     - {id: active, expr: market draft or active, refusal: {reason: not active, phase: pre}}
     - {id: fresh, expr: fresh and rate > 0, refusal: {reason: stale feed, phase: pre}}
@@ -231,7 +231,7 @@ components:
     transition: pool.FxPool.removeLiquidity
     lean: Rholphin.Model.Pool.fxPool_removeLiquidity
     kind: mutate
-    source: {file: contracts/src/deploy/v3/51_pool.rho, line: 472}
+    source: {file: contracts/src/deploy/v3/51_pool.rho, line: 502}
     guards:
     - {id: shares, expr: 0 < shares <= totalShares, refusal: {reason: shares, phase: pre}}
     - {id: slippage, expr: baseOut >= minBase and quoteOut >= minQuote, refusal: {reason: minimum, phase: pre}}
@@ -272,7 +272,7 @@ components:
     transition: pool.LiquidityLock.fund
     lean: Rholphin.Model.Pool.liquidityLock_fund
     kind: mutate
-    source: {file: contracts/src/deploy/v3/51_pool.rho, line: 544}
+    source: {file: contracts/src/deploy/v3/51_pool.rho, line: 574}
     guards:
     - {id: unfunded, expr: not funded, refusal: {reason: funded, phase: pre}}
     - {id: height, expr: untilHeight > 0, refusal: {reason: height, phase: pre}}
@@ -303,7 +303,7 @@ components:
     transition: pool.LiquidityLock.release
     lean: Rholphin.Model.Pool.liquidityLock_release
     kind: mutate
-    source: {file: contracts/src/deploy/v3/51_pool.rho, line: 583}
+    source: {file: contracts/src/deploy/v3/51_pool.rho, line: 613}
     guards:
     - {id: funded, expr: funded, refusal: {reason: unfunded, phase: pre}}
     - {id: open, expr: not released and not cancelled, refusal: {reason: closed, phase: pre}}
@@ -335,7 +335,7 @@ components:
     transition: pool.LiquidityLock.cancel
     lean: Rholphin.Model.Pool.liquidityLock_cancel
     kind: mutate
-    source: {file: contracts/src/deploy/v3/51_pool.rho, line: 621}
+    source: {file: contracts/src/deploy/v3/51_pool.rho, line: 651}
     guards:
     - {id: authorize, expr: 'Governor.authorize(liquidity-lock, nonce, cancel, marketId)', refusal: {reason: below threshold, phase: pre}}
     - {id: open, expr: funded and not released and not cancelled, refusal: {reason: closed, phase: pre}}
@@ -365,7 +365,7 @@ components:
     transition: pool.LiquidityLock.info
     lean: Rholphin.Model.Pool.liquidityLock_info
     kind: read
-    source: {file: contracts/src/deploy/v3/51_pool.rho, line: 665}
+    source: {file: contracts/src/deploy/v3/51_pool.rho, line: 695}
     guards: []
     effects:
     - {target: reply, formula: '(true, {marketId, funded, released, cancelled, untilHeight, beneficiary, funder, shares})'}

@@ -311,29 +311,12 @@ in {
   } |
 
   contract vaultUpdate(@s, @ownerId, @vault, @td, @ti, @tc, @bd, @rev, ret2) = {
-    match s.get("vaults").set(ownerId, vault) {
-      vaults => {
-        match s.set("vaults", vaults) {
-          s1 => {
-            match s1.set("totalDebt", td) {
-              s2 => {
-                match s2.set("totalAccruedInterest", ti) {
-                  s3 => {
-                    match s3.set("totalCollateral", tc) {
-                      s4 => {
-                        match s4.set("badDebt", bd) {
-                          s5 => { ret2!(s5.set("rev", rev)) }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
+    ret2!(s.set("vaults", s.get("vaults").set(ownerId, vault))
+           .set("totalDebt", td)
+           .set("totalAccruedInterest", ti)
+           .set("totalCollateral", tc)
+           .set("badDebt", bd)
+           .set("rev", rev))
   } |
 
   // Write-off commit: book the cumulative badDebt memo, add the shortfall to
@@ -878,8 +861,8 @@ in {
         for (@ex <- eCh) {
           match ex {
             (true, action, argsHash, args) => {
-              if (action != "setRiskParams") { ret2!((false, "action")) }
-              else {
+              match action {
+              "setRiskParams" => {
                 paramsValues!(currency, args, *pvCh) |
                 for (@values <- pvCh) {
                   vaultCodec!(*codecCh) |
@@ -912,6 +895,8 @@ in {
                   }
                 }
               }
+              _ => { ret2!((false, "action")) }
+            }
             }
             _ => { ret2!(ex) }
           }
@@ -1093,6 +1078,7 @@ in {
                           }
                         }
                       }
+                      _ => { ret2!(1 / 0) }
                     }
                   }
                 }
@@ -1176,6 +1162,7 @@ in {
                           }
                         }
                       }
+                      _ => { ret2!(1 / 0) }
                     }
                   }
                 }
@@ -1327,6 +1314,7 @@ in {
                                 }
                               }
                             }
+                      _ => { ret2!(1 / 0) }
                           }
                         }
                       }
@@ -1376,6 +1364,7 @@ in {
                     }
                   }
                 }
+                      _ => { ret2!(1 / 0) }
               }
             }
           }
@@ -1793,8 +1782,8 @@ in {
         for (@ex <- eCh) {
           match ex {
             (true, action, argsHash, args) => {
-              if (action != "setSavingsShare") { ret2!((false, "action")) }
-              else {
+              match action {
+              "setSavingsShare" => {
                 if (args < 0 || args > 10000) { ret2!((false, "bps")) }
                 else {
                   if (argsHash != args.toString()) { ret2!((false, "params hash")) }
@@ -1807,6 +1796,8 @@ in {
                   }
                 }
               }
+              _ => { ret2!((false, "action")) }
+            }
             }
             _ => { ret2!(ex) }
           }
@@ -1880,6 +1871,7 @@ in {
                       }
                     }
                   }
+                      _ => { ret2!(1 / 0) }
                 }
               }
             }
@@ -1929,6 +1921,7 @@ in {
                         }
                       }
                     }
+                      _ => { ret2!(1 / 0) }
                   }
                 }
               }
@@ -1971,8 +1964,8 @@ in {
         for (@ex <- eCh) {
           match ex {
             (true, action, argsHash, args) => {
-              if (action != "setPsmPolicy") { ret2!((false, "action")) }
-              else {
+              match action {
+              "setPsmPolicy" => {
                 match (args.get("feeBps")) {
                   feeBps => {
                     match (args.get("ceiling")) {
@@ -2002,6 +1995,8 @@ in {
                   }
                 }
               }
+              _ => { ret2!((false, "action")) }
+            }
             }
             _ => { ret2!(ex) }
           }

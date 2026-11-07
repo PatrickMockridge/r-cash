@@ -27,7 +27,7 @@ in {
                 match s2.get("accounts").get(ownerId) {
                   Nil => {
                     new proof, account, PurseStore, purseState, accountState, AccountGate,
-                        reserveSend, finishSend, dropReserve, sendCommit in {
+                        reserveSend, reserveNew, finishSend, dropReserve, sendCommit in {
 
                       contract AccountGate(@"verify", dId, ret2) = {
                         new pkCh, aCh in {
@@ -189,38 +189,51 @@ in {
                       purseState!({"purses": {}, "rev": 0}) |
                       accountState!({"nextTransferId": 0, "ops": {}, "rev": 0}) |
 
+                      // Store a fresh reservation. A dropped reservation is
+                      // deliberately re-usable, so both "absent" and "dropped"
+                      // reach this helper and overwrite the entry with a new id.
+                      contract reserveNew(@as, @opId, ret2) = {
+                        match as.get("nextTransferId") { id => {
+                          new nextCh in {
+                            match opId {
+                              "" => {
+                                nextCh!(as.set("nextTransferId", id + 1)
+                                  .set("rev", as.get("rev") + 1))
+                              }
+                              _ => {
+                                nextCh!(as.set("nextTransferId", id + 1)
+                                  .set("ops", as.get("ops").set(opId, {"id": id}))
+                                  .set("rev", as.get("rev") + 1))
+                              }
+                            } |
+                            for (@nxt <- nextCh) {
+                              accountState!(nxt) | ret2!((true, id))
+                            }
+                          }
+                        } }
+                      } |
+
                       // Reserve an opId before any funds move: a completed entry is
-                      // replayed, a pending entry is refused, a new one is stored.
+                      // replayed, a pending entry is refused, a new or dropped one
+                      // is reserved.
                       contract reserveSend(@opId, ret2) = {
                         for (@as <- accountState) {
                           match as.get("ops").get(opId) {
-                            Nil => {
-                              match as.get("nextTransferId") { id => {
-                                new nextCh in {
-                                  match opId {
-                                    "" => {
-                                      nextCh!(as.set("nextTransferId", id + 1)
-                                        .set("rev", as.get("rev") + 1))
-                                    }
-                                    _ => {
-                                      nextCh!(as.set("nextTransferId", id + 1)
-                                        .set("ops", as.get("ops").set(opId, {"id": id}))
-                                        .set("rev", as.get("rev") + 1))
-                                    }
-                                  } |
-                                  for (@nxt <- nextCh) {
-                                    accountState!(nxt) | ret2!((true, id))
-                                  }
-                                }
-                              } }
-                            }
+                            Nil => { reserveNew!(as, opId, *ret2) }
                             entry => {
-                              match entry.get("uri") {
-                                Nil => {
-                                  accountState!(as) | ret2!((false, "pending", entry.get("id")))
-                                }
-                                uri => {
-                                  accountState!(as) | ret2!((true, entry.get("id"), uri))
+                              match entry.get("dropped") {
+                                true => { reserveNew!(as, opId, *ret2) }
+                                _ => {
+                                  match entry.get("uri") {
+                                    Nil => {
+                                      accountState!(as) |
+                                      ret2!((false, "pending", entry.get("id")))
+                                    }
+                                    uri => {
+                                      accountState!(as) |
+                                      ret2!((true, entry.get("id"), uri))
+                                    }
+                                  }
                                 }
                               }
                             }
@@ -247,7 +260,8 @@ in {
                           "" => { ret2!((true, Nil)) }
                           _ => {
                             for (@as <- accountState) {
-                              accountState!(as.set("ops", as.get("ops").set(opId, Nil))
+                              accountState!(as.set("ops",
+                                as.get("ops").set(opId, {"dropped": true}))
                                 .set("rev", as.get("rev") + 1)) |
                               ret2!((true, Nil))
                             }
@@ -370,7 +384,9 @@ in {
                                                       rl!(`__ROOT_URI__`, *rCh) |
                                                       for (Root <- rCh) {
                                                         Root!("resolve", "component:transfer-book", 1, *bCh) |
-                                                        for (@(true, bookUri, _) <- bCh) {
+                                                        for (@__reply2 <- bCh) {
+  match __reply2 {
+    (true, bookUri, _) => {
                                                           new bc in {
                                                             rl!(bookUri, *bc) |
                                                             for (TransferBook <- bc) {
@@ -403,6 +419,10 @@ in {
                                                             }
                                                           }
                                                         }
+    (false, __why) => { ret2!(1 / 0) }
+    _ => { ret2!(1 / 0) }
+  }
+}
                                                       }
                                                     }
                                                   }

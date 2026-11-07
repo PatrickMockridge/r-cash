@@ -27,12 +27,18 @@ in {
       rl!(`__ROOT_URI__`, *rCh) |
       for (Root <- rCh) {
         Root!("resolve", "component:clock", 1, *cCh) |
-        for (@(true, clockUri, _) <- cCh) {
+        for (@__reply43 <- cCh) {
+  match __reply43 {
+    (true, clockUri, _) => {
           new cc in {
             rl!(clockUri, *cc) |
             for (Clock <- cc) { Clock!("now", *ret) }
           }
         }
+    (false, __why) => { ret!(1 / 0) }
+    _ => { ret!(1 / 0) }
+  }
+}
       }
     }
   } |
@@ -42,12 +48,18 @@ in {
       rl!(`__ROOT_URI__`, *rCh) |
       for (Root <- rCh) {
         Root!("resolve", "component:verifier", 1, *vCh) |
-        for (@(true, verUri, _) <- vCh) {
+        for (@__reply42 <- vCh) {
+  match __reply42 {
+    (true, verUri, _) => {
           new vc in {
             rl!(verUri, *vc) |
             for (Verifier <- vc) { ret!(*Verifier) }
           }
         }
+    (false, __why) => { ret!(1 / 0) }
+    _ => { ret!(1 / 0) }
+  }
+}
       }
     }
   } |
@@ -57,12 +69,18 @@ in {
       rl!(`__ROOT_URI__`, *rCh) |
       for (Root <- rCh) {
         Root!("resolve", "component:oracle-registry", 1, *hCh) |
-        for (@(true, hubUri, _) <- hCh) {
+        for (@__reply41 <- hCh) {
+  match __reply41 {
+    (true, hubUri, _) => {
           new hc in {
             rl!(hubUri, *hc) |
             for (OracleRegistry <- hc) { ret!(*OracleRegistry) }
           }
         }
+    (false, __why) => { ret!(1 / 0) }
+    _ => { ret!(1 / 0) }
+  }
+}
       }
     }
   } |
@@ -104,18 +122,13 @@ in {
   } |
 
   contract marketTransition(@from, @to, ret) = {
-    if (from == "active") {
-      if (to == "paused" || to == "delisted") { ret!(true) }
-      else { ret!(false) }
-    } else {
-      if (from == "paused") {
-        if (to == "active" || to == "delisted") { ret!(true) }
-        else { ret!(false) }
-      } else {
-        if (from == "draft") {
-          if (to == "delisted") { ret!(true) } else { ret!(false) }
-        } else { ret!(false) }
-      }
+    match (from, to) {
+      ("active", "paused") => { ret!((true, Nil)) }
+      ("active", "delisted") => { ret!((true, Nil)) }
+      ("paused", "active") => { ret!((true, Nil)) }
+      ("paused", "delisted") => { ret!((true, Nil)) }
+      ("draft", "delisted") => { ret!((true, Nil)) }
+      _ => { ret!((false, "transition")) }
     }
   } |
 
@@ -289,8 +302,9 @@ in {
                                               match s2.get("markets").get(marketId) {
                                                 Nil => { ret!(1 / 0) }
                                                 r2 => {
-                                                  if (r2.get("status") != "draft") { ret!(1 / 0) }
-                                                  else {
+                                                  match r2.get("status") {
+        "draft" => { ret!(1 / 0) }
+        _ => {
                                                     new goCh in {
                                                       match s2.get("byPair").get(record.get("pairKey")) {
                                                         Nil => { goCh!(true) }
@@ -326,6 +340,7 @@ in {
                                                       }
                                                     }
                                                   }
+      }
                                                 }
                                               }
                                             }
@@ -447,8 +462,9 @@ in {
       match s.get("markets").get(marketId) {
         Nil => { ret!((false, "no market")) }
         record => {
-          if (record.get("status") != "draft") { ret!((false, "not draft")) }
-          else {
+          match record.get("status") {
+        "draft" => { ret!((false, "not draft")) }
+        _ => {
             new dCh, tCh, pCh, aCh, lCh, iCh in {
               MarketDirectory!("byId", marketId, *dCh) |
               MarketTerms!("get", record.get("termsHash"), *tCh) |
@@ -489,6 +505,7 @@ in {
               }
             }
           }
+      }
         }
       }
     }
@@ -536,7 +553,9 @@ in {
       rl!(`__ROOT_URI__`, *gCh) |
       for (Root <- gCh) {
         Root!("resolve", "component:governor", 1, *vCh) |
-        for (@(true, govUri, _) <- vCh) {
+        for (@__reply40 <- vCh) {
+  match __reply40 {
+    (true, govUri, _) => {
           new gc in {
             rl!(govUri, *gc) |
             for (Governor <- gc) {
@@ -551,13 +570,17 @@ in {
                         record => {
                           marketTransition!(record.get("status"), status, *tCh) |
                           for (@ok <- tCh) {
-                            if (ok == false) {
-                              indexState!(s) | ret!((false, "transition"))
-                            } else {
-                              indexState!(s.set("markets",
-                                s.get("markets").set(marketId, record.set("status", status)))
-                                .set("rev", s.get("rev") + 1)) |
-                              ret!((true, status))
+                            match ok {
+                              (true, Nil) => {
+                                indexState!(s.set("markets",
+                                  s.get("markets").set(marketId, record.set("status", status)))
+                                  .set("rev", s.get("rev") + 1)) |
+                                ret!((true, status))
+                              }
+                              (false, why) => {
+                                indexState!(s) | ret!((false, why))
+                              }
+                              _ => { indexState!(s) | ret!(1 / 0) }
                             }
                           }
                         }
@@ -570,6 +593,10 @@ in {
             }
           }
         }
+    (false, __why) => { ret!(1 / 0) }
+    _ => { ret!(1 / 0) }
+  }
+}
       }
     }
   } |
@@ -580,7 +607,9 @@ in {
       rl!(`__ROOT_URI__`, *rootCh) |
       for (Root <- rootCh) {
         Root!("resolve", "component:governor", 1, *resolveCh) |
-        for (@(true, govUri, _) <- resolveCh) {
+        for (@__reply39 <- resolveCh) {
+  match __reply39 {
+    (true, govUri, _) => {
           rl!(govUri, *gcCh) |
           for (Governor <- gcCh) {
             Governor!("authorize", "market-index", nonce, "pauseAsset", code, sigs, *replyCh) |
@@ -602,14 +631,19 @@ in {
             }
           }
         }
+    (false, __why) => { ret!(1 / 0) }
+    _ => { ret!(1 / 0) }
+  }
+}
       }
     }
   } |
 
   contract TradabilityGate(@"admit", @status, @fresh, @inputValue, @poolValue,
                            @terms, ret) = {
-    if (status != "active") { ret!((false, "not active")) }
-    else {
+    match status {
+        "active" => { ret!((false, "not active")) }
+        _ => {
       if (fresh == false) { ret!((false, "stale")) }
       else {
         if (inputValue < terms.get("minTicketQuote")) { ret!((false, "min ticket")) }
@@ -620,6 +654,7 @@ in {
         }
       }
     }
+      }
   } |
 
   contract ListingViews(@"marketFor", @base, @quote, ret) = {
@@ -627,7 +662,9 @@ in {
       rl!(`__ROOT_URI__`, *rCh) |
       for (Root <- rCh) {
         Root!("resolve", "component:market-index", 1, *iCh) |
-        for (@(true, indexUri, _) <- iCh) {
+        for (@__reply38 <- iCh) {
+  match __reply38 {
+    (true, indexUri, _) => {
           new ic in {
             rl!(indexUri, *ic) |
             for (MarketIndex <- ic) {
@@ -635,6 +672,10 @@ in {
             }
           }
         }
+    (false, __why) => { ret!(1 / 0) }
+    _ => { ret!(1 / 0) }
+  }
+}
       }
     }
   } |
@@ -644,12 +685,18 @@ in {
       rl!(`__ROOT_URI__`, *rCh) |
       for (Root <- rCh) {
         Root!("resolve", "component:market-index", 1, *iCh) |
-        for (@(true, indexUri, _) <- iCh) {
+        for (@__reply37 <- iCh) {
+  match __reply37 {
+    (true, indexUri, _) => {
           new ic in {
             rl!(indexUri, *ic) |
             for (MarketIndex <- ic) { MarketIndex!("market", marketId, *ret) }
           }
         }
+    (false, __why) => { ret!(1 / 0) }
+    _ => { ret!(1 / 0) }
+  }
+}
       }
     }
   } |
@@ -659,7 +706,9 @@ in {
       rl!(`__ROOT_URI__`, *rCh) |
       for (Root <- rCh) {
         Root!("resolve", "component:market-index", 1, *iCh) |
-        for (@(true, indexUri, _) <- iCh) {
+        for (@__reply36 <- iCh) {
+  match __reply36 {
+    (true, indexUri, _) => {
           new ic in {
             rl!(indexUri, *ic) |
             for (MarketIndex <- ic) {
@@ -673,6 +722,10 @@ in {
             }
           }
         }
+    (false, __why) => { ret!(1 / 0) }
+    _ => { ret!(1 / 0) }
+  }
+}
       }
     }
   } |
@@ -682,12 +735,18 @@ in {
       rl!(`__ROOT_URI__`, *rCh) |
       for (Root <- rCh) {
         Root!("resolve", "component:market-terms", 1, *iCh) |
-        for (@(true, termsUri, _) <- iCh) {
+        for (@__reply35 <- iCh) {
+  match __reply35 {
+    (true, termsUri, _) => {
           new tc in {
             rl!(termsUri, *tc) |
             for (MarketTerms <- tc) { MarketTerms!("get", termsHash, *ret) }
           }
         }
+    (false, __why) => { ret!(1 / 0) }
+    _ => { ret!(1 / 0) }
+  }
+}
       }
     }
   } |
@@ -697,12 +756,18 @@ in {
       rl!(`__ROOT_URI__`, *rCh) |
       for (Root <- rCh) {
         Root!("resolve", "component:currency-registry", 1, *iCh) |
-        for (@(true, regUri, _) <- iCh) {
+        for (@__reply34 <- iCh) {
+  match __reply34 {
+    (true, regUri, _) => {
           new rc in {
             rl!(regUri, *rc) |
             for (CurrencyRegistry <- rc) { CurrencyRegistry!("currency", code, *ret) }
           }
         }
+    (false, __why) => { ret!(1 / 0) }
+    _ => { ret!(1 / 0) }
+  }
+}
       }
     }
   } |
@@ -712,12 +777,18 @@ in {
       rl!(`__ROOT_URI__`, *rCh) |
       for (Root <- rCh) {
         Root!("resolve", "component:currency-registry", 1, *iCh) |
-        for (@(true, regUri, _) <- iCh) {
+        for (@__reply33 <- iCh) {
+  match __reply33 {
+    (true, regUri, _) => {
           new rc in {
             rl!(regUri, *rc) |
             for (CurrencyRegistry <- rc) { CurrencyRegistry!("currencies", *ret) }
           }
         }
+    (false, __why) => { ret!(1 / 0) }
+    _ => { ret!(1 / 0) }
+  }
+}
       }
     }
   } |
@@ -727,12 +798,18 @@ in {
       rl!(`__ROOT_URI__`, *rCh) |
       for (Root <- rCh) {
         Root!("resolve", "component:market-index", 1, *iCh) |
-        for (@(true, indexUri, _) <- iCh) {
+        for (@__reply32 <- iCh) {
+  match __reply32 {
+    (true, indexUri, _) => {
           new ic in {
             rl!(indexUri, *ic) |
             for (MarketIndex <- ic) { MarketIndex!("markets", *ret) }
           }
         }
+    (false, __why) => { ret!(1 / 0) }
+    _ => { ret!(1 / 0) }
+  }
+}
       }
     }
   } |
@@ -745,7 +822,9 @@ in {
       rl!(`__ROOT_URI__`, *tCh) |
       for (Root <- tCh) {
         Root!("resolve", "component:pool-template", 1, *trCh) |
-        for (@(true, tplUri, _) <- trCh) {
+        for (@__reply31 <- trCh) {
+  match __reply31 {
+    (true, tplUri, _) => {
           rl!(tplUri, *tc) |
           for (PoolTemplate <- tc) {
             PoolTemplate!("create", terms, termsHash, *pcCh) |
@@ -780,9 +859,9 @@ in {
                         }
                       }
                       (false, "exists", existing) => {
-                        // A concurrent create won the slot. Same terms is an
-                        // idempotent success; a different slot is refused
-                        // without touching the winner.
+                                                                             
+                                                                          
+                                                       
                         if (existing.get("termsHash") == termsHash) {
                           ret!((true, terms.get("marketId"),
                                 existing.get("poolUri"),
@@ -798,6 +877,10 @@ in {
             }
           }
         }
+    (false, __why) => { ret!(1 / 0) }
+    _ => { ret!(1 / 0) }
+  }
+}
       }
     }
   } |

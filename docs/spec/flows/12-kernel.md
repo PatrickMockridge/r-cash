@@ -98,8 +98,8 @@ stateDiagram-v2
 | `AmmMath@"weight"` | `kernel.AmmMath.weight` | read | — | reply = 5000 if value <= 0 else floor(floor(rb*rate/1e8)*10000 / value) | — | — | I12 | verified | contracts/src/deploy/v3/05_amm_math.rho:16 |
 | `AmmMath@"fee"` | `kernel.AmmMath.fee` | read | — | reply = baseSpread + floor(abs(weight - 5000) * skewSpread / 5000) | — | — | I12 | verified | contracts/src/deploy/v3/05_amm_math.rho:30 |
 | `AmmMath@"out"` | `kernel.AmmMath.out` | read | — | reply = b2q: floor(floor(dx*rate/1e8) * (10000-fee)/10000); q2b: -1 if rate <= 0 else floor(floor(dx*1e8/rate) * (10000-fee)/10000) | — | — | I12 | verified | contracts/src/deploy/v3/05_amm_math.rho:42 |
-| `AmmMath@"shares"` | `kernel.AmmMath.shares` | read | — | reply = first: depositValue - 1e8; else 0 if totalShares<=0 or poolValue<=0; else floor(depositValue*totalShares/poolValue) | — | — | I11 | verified | contracts/src/deploy/v3/05_amm_math.rho:65 |
-| `AmmMath@"inputValue"` | `kernel.AmmMath.inputValue` | read | — | reply = floor(amount*rate/1e8) if base; amount if quote; -1 | — | — | I12 | verified | contracts/src/deploy/v3/05_amm_math.rho:77 |
+| `AmmMath@"shares"` | `kernel.AmmMath.shares` | read | — | reply = first: depositValue - 1e8; else 0 if totalShares<=0 or poolValue<=0; else floor(depositValue*totalShares/poolValue) | — | — | I11 | verified | contracts/src/deploy/v3/05_amm_math.rho:56 |
+| `AmmMath@"inputValue"` | `kernel.AmmMath.inputValue` | read | — | reply = floor(amount*rate/1e8) if base; amount if quote; -1 | — | — | I12 | verified | contracts/src/deploy/v3/05_amm_math.rho:68 |
 
 ### CollateralMath
 

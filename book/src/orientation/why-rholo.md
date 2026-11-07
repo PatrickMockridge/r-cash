@@ -92,6 +92,8 @@ platform behaviour:
 - A deploy term is at most 65,536 bytes; the parser depth is 128.
 - A failed deploy rolls back tuple space and native state.
 - An unmatched `for` is silent, so every arm must reply or be deliberately fire-and-forget.
+  The same is true of `match`: a value that matches no arm becomes the empty process. Both
+  are partial pattern languages, and every open domain needs an explicit total arm.
 - BigInt intermediates need `.toInt()` at fixed-point boundaries.
 - Rholang has no built-in decimal type: the exact decimal added in October 2026 was removed
   before mainnet (issue #527). R-Cash never used it; every amount is an 8-decimal integer count

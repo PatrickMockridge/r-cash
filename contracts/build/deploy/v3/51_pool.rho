@@ -32,8 +32,9 @@ in {
       poolStatus!(marketId, *r) |
       for (@x <- r) {
         match x {
-          (true, record) => { ret!(record.get("status") == "active") }
-          _ => { ret!(false) }
+          (true, record) => { ret!((true, record.get("status") == "active")) }
+          (false, why) => { ret!((false, why)) }
+          _ => { ret!(1 / 0) }
         }
       }
     }
@@ -48,12 +49,13 @@ in {
         match x {
           (true, record) => {
             match record.get("status") {
-              "draft" => { ret!(true) }
-              "active" => { ret!(true) }
-              _ => { ret!(false) }
+              "draft" => { ret!((true, true)) }
+              "active" => { ret!((true, true)) }
+              _ => { ret!((true, false)) }
             }
           }
-          _ => { ret!(false) }
+          (false, why) => { ret!((false, why)) }
+          _ => { ret!(1 / 0) }
         }
       }
     }
@@ -96,8 +98,12 @@ in {
               OracleHub!("getPair", base, quote, maxAge, *rrCh) |
               for (@rr <- rrCh) {
                 match rr {
-                  (true, m) => { ret!((m.get("rate"), m.get("fresh"))) }
-                  _ => { ret!((0, false)) }
+                  (true, m) => {
+                    if (m.get("fresh")) { ret!((true, m.get("rate"))) }
+                    else { ret!((false, "stale feed")) }
+                  }
+                  (false, why) => { ret!((false, why)) }
+                  _ => { ret!(1 / 0) }
                 }
               }
             }
@@ -281,11 +287,11 @@ in {
         poolActive!(terms.get("marketId"), *activeCh) |
         for (@rr <- rateCh; @active <- activeCh) {
           match rr {
-            (rate, fresh) => {
-              if (active == false) { ret2!((false, "not active")) }
-              else {
-                if (fresh == false || rate <= 0) { ret2!((false, "stale feed")) }
-                else {
+            (true, rate) => {
+              match active {
+                (true, true) => {
+                  if (rate <= 0) { ret2!((false, "stale feed")) }
+                  else {
                 for (@s <<- poolState) {
                   new mCh in { poolAmmMath!(*mCh) | for (AmmMath <- mCh) { new wCh, fCh in {
                     AmmMath!("weight", s.get("rb"), s.get("rq"), rate, *wCh) |
@@ -304,8 +310,14 @@ in {
                   } } }
                 }
               }
+                }
+                (true, false) => { ret2!((false, "not active")) }
+                (false, why) => { ret2!((false, why)) }
+                _ => { ret2!(1 / 0) }
+              }
             }
-            }
+            (false, why) => { ret2!((false, why)) }
+            _ => { ret2!(1 / 0) }
           }
         }
       }
@@ -318,20 +330,20 @@ in {
           poolActive!(terms.get("marketId"), *activeCh) |
           for (@rr <- rateCh; @active <- activeCh) {
             match rr {
-              (rate, fresh) => {
-                if (active == false) {
-                  ret2!((false, "not active", *inputPayment))
-                }
-                else {
-                  if (fresh == false || rate <= 0) {
-                    ret2!((false, "stale feed", *inputPayment))
-                  } else {
+            (true, rate) => {
+              match active {
+                (true, true) => {
+                  if (rate <= 0) { ret2!((false, "stale feed", *inputPayment)) }
+                  else {
                     new mCh in { poolAmmMath!(*mCh) | for (AmmMath <- mCh) { new amtCh, wCh, fCh, o2Ch, poolValCh in {
-                      if (dir == "b2q") {
+                      match dir {
+  "b2q" => {
                         @baseIssuer!("getAmountOf", *inputPayment, *amtCh)
-                      } else {
+                      }
+  _ => {
                         @quoteIssuer!("getAmountOf", *inputPayment, *amtCh)
-                      } |
+                      }
+} |
                       for (@am <- amtCh) {
                         match am {
                           (true, amount) => {
@@ -345,9 +357,12 @@ in {
                                   AmmMath!("out", dir, amount, rate, fee, *o2Ch) |
                                   for (@out <- o2Ch) {
                                     new inValueCh in {
-                                      if (dir == "b2q") {
+                                      match dir {
+  "b2q" => {
                                         match ((amount * rate) / 100000000).toInt() { v => inValueCh!(v) }
-                                      } else { inValueCh!(amount) } |
+                                      }
+  _ => { inValueCh!(amount) }
+} |
                                       for (@inValue <- inValueCh) {
                                         if (out <= 0 || out < minOut) {
                                           ret2!((false, "output", *inputPayment))
@@ -362,27 +377,33 @@ in {
                                                       poolState!(s2) | ret2!((false, "conflict", *inputPayment))
                                                     } else {
                                                       new depCh, wdCh in {
-                                                        if (dir == "b2q") {
+                                                        match dir {
+  "b2q" => {
                                                           @basePurse!("deposit", *inputPayment, *depCh) |
                                                           @quotePurse!("withdraw", (quoteBrand, out), *wdCh)
-                                                        } else {
+                                                        }
+  _ => {
                                                           @quotePurse!("deposit", *inputPayment, *depCh) |
                                                           @basePurse!("withdraw", (baseBrand, out), *wdCh)
-                                                        } |
+                                                        }
+} |
                                                         for (@d <- depCh; @w2 <- wdCh) {
                                                           match d {
                                                             (true, _) => {
                                                               match w2 {
                                                                 (true, outPayment) => {
-                                                                  if (dir == "b2q") {
+                                                                  match dir {
+  "b2q" => {
                                                                     poolState!(s2.set("rb", s2.get("rb") + amount)
                                                                                  .set("rq", s2.get("rq") - out)
                                                                                  .set("rev", s2.get("rev") + 1))
-                                                                  } else {
+                                                                  }
+  _ => {
                                                                     poolState!(s2.set("rb", s2.get("rb") - out)
                                                                                  .set("rq", s2.get("rq") + amount)
                                                                                  .set("rev", s2.get("rev") + 1))
-                                                                  } |
+                                                                  }
+} |
                                                                   ret2!((true, outPayment, out))
                                                                 }
                                                                 _ => { ret2!(1 / 0) }
@@ -413,8 +434,14 @@ in {
                     } } }
                   }
                 }
+                (true, false) => { ret2!((false, "not active", *inputPayment)) }
+                (false, why) => { ret2!((false, why, *inputPayment)) }
+                _ => { ret2!(1 / 0) }
               }
             }
+            (false, why) => { ret2!((false, why, *inputPayment)) }
+            _ => { ret2!(1 / 0) }
+          }
           }
         }
       }
@@ -427,14 +454,11 @@ in {
           poolOpen!(terms.get("marketId"), *activeCh) |
           for (@rr <- rateCh; @active <- activeCh) {
             match rr {
-              (rate, fresh) => {
-                if (active == false) {
-                  ret2!((false, "not active", *basePayment, *quotePayment))
-                }
-                else {
-                  if (fresh == false || rate <= 0) {
-                    ret2!((false, "stale feed", *basePayment, *quotePayment))
-                  } else {
+            (true, rate) => {
+              match active {
+                (true, true) => {
+                  if (rate <= 0) { ret2!((false, "stale feed", *basePayment, *quotePayment)) }
+                  else {
                     new bAmtCh, qAmtCh in {
                       @baseIssuer!("getAmountOf", *basePayment, *bAmtCh) |
                       @quoteIssuer!("getAmountOf", *quotePayment, *qAmtCh) |
@@ -462,8 +486,14 @@ in {
                     }
                   }
                 }
+                (true, false) => { ret2!((false, "not active", *basePayment, *quotePayment)) }
+                (false, why) => { ret2!((false, why, *basePayment, *quotePayment)) }
+                _ => { ret2!(1 / 0) }
               }
             }
+            (false, why) => { ret2!((false, why, *basePayment, *quotePayment)) }
+            _ => { ret2!(1 / 0) }
+          }
           }
         }
       }

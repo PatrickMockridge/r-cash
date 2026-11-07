@@ -18,12 +18,18 @@ in {
       rl!(`__ROOT_URI__`, *rCh) |
       for (Root <- rCh) {
         Root!("resolve", "component:clock", 1, *cCh) |
-        for (@(true, clockUri, v) <- cCh) {
+        for (@__reply12 <- cCh) {
+  match __reply12 {
+    (true, clockUri, v) => {
           new ccCh in {
             rl!(clockUri, *ccCh) |
             for (Clock <- ccCh) { Clock!("now", *ret) }
           }
         }
+    (false, __why) => { ret!(1 / 0) }
+    _ => { ret!(1 / 0) }
+  }
+}
       }
     }
   } |
@@ -36,20 +42,10 @@ in {
   } |
 
   contract feedStore(@s, @index, @price, @height, @seenKey, ret) = {
-    match s.get("prices").set(index, {"price": price, "height": height}) {
-      prices => {
-        match s.set("prices", prices) {
-          s1 => {
-            match s1.set(seenKey, true) {
-              s2 => {
-                ret!(s2.set("trialSubmits", s2.get("trialSubmits") + 1)
-                      .set("rev", s2.get("rev") + 1))
-              }
-            }
-          }
-        }
-      }
-    }
+    ret!(s.set("prices", s.get("prices").set(index, {"price": price, "height": height}))
+          .set(seenKey, true)
+          .set("trialSubmits", s.get("trialSubmits") + 1)
+          .set("rev", s.get("rev") + 1))
   } |
 
   contract feedCountSeen(@s, ret) = {
@@ -69,17 +65,19 @@ in {
         new a, b, c in {
           feedSlot!(s, 0, *a) | feedSlot!(s, 1, *b) | feedSlot!(s, 2, *c) |
           for (@x0 <- a; @x1 <- b; @x2 <- c) {
-            match x0 {
+            match x0 { // match-total: feedSlot returns a (price, height) pair
               (p0, h0) => {
-                match x1 {
+                match x1 { // match-total: feedSlot returns a (price, height) pair
                   (p1, h1) => {
-                    match x2 {
+                    match x2 { // match-total: feedSlot returns a (price, height) pair
                       (p2, h2) => {
                         new rCh, omCh, mCh in {
                           rl!(`__ROOT_URI__`, *rCh) |
                           for (Root <- rCh) {
                             Root!("resolve", "component:oracle-math", 1, *omCh) |
-                            for (@(true, omUri, v) <- omCh) {
+                            for (@__reply11 <- omCh) {
+  match __reply11 {
+    (true, omUri, v) => {
                               new oc in {
                                 rl!(omUri, *oc) |
                                 for (OracleMath <- oc) {
@@ -102,11 +100,16 @@ in {
                                         }
                                       }
                                       (false, m, why) => { ret!((false, 0, 0, why)) }
+                                      _ => { ret!((false, 0, 0, "no feed")) }
                                     }
                                   }
                                 }
                               }
                             }
+    (false, __why) => { ret!(1 / 0) }
+    _ => { ret!(1 / 0) }
+  }
+}
                           }
                         }
                       }
@@ -126,12 +129,18 @@ in {
       rl!(`__ROOT_URI__`, *rCh) |
       for (Root <- rCh) {
         Root!("resolve", "component:governor", 1, *gCh) |
-        for (@(true, govUri, v) <- gCh) {
+        for (@__reply10 <- gCh) {
+  match __reply10 {
+    (true, govUri, v) => {
           new gc in {
             rl!(govUri, *gc) |
             for (Governor <- gc) { ret!(*Governor) }
           }
         }
+    (false, __why) => { ret!(1 / 0) }
+    _ => { ret!(1 / 0) }
+  }
+}
       }
     }
   } |
@@ -141,7 +150,9 @@ in {
       rl!(`__ROOT_URI__`, *rCh) |
       for (Root <- rCh) {
         Root!("resolve", "component:verifier", 1, *verCh) |
-        for (@(true, vUri, vv) <- verCh) {
+        for (@__reply9 <- verCh) {
+  match __reply9 {
+    (true, vUri, vv) => {
           new vc, dCh, okCh in {
             rl!(vUri, *vc) |
             for (Verifier <- vc) {
@@ -159,6 +170,10 @@ in {
             }
           }
         }
+    (false, __why) => { ret!(1 / 0) }
+    _ => { ret!(1 / 0) }
+  }
+}
       }
     }
   } |
@@ -197,7 +212,7 @@ in {
                                       _ => { keyCh!("seen2") }
                                     } |
                                     for (@slot <- slotCh; @seenKey <- keyCh) {
-                                      match slot {
+                                      match slot { // match-total: feedSlot returns a pair
                                         (priorPrice, priorHeight) => {
                                           if (height <= priorHeight) {
                                             feedState!(s2) |
@@ -240,7 +255,7 @@ in {
           new rCh in {
             feedRead!(s, now, true, *rCh) |
             for (@r <- rCh) {
-              match r {
+              match r { // match-total: feedRead returns a 4-tuple
                 (fresh, price, age, reason) => {
                   ret!((true, {"fresh": fresh, "price": price,
                                "age": age, "reason": reason}))
@@ -266,7 +281,7 @@ in {
                 feedCountSeen!(s, *seenCh) |
                 feedRead!(s, now, false, *readCh) |
                 for (@seen <- seenCh; @r <- readCh) {
-                  match r {
+                  match r { // match-total: feedRead returns a 4-tuple
                     (fresh, price, age, why) => {
                       if ((now - s.get("trialStart")) < s.get("trialBlocks")) {
                         ret!((false, "trial"))

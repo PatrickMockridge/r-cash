@@ -19,12 +19,18 @@ in {
       rl!(`__ROOT_URI__`, *rCh) |
       for (Root <- rCh) {
         Root!("resolve", "component:governor", 1, *gCh) |
-        for (@(true, govUri, v) <- gCh) {
+        for (@__reply4 <- gCh) {
+  match __reply4 {
+    (true, govUri, v) => {
           new gc in {
             rl!(govUri, *gc) |
             for (Governor <- gc) { ret!(*Governor) }
           }
         }
+    (false, __why) => { ret!(1 / 0) }
+    _ => { ret!(1 / 0) }
+  }
+}
       }
     }
   } |
@@ -101,7 +107,9 @@ in {
       rl!(`__ROOT_URI__`, *rCh) |
       for (Root <- rCh) {
         Root!("resolve", "component:verifier", 1, *verCh) |
-        for (@(true, vUri, vv) <- verCh) {
+        for (@__reply3 <- verCh) {
+  match __reply3 {
+    (true, vUri, vv) => {
           new vc in {
             rl!(vUri, *vc) |
             for (Verifier <- vc) {
@@ -113,6 +121,10 @@ in {
             }
           }
         }
+    (false, __why) => { ret!(1 / 0) }
+    _ => { ret!(1 / 0) }
+  }
+}
       }
     }
   } |
@@ -237,6 +249,8 @@ in {
                 for (@s2 <- oracleRegState) {
                   match action {
                     "addReporter" => {
+                      if (args.length() != 1) { oracleRegState!(s2) | ret!((false, "action")) }
+                      else {
                       match args.nth(0) {
                         reporter => {
                           new inCh in {
@@ -255,7 +269,10 @@ in {
                         }
                       }
                     }
+                    }
                     "removeReporter" => {
+                      if (args.length() != 1) { oracleRegState!(s2) | ret!((false, "action")) }
+                      else {
                       match args.nth(0) {
                         reporter => {
                           new outCh in {
@@ -268,6 +285,7 @@ in {
                           }
                         }
                       }
+                    }
                     }
                     _ => { oracleRegState!(s2) | ret!((false, "unknown admin action")) }
                   }

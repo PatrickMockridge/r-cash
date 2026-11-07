@@ -281,3 +281,33 @@ devnet parse/normalize step is authoritative. An arm may nest at most four
 
 No cell is held while `AmmMath`, `OracleHub` or the issuer is awaited. If the consumed
 reserves differ from the peeked reserves, step 6 calls `fail()` and the client retries.
+
+## 11. Pattern discipline
+
+`match` and `for` use the same **partial** pattern language. A non-matching `match`
+reduces to the empty process; a non-matching receive leaves the message unconsumed and
+never runs its continuation. Neither is an error. Exhaustiveness is therefore a liveness
+obligation (WF2, WF6, L1), not a type check, and `tools/check_match.py` is the offline
+enforcer.
+
+A pattern variable binds; it never compares. A lowercase identifier in a pattern is a new
+binding, even when an identifier of the same name is in scope. Patterns have no guards, so
+numeric comparisons stay `if`. Data-map patterns are unavailable; map fields are read with
+`.get`. A non-matching `match` is silent, so every open domain needs an irrefutable arm.
+
+| Rule | Requirement | Gate |
+|---|---|---|
+| D1 totality | every match has a `_` or bare-variable arm, or a reviewed `// match-total: <reason>` annotation | G-MATCH-01 |
+| D2 live arms | no irrefutable arm before a refining arm and no duplicate literal arm | G-MATCH-02 |
+| D3 no shadow | a pattern identifier never shadows the scrutinee or an in-scope contract parameter | G-MATCH-03 |
+| D4 no `Nil` value | `Nil` is absence, never a stored tombstone | G-MATCH-04 |
+| D5 receive totality | a receive whose pattern contains a literal needs a catch-all continuation that fails closed | G-MATCH-05 |
+| D6 catch-all purity | a `_` arm returns a reason, forwards the failure, or fails `1/0`; never a bare `false` or `(0, false)` | G-MATCH-06 |
+| D7 tagged results | helpers that decide return `(true, Out)` / `(false, Reason)`, not a bare boolean | G-MATCH-11 |
+
+`match x { y => P }` is Rholang's `let` and is permitted for one binding; chains of two or
+more are reported as G-MATCH-08. Nesting deeper than the four-level rule in §9 is reported
+as G-MATCH-09. A `contract F(@"method", ...)` literal parameter pattern is a co-designed
+protocol, not a partial match, and is out of scope. Union (`\/`), intersection (`/\`), list
+and type patterns are available but unused in this corpus; adopt one only after a devnet
+parse smoke test.

@@ -379,7 +379,7 @@ components:
     transition: kernel.AmmMath.shares
     lean: Rholphin.Model.Kernel.ammMath_shares
     kind: read
-    source: {file: contracts/src/deploy/v3/05_amm_math.rho, line: 65}
+    source: {file: contracts/src/deploy/v3/05_amm_math.rho, line: 56}
     guards: []
     effects:
     - {target: reply, formula: 'first: depositValue - 1e8; else 0 if totalShares<=0 or poolValue<=0; else floor(depositValue*totalShares/poolValue)'}
@@ -395,7 +395,7 @@ components:
     transition: kernel.AmmMath.inputValue
     lean: Rholphin.Model.Kernel.ammMath_inputValue
     kind: read
-    source: {file: contracts/src/deploy/v3/05_amm_math.rho, line: 77}
+    source: {file: contracts/src/deploy/v3/05_amm_math.rho, line: 68}
     guards: []
     effects:
     - {target: reply, formula: floor(amount*rate/1e8) if base; amount if quote; -1}

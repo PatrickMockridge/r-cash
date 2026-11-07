@@ -15,12 +15,18 @@ in {
       rl!(`__ROOT_URI__`, *rCh) |
       for (Root <- rCh) {
         Root!("resolve", "component:oracle-registry", 1, *regCh) |
-        for (@(true, regUri, v) <- regCh) {
+        for (@__reply6 <- regCh) {
+  match __reply6 {
+    (true, regUri, v) => {
           new rc in {
             rl!(regUri, *rc) |
             for (Registry <- rc) { Registry!("feedEntry", code, *ret) }
           }
         }
+    (false, __why) => { ret!(1 / 0) }
+    _ => { ret!(1 / 0) }
+  }
+}
       }
     }
   } |
@@ -47,7 +53,9 @@ in {
       rl!(`__ROOT_URI__`, *rCh) |
       for (Root <- rCh) {
         Root!("resolve", "component:oracle-math", 1, *omCh) |
-        for (@(true, omUri, v) <- omCh) {
+        for (@__reply5 <- omCh) {
+  match __reply5 {
+    (true, omUri, v) => {
           new oc in {
             rl!(omUri, *oc) |
             for (OracleMath <- oc) {
@@ -55,6 +63,10 @@ in {
             }
           }
         }
+    (false, __why) => { ret!(1 / 0) }
+    _ => { ret!(1 / 0) }
+  }
+}
       }
     }
   } |

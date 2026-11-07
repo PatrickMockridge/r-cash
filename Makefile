@@ -4,7 +4,7 @@ PY := $(VENV)/bin/python
 RHOLO_DIR ?= $(or $(RCHAIN_RUST_DIR),../rholo)
 export RHOLO_DIR
 
-.PHONY: venv image devnet down status keys build probes deploy logs clean demo client-test web-build check-languages inventory flows check-flows check-trace check-mesh vectors-check model-test offline-test pre-devnet-check lean-build lean-check formal-check mesh-plan mesh-install mesh-pair test-wasm measure measure-check check-arch check-captures spec-check tla-check install install-v3 bootstrap setup unit-v3 unit-feed unit-hub unit-stablecoin unit-liquidation unit-interest unit-savings unit-psm unit-timelock unit-accounts unit-transfer unit-transfer-memo unit-market unit-mesh unit-external unit-buffer unit-pool unit-all testnet-preflight testnet-keys testnet-fund testnet-install testnet-setup testnet-core testnet-mesh testnet-unit-mesh testnet-clients testnet-demo testnet-campaign docs docs-serve docs-check
+.PHONY: venv image devnet down status keys build probes deploy logs clean demo client-test web-build check-languages inventory flows check-flows check-trace check-mesh vectors-check model-test offline-test pre-devnet-check lean-build lean-check formal-check mesh-plan mesh-install mesh-pair test-wasm measure measure-check check-arch check-captures spec-check tla-check install install-v3 bootstrap setup unit-v3 unit-feed unit-hub unit-stablecoin unit-liquidation unit-interest unit-savings unit-psm unit-timelock unit-accounts unit-transfer unit-transfer-memo unit-market unit-mesh unit-external unit-buffer unit-pool unit-all testnet-preflight testnet-keys testnet-fund testnet-install testnet-setup testnet-core testnet-mesh testnet-unit-mesh testnet-clients testnet-demo testnet-campaign docs docs-serve docs-check match-check
 
 venv:
 	python3 -m venv $(VENV)
@@ -197,10 +197,13 @@ lean-check:
 primitive-check:
 	$(PY) tools/check_primitives.py --check
 
+match-check:
+	$(PY) tools/check_match.py --check
+
 arm-vectors:
 	$(PY) tools/check_arm_vectors.py --check
 
-formal-check: lean-check check-flows check-trace check-mesh primitive-check arm-vectors
+formal-check: lean-check check-flows check-trace check-mesh primitive-check match-check arm-vectors
 
 # Public testnet (network id testnet, shard /testnet). All commands are opt-in
 # and read configs/testnet.json; see book/src/guides/testnet.md.
