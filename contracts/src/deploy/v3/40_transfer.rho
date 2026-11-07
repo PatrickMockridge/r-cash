@@ -131,7 +131,7 @@ in {
                               rl!(`__ROOT_URI__`, *rCh) |
                               for (Root <- rCh) {
                                 Root!("resolve", "component:codec", 1, *ccCh) |
-                                for (@(true, codecUri, _) <- ccCh) {
+                                for (@codecReply <- ccCh) { match codecReply { (true, codecUri, _) => {
                                   new cCh in {
                                     rl!(codecUri, *cCh) |
                                     for (Codec <- cCh) {
@@ -170,7 +170,7 @@ in {
                                       }
                                     }
                                   }
-                                }
+                                } _ => { ret2!(1 / 0) } }}
                               }
                             }
                           }
@@ -189,7 +189,7 @@ in {
                               rl!(`__ROOT_URI__`, *rCh) |
                               for (Root <- rCh) {
                                 Root!("resolve", "component:clock", 1, *cCh) |
-                                for (@(true, clockUri, _) <- cCh) {
+                                for (@clockReply <- cCh) { match clockReply { (true, clockUri, _) => {
                                   new cc in {
                                     rl!(clockUri, *cc) |
                                     for (Clock <- cc) {
@@ -236,7 +236,7 @@ in {
                                       }
                                     }
                                   }
-                                }
+                                } _ => { ret2!(1 / 0) } }}
                               }
                             }
                           }

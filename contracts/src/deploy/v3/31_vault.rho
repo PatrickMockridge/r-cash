@@ -18,7 +18,8 @@ new
   LiquidationEngine, LiquidationAuthLedger, VaultAccept,
   liquidationAuth, liquidationAuthState,
   mintSlot, burnSlot, settleSlot, custodySlot, bufferSlot,
-  vaultResolve, vaultParams, vaultBufferInfo, vaultInstallSlot,
+  vaultResolve, vaultParams, vaultBufferInfo, vaultRate, vaultAccrue,
+  vaultHealth, vaultPayout, vaultLiquidateDecide, vaultInstallSlot,
   vaultUpdate, vaultCommit, vaultWriteOff,
   vaultMintCommit, repayCommit, vaultLiquidateCommit,
   rl(`rho:registry:lookup`),
@@ -35,10 +36,10 @@ in {
       rl!(`__ROOT_URI__`, *rCh) |
       for (Root <- rCh) {
         Root!("resolve", key, 1, *cCh) |
-        for (@(true, uri, v) <- cCh) {
+        for (@resolveReply <- cCh) { match resolveReply { (true, uri, v) => {
           rl!(uri, *cc) |
           for (Cap <- cc) { ret2!(*Cap) }
-        }
+        } _ => { ret2!(1 / 0) } }}
       }
     }
   } |
@@ -47,7 +48,7 @@ in {
   contract vaultParams(ret2) = {
     new pCh in {
       rl!(`__PARAMS_URI__`, *pCh) |
-      for (Params <- pCh) { Params!("params", ret2) }
+      for (Params <- pCh) { Params!("params", *ret2) }
     }
   } |
 
@@ -56,7 +57,7 @@ in {
   contract vaultBufferInfo(ret2) = {
     new bCh in {
       rl!(`__BUFFER_URI__`, *bCh) |
-      for (Buffer <- bCh) { Buffer!("info", ret2) }
+      for (Buffer <- bCh) { Buffer!("info", *ret2) }
     }
   } |
 
@@ -314,7 +315,7 @@ in {
                        @interestPaid, @principalPaid, payment,
                        settleFacet, bufferFacet, ret2) = {
     new settleCh in {
-      settleFacet!("settle", payment, principalPaid, interestPaid, *settleCh) |
+      settleFacet!("settle", *payment, principalPaid, interestPaid, *settleCh) |
       for (@st <- settleCh) {
         new depCh, settleDone in {
           match st {
@@ -394,7 +395,7 @@ in {
                                 @seized, @writeOff, payment,
                                 burnFacet, custodyFacet, bufferFacet, ret2) = {
     new burnCh in {
-      burnFacet!("burn", payment, amount, *burnCh) |
+      burnFacet!("burn", *payment, amount, *burnCh) |
       for (@b <- burnCh) {
         match b {
           (true, burned, supply) => {
@@ -564,7 +565,7 @@ in {
                                          ps.get("ratePerBlock"), *accCh) |
                             for (@accrued <- accCh) {
                               for (facet <<- custodySlot) {
-                                facet!("deposit", payment, *cCh) |
+                                facet!("deposit", *payment, *cCh) |
                                 for (@c <- cCh) {
                                   match c {
                                     (true, amount) => {
@@ -672,7 +673,8 @@ in {
                                       }
                                     }
                                   }
-                                }
+                                _ => { ret2!((false, "rate")) }
+                                  }
                               }
                             }
                             _ => { ret2!(1 / 0) }
@@ -764,6 +766,7 @@ in {
                                         }
                                       }
                                     }
+                                  _ => { ret2!((false, "rate")) }
                                   }
                                 }
                               }
@@ -908,7 +911,8 @@ in {
                                               }
                                             }
                                           }
-                                        }
+                                        _ => { ret2!((false, "rate")) }
+                                  }
                                       }
                                     }
                                     _ => { ret2!(1 / 0) }
@@ -966,7 +970,8 @@ in {
                               }
                             }
                           }
-                        }
+                        _ => { ret2!((false, "rate")) }
+                                  }
                       }
                     }
                     _ => { ret2!(1 / 0) }
@@ -1118,9 +1123,11 @@ in {
             _ => { shopUriCh!("no-shop") }
           } |
           for (@shopUri <- shopUriCh) {
-            if (shopUri == "no-shop") {
+            match shopUri {
+              "no-shop" => {
               ret!((false, "unknown"))
-            } else {
+              }
+              _ => {
               rl!(shopUri, *shopCh) |
               for (Shop <- shopCh) {
                 Shop!("isFacet", kind, *facet, *okCh) |
@@ -1164,12 +1171,16 @@ in {
             }
           }
         }
+          }
       } |
 
       rs!(bundle+{*VaultBook}, *uVault) |
       rs!(bundle+{*LiquidationEngine}, *uLiq) |
       rs!(bundle+{*VaultAccept}, *uAccept) |
       rs!(bundle+{*LiquidationAuthLedger}, *uAuthLedger) |
-      deployId!([uVault, uLiq, uAccept, uAuthLedger])
+      for (@vaultUri <- uVault; @liqUri <- uLiq;
+           @acceptUri <- uAccept; @authLedgerUri <- uAuthLedger) {
+        deployId!([vaultUri, liqUri, acceptUri, authLedgerUri])
+      }
   }
 }

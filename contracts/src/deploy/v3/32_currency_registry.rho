@@ -206,7 +206,7 @@ in {
       match s.get("currencies").get(code) {
         Nil => {
           new subCh in {
-            sponsorSubmitterCheck!(dId, sponsorHex, *subCh) |
+            sponsorSubmitterCheck!(*dId, sponsorHex, *subCh) |
             for (@sub <- subCh) {
               match sub {
                 (true, Nil) => {
@@ -215,7 +215,7 @@ in {
                     for (RegRoot <- rCh) {
                       RegRoot!("resolve", "component:verifier", 1, *vCh) |
                       RegRoot!("resolve", "component:codec", 1, *cCh) |
-                      for (@__reply25 <- vCh; @(true, codecUri, _) <- cCh) {
+                      for (@__reply25 <- vCh; @codecReply <- cCh) { match codecReply { (true, codecUri, _) => {
   match __reply25 {
     (true, verUri, _) => {
                         new vc, cc in {
@@ -295,7 +295,7 @@ in {
     (false, __why) => { ret!(1 / 0) }
     _ => { ret!(1 / 0) }
   }
-}
+} _ => { ret!(1 / 0) } }}
                       }
                     }
                 }
@@ -320,7 +320,7 @@ in {
       match s.get("currencies").get(code) {
         Nil => {
           new subCh in {
-            sponsorSubmitterCheck!(dId, sponsorHex, *subCh) |
+            sponsorSubmitterCheck!(*dId, sponsorHex, *subCh) |
             for (@sub <- subCh) {
               match sub {
                 (true, Nil) => {
@@ -329,7 +329,7 @@ in {
                     for (RegRoot <- rCh) {
                       RegRoot!("resolve", "component:verifier", 1, *vCh) |
                       RegRoot!("resolve", "component:codec", 1, *cCh) |
-                      for (@__reply24 <- vCh; @(true, codecUri, _) <- cCh) {
+                      for (@__reply24 <- vCh; @codecReply <- cCh) { match codecReply { (true, codecUri, _) => {
   match __reply24 {
     (true, verUri, _) => {
                         rl!(verUri, *vc) |
@@ -422,7 +422,7 @@ in {
     (false, __why) => { ret!(1 / 0) }
     _ => { ret!(1 / 0) }
   }
-}
+} _ => { ret!(1 / 0) } }}
                       }
                     }
                 }
@@ -465,7 +465,7 @@ in {
         for (@v <- vCh) {
           match v {
             (true, Nil) => {
-              for (_ <- directoryAuthState) {
+              for (@currentAuth <- directoryAuthState) {
                 directoryAuthState!(*newAuth) |
                 ret!((true, Nil))
               }

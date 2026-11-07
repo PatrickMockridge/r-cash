@@ -144,25 +144,25 @@ in {
         contract AuthLedger(@"check", @kind, @auth, ret2) = {
           match kind {
             "mint" => {
-              for (@cur <<- mintAuthState) {
+              for (cur <<- mintAuthState) {
                 if (auth == *cur) { ret2!((true, Nil)) }
                 else { ret2!((false, "bad auth")) }
               }
             }
             "burn" => {
-              for (@cur <<- burnAuthState) {
+              for (cur <<- burnAuthState) {
                 if (auth == *cur) { ret2!((true, Nil)) }
                 else { ret2!((false, "bad auth")) }
               }
             }
             "settle" => {
-              for (@cur <<- settlementAuthState) {
+              for (cur <<- settlementAuthState) {
                 if (auth == *cur) { ret2!((true, Nil)) }
                 else { ret2!((false, "bad auth")) }
               }
             }
             "custody" => {
-              for (@cur <<- custodyAuthState) {
+              for (cur <<- custodyAuthState) {
                 if (auth == *cur) { ret2!((true, Nil)) }
                 else { ret2!((false, "bad auth")) }
               }
@@ -262,8 +262,8 @@ in {
           }
         } |
 
-        contract mintCore(auth, @amount, ret2) = {
-          for (@cur <<- mintAuthState) {
+        contract mintCore(@auth, @amount, ret2) = {
+          for (cur <<- mintAuthState) {
             if (auth != *cur) { ret2!((false, "bad auth")) }
             else {
               if (amount <= 0) { ret2!((false, "amount")) }
@@ -292,8 +292,8 @@ in {
           }
         } |
 
-        contract burnCore(auth, payment, @maxAmount, ret2) = {
-          for (@cur <<- burnAuthState) {
+        contract burnCore(@auth, payment, @maxAmount, ret2) = {
+          for (cur <<- burnAuthState) {
             if (auth != *cur) { ret2!((false, "bad auth")) }
             else {
               new amtCh in {
@@ -333,8 +333,8 @@ in {
           }
         } |
 
-        contract settleCore(auth, payment, @principal, @interest, ret2) = {
-          for (@cur <<- settlementAuthState) {
+        contract settleCore(@auth, payment, @principal, @interest, ret2) = {
+          for (cur <<- settlementAuthState) {
             if (auth != *cur) { ret2!((false, "bad auth", *payment)) }
             else {
               if (principal < 0 || interest < 0) {
@@ -355,7 +355,7 @@ in {
                           } else {
                             if (interest == 0) {
                               new bCh0 in {
-                                for (@burnCur <<- burnAuthState) {
+                                for (burnCur <<- burnAuthState) {
                                   burnCore!(*burnCur, *payment, principal, *bCh0)
                                 } |
                                 for (@b <- bCh0) {
@@ -381,19 +381,19 @@ in {
                                       @purse!("withdraw", (brand, interest), *wiCh) |
                                       for (@(true, interestPay) <- wiCh) {
                                         new bCh in {
-                                          for (@burnCur <<- burnAuthState) {
-                                            burnCore!(*burnCur, *principalPay,
+                                          for (burnCur <<- burnAuthState) {
+                                            burnCore!(*burnCur, principalPay,
                                                       principal, *bCh)
                                           } |
                                           for (@b <- bCh) {
                                             match b {
                                               (true, _, _) => {
                                                 ret2!((true, principal,
-                                                       *interestPay))
+                                                       interestPay))
                                               }
                                               (false, why) => {
                                                 ret2!((false, why,
-                                                       *principalPay))
+                                                       principalPay))
                                               }
                                               _ => { ret2!(1 / 0) }
                                             }
@@ -417,8 +417,8 @@ in {
           }
         } |
 
-        contract custodyDepositCore(auth, payment, ret2) = {
-          for (@cur <<- custodyAuthState) {
+        contract custodyDepositCore(@auth, payment, ret2) = {
+          for (cur <<- custodyAuthState) {
             if (auth != *cur) { ret2!((false, "bad auth")) }
             else {
               new amtCh, depCh in {
@@ -442,8 +442,8 @@ in {
           }
         } |
 
-        contract custodyWithdrawCore(auth, @amount, ret2) = {
-          for (@cur <<- custodyAuthState) {
+        contract custodyWithdrawCore(@auth, @amount, ret2) = {
+          for (cur <<- custodyAuthState) {
             if (auth != *cur) { ret2!((false, "bad auth")) }
             else {
               if (amount <= 0) { ret2!((false, "amount")) }
@@ -453,29 +453,29 @@ in {
         } |
 
         contract MintFacet(@"mint", @amount, ret2) = {
-          for (@auth <<- mintAuthState) { mintCore!(*auth, amount, *ret2) }
+          for (auth <<- mintAuthState) { mintCore!(*auth, amount, *ret2) }
         } |
 
         contract BurnFacet(@"burn", payment, @maxAmount, ret2) = {
-          for (@auth <<- burnAuthState) {
+          for (auth <<- burnAuthState) {
             burnCore!(*auth, *payment, maxAmount, *ret2)
           }
         } |
 
         contract SettlementFacet(@"settle", payment, @principal, @interest, ret2) = {
-          for (@auth <<- settlementAuthState) {
+          for (auth <<- settlementAuthState) {
             settleCore!(*auth, *payment, principal, interest, *ret2)
           }
         } |
 
         contract CustodyFacet(@"deposit", payment, ret2) = {
-          for (@auth <<- custodyAuthState) {
+          for (auth <<- custodyAuthState) {
             custodyDepositCore!(*auth, *payment, *ret2)
           }
         } |
 
         contract CustodyFacet(@"withdraw", @amount, ret2) = {
-          for (@auth <<- custodyAuthState) {
+          for (auth <<- custodyAuthState) {
             custodyWithdrawCore!(*auth, amount, *ret2)
           }
         } |
@@ -502,7 +502,7 @@ in {
           }
         } |
 
-        contract deliverOne(consumerUri, @kind, facet, @nonce, @deadline, ret2) = {
+        contract deliverOne(@consumerUri, @kind, facet, @nonce, @deadline, ret2) = {
           new cCh, rCh2 in {
             rl!(consumerUri, *cCh) |
             for (Consumer <- cCh) {
@@ -517,7 +517,7 @@ in {
           }
         } |
 
-        contract deliverKinds(@kinds, @i, consumerUri, @nonce, @deadline, ret2) = {
+        contract deliverKinds(@kinds, @i, @consumerUri, @nonce, @deadline, ret2) = {
           if (i >= kinds.length()) { ret2!((true, Nil)) }
           else {
             match kinds.nth(i) {
@@ -657,7 +657,7 @@ in {
         rs!(bundle+{*FacetShop}, *uShop) |
         for (@scUri <- uSC; @custodyUri <- uCustody;
              @authUri <- uAuth; @shopUri <- uShop) {
-          shopCfg!({"uri": shopUri, "sponsor": "__SPONSOR_PUB__"}) |
+          shopCfg!({"uri": shopUri.toString(), "sponsor": "__SPONSOR_PUB__"}) |
           Stablecoin!("attest", *attCh) |
           for (@att <- attCh) {
             deployId!([scUri, custodyUri, authUri, shopUri, att])

@@ -121,10 +121,10 @@
       "brace_depth": 25,
       "contracts": 21,
       "grammar_depth": 42,
-      "minified_bytes": 13920,
+      "minified_bytes": 13941,
       "operator_run": 5,
-      "sha256": "a710b516b2c0b1ec7083da8693a9555cd8496cb4678d459eea4702da5bb5aa89",
-      "source_bytes": 24827
+      "sha256": "b369646308acc4d811c4da8c0b50ffedadbc32d342875b6f94829eb4dbb8f6a7",
+      "source_bytes": 24848
     },
     "contracts/build/deploy/v3/31_feed.rho": {
       "brace_depth": 26,
@@ -139,10 +139,10 @@
       "brace_depth": 26,
       "contracts": 27,
       "grammar_depth": 44,
-      "minified_bytes": 13530,
+      "minified_bytes": 13529,
       "operator_run": 5,
-      "sha256": "aaad71af5939c28ded69195bf98b6fbde480b8db951266a41bcd6bd108b9bcbb",
-      "source_bytes": 26503
+      "sha256": "f5e73410f1128634a0837a2ea3d98a7d72ba3bd3684dd64c68b0e349c6b2f87a",
+      "source_bytes": 26502
     },
     "contracts/build/deploy/v3/31_params.rho": {
       "brace_depth": 23,
@@ -154,49 +154,49 @@
       "source_bytes": 7276
     },
     "contracts/build/deploy/v3/31_psm.rho": {
-      "brace_depth": 30,
+      "brace_depth": 34,
       "contracts": 18,
-      "grammar_depth": 49,
-      "minified_bytes": 11944,
+      "grammar_depth": 55,
+      "minified_bytes": 12284,
       "operator_run": 3,
-      "sha256": "4b8679c3d86a884a1d24b8f35fc7f05d73f3e7097c5b2b50e1c0d45153d91897",
-      "source_bytes": 23861
+      "sha256": "07985b91f74e9d05c33b85a3200413e3818ad503b41d3c40a563d26c5ff5357d",
+      "source_bytes": 24201
     },
     "contracts/build/deploy/v3/31_vault.rho": {
       "brace_depth": 33,
       "contracts": 32,
       "grammar_depth": 52,
-      "minified_bytes": 23627,
+      "minified_bytes": 24010,
       "operator_run": 4,
-      "sha256": "8eb14522f1c570d0ea32953f249f7ec16b5d7764d01511a8580db18101d3dd63",
-      "source_bytes": 51708
+      "sha256": "e4053c14f24f7effeb12b3b3e50241786ebd7d71c0768614d6d0d0c35fda652e",
+      "source_bytes": 52294
     },
     "contracts/build/deploy/v3/32_currency_registry.rho": {
-      "brace_depth": 40,
+      "brace_depth": 42,
       "contracts": 14,
-      "grammar_depth": 64,
-      "minified_bytes": 10706,
+      "grammar_depth": 67,
+      "minified_bytes": 10837,
       "operator_run": 3,
-      "sha256": "a84a058ac91c315a10027cd9c7be2d753d084f555fef0a41c65bac3f092bf29b",
-      "source_bytes": 24034
+      "sha256": "7619ea39a55eba69ffb2e296b0f1552ac7188f5256a8f9bf1bc1f03dc537c31e",
+      "source_bytes": 24165
     },
     "contracts/build/deploy/v3/40_transfer.rho": {
-      "brace_depth": 36,
+      "brace_depth": 38,
       "contracts": 7,
-      "grammar_depth": 62,
-      "minified_bytes": 5400,
+      "grammar_depth": 65,
+      "minified_bytes": 5520,
       "operator_run": 4,
-      "sha256": "6463c04ac8db8e04c13cb9eb7e72dadcaf94a410bc70303cf44e7a91683a34dc",
-      "source_bytes": 13131
+      "sha256": "880c33cfd64008b2513a504f47f755002e68664d837c7974a0aff720ebcaf5cb",
+      "source_bytes": 13251
     },
     "contracts/build/deploy/v3/50_market.rho": {
       "brace_depth": 45,
       "contracts": 34,
       "grammar_depth": 72,
-      "minified_bytes": 23979,
+      "minified_bytes": 24068,
       "operator_run": 3,
-      "sha256": "9b5ca0dc781ba3320d4ad71f3128ce62a231cf821abf9a3e7d7e8e01135b20a2",
-      "source_bytes": 46747
+      "sha256": "64e3d4fd74110342933bb9a4114eb39a78d0eacdfc97e24232b7d9b8da71d244",
+      "source_bytes": 46836
     },
     "contracts/build/deploy/v3/51_lock.rho": {
       "brace_depth": 22,

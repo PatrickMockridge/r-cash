@@ -149,9 +149,10 @@ def main() -> int:
 
     def set_paused(nonce: int, paused: bool) -> str:
         args = "true" if paused else "false"
-        payload = f"rcash:admin:v1|stablecoin:{currency}|{nonce}|setPaused|{args}"
+        payload = sign_payload.admin_canonical_payload(
+            f"stablecoin:{currency}", nonce, "setPaused", args)
         sigs = ", ".join(
-            f'"{sign_payload.sign_payload(keys[n]["secret"], payload.encode())["signature"]}".hexToBytes()'
+            f'"{sign_payload.sign_payload(keys[n]["secret"], payload)["signature"]}".hexToBytes()'
             for n in ("admin1", "admin2"))
         body = (
             f'CurrencyRegistry!("setPaused", "{currency}", {str(paused).lower()}, '

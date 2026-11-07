@@ -190,14 +190,14 @@ def main() -> int:
         "__POOL_URI__": pool_uri,
         "__LOCK_URI__": lock_uri,
         "__LOCK_UNTIL__": str(lock_until),
-        "__PUBKEY__": keys["deployer"]["public"],
+        "__PUBKEY__": keys["sponsor"]["public"],
         "__FUND_REV__": str(FUND_REV),
         "__COLLATERAL__": str(COLLATERAL),
         "__MINT__": str(MINT),
         "__BASE_AMT__": str(BASE_AMT),
         "__QUOTE_AMT__": str(QUOTE_AMT),
     })
-        seeded = one(seed_term, keys["deployer"]["secret"])
+        seeded = one(seed_term, keys["sponsor"]["secret"])
         if isinstance(seeded[2], dict):
             shares, seeded_reserves, lock_shares = seeded[1], seeded[2], seeded[3]
         else:

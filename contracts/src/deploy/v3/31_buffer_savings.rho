@@ -450,7 +450,7 @@ in {
                             {
                               for (facet <<- burnSlot) {
                                 burnSlot!(*facet) |
-                                facet!("burn", *payment, cancelled, *bCh)
+                                facet!("burn", payment, cancelled, *bCh)
                               }
                             } |
                             for (@b <- bCh) {
@@ -553,7 +553,7 @@ in {
           rl!(codecUri, *cc) | rl!(verUri, *vc) |
           for (Codec <- cc; Verifier <- vc) {
             for (@issuerUri <- bufferShopUriState) {
-              bufferShopUriState!(issuerUri) |
+              bufferShopUriState!(issuerUri.toString()) |
               if (sponsorHex != "__SPONSOR_PUB__") { ret!((false, "bad sponsor")) }
               else {
                 if (kinds != "buffer") { ret!((false, "action")) }
@@ -636,7 +636,7 @@ in {
   rs!(bundle+{*BufferFacetShop}, *uriShopCh) |
   for (@savingsUri <- uriSavingsCh; @bufferUri <- uriBufferCh;
        @issuerUri <- uriShopCh) {
-    bufferShopUriState!(issuerUri) |
+    bufferShopUriState!(issuerUri.toString()) |
     SavingsPool!("attest", *attSavingsCh) |
     SurplusBuffer!("attest", *attBufferCh) |
     for (@attS <- attSavingsCh; @attB <- attBufferCh) {

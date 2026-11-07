@@ -135,10 +135,11 @@ def rotate_liquidation_auth(keys: dict, ledger_uri: str) -> list:
     The engine reads the cell per call, so liquidation keeps working afterwards.
     """
     nonce = node.height()
-    payload = (f"rcash:admin:v1|auth:{CURRENCY}:liquidation|{nonce}|"
-               "rotateLiquidationAuth|liquidation")
+    payload = sign_payload.admin_canonical_payload(
+        f"auth:{CURRENCY}:liquidation", nonce, "rotateLiquidationAuth",
+        "liquidation")
     sigs = ", ".join(
-        f'"{sign_payload.sign_payload(keys[n]["secret"], payload.encode())["signature"]}".hexToBytes()'
+        f'"{sign_payload.sign_payload(keys[n]["secret"], payload)["signature"]}".hexToBytes()'
         for n in ("admin1", "admin2"))
     body = (f'LiquidationAuthLedger!("rotate", {nonce}, [{sigs}], *r) | '
             "for (@x <- r) { deployId!(x) }")
@@ -156,7 +157,10 @@ def liquidate(keys: dict, holder: str, liq_uri: str, vault_uri: str,
         "__AMOUNT__": str(amount),
         "__MIN_COLLATERAL__": str(min_collateral),
     })
-    return one(term, keys["deployer"]["secret"])
+    reply = one(term, keys["deployer"]["secret"])
+    if not (isinstance(reply, tuple) and len(reply) == 3):
+        print("liquidate refusal:", reply)
+    return reply
 
 
 def main() -> int:

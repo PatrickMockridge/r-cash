@@ -138,8 +138,8 @@ in {
         Root!("resolve", "component:bounds", 1, *bCh) |
         Root!("resolve", "component:codec", 1, *cCh) |
         marketVerifier!(*vCh) |
-        for (@(true, boundsUri, _) <- bCh; @(true, codecUri, _) <- cCh;
-             Verifier <- vCh) {
+        for (@boundsReply <- bCh; @codecReply <- cCh;
+             Verifier <- vCh) { match (boundsReply, codecReply) { ((true, boundsUri, _), (true, codecUri, _)) => {
           new bc, cc, checkCh in {
             rl!(boundsUri, *bc) | rl!(codecUri, *cc) |
             for (Bounds <- bc; Codec <- cc) {
@@ -184,7 +184,7 @@ in {
               }
             }
           }
-        }
+        } _ => { ret!(1 / 0) } }}
       }
     }
   } |

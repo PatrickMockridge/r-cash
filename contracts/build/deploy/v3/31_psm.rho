@@ -27,13 +27,13 @@ in {
   for (Stablecoin <- scCh) {
     Stablecoin!("issuer", *issuerCh)
   } |
-  for (@(true, issuer) <- issuerCh) {
+  for (@issuerReply <- issuerCh) { match issuerReply { (true, issuer) => {
     rl!(`rho:rchain:ertp`, *ertpCh) |
     for (@(_, ERTP) <- ertpCh) {
       @ERTP!("getRevIssuer", *revIssuerCh) |
       for (@(revBrand, revIssuer) <- revIssuerCh) {
         @revIssuer!("makeEmptyPurse", *psmRevPurseCh) |
-        for (@(true, psmRevPurse) <- psmRevPurseCh) {
+        for (@purseReply <- psmRevPurseCh) { match purseReply { (true, psmRevPurse) => {
 
   // Fee ceiling in basis points, rounded up so the protocol never undercharges.
   contract feeCeil(@amount, @bps, ret2) = {
@@ -47,7 +47,7 @@ in {
       rl!(`__ROOT_URI__`, *rCh) |
       for (Root <- rCh) {
         Root!("resolve", "component:oracle-hub", 1, *hCh) |
-        for (@(true, hubUri, v) <- hCh) {
+        for (@hubReply <- hCh) { match hubReply { (true, hubUri, v) => {
           new hc, rrCh in {
             rl!(hubUri, *hc) |
             for (OracleHub <- hc) {
@@ -60,7 +60,7 @@ in {
               }
             }
           }
-        }
+        } _ => { ret2!((0, false)) } }}
       }
     }
   } |
@@ -70,12 +70,12 @@ in {
       rl!(`__ROOT_URI__`, *rCh) |
       for (Root <- rCh) {
         Root!("resolve", "component:governor", 1, *gCh) |
-        for (@(true, govUri, v) <- gCh) {
+        for (@govReply <- gCh) { match govReply { (true, govUri, v) => {
           new gc in {
             rl!(govUri, *gc) |
             for (Governor <- gc) { ret2!(*Governor) }
           }
-        }
+        } _ => { ret2!(1 / 0) } }}
       }
     }
   } |
@@ -85,12 +85,12 @@ in {
       rl!(`__ROOT_URI__`, *rCh) |
       for (Root <- rCh) {
         Root!("resolve", "component:codec", 1, *cCh) |
-        for (@(true, codecUri, v) <- cCh) {
+        for (@codecReply <- cCh) { match codecReply { (true, codecUri, v) => {
           new cc in {
             rl!(codecUri, *cc) |
             for (Codec <- cc) { ret2!(*Codec) }
           }
-        }
+        } _ => { ret2!(1 / 0) } }}
       }
     }
   } |
@@ -104,7 +104,7 @@ in {
       rl!(`__ROOT_URI__`, *rCh) |
       for (Root <- rCh) {
         Root!("resolve", "component:currency-registry", 1, *regCh) |
-        for (@(true, regUri, _) <- regCh) {
+        for (@regReply <- regCh) { match regReply { (true, regUri, _) => {
           rl!(regUri, *rc) |
           for (CurrencyRegistry <- rc) {
             CurrencyRegistry!("currency", "__CURRENCY__", *eCh) |
@@ -137,7 +137,7 @@ in {
               }
             }
           }
-        }
+        } _ => { ret!(1 / 0) } }}
       }
     }
   } |
@@ -627,8 +627,8 @@ in {
     for (@att <- attCh) { deployId!([uri, att]) }
   }
 
-        }
+        } _ => { 1 / 0 } }}
       }
     }
-  }
+  } _ => { 1 / 0 } }}
 }

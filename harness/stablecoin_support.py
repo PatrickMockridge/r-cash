@@ -223,7 +223,7 @@ def provision_groups(kinds, issuer_shop_uri: str,
 def provision_term(shop_uri: str, consumer_uri: str, consumer_tag: str,
                    kinds, nonce: int, deadline: int, sponsor: str,
                    signature: str) -> str:
-    kinds_literal = "[" + ", ".join(json.dumps(k) for k in kinds) + "]"
+    kinds_literal = kinds_arg(kinds)
     return (
         "new rl(`rho:registry:lookup`), ch, r, "
         "deployId(`rho:rchain:deployId`) in {\n"
@@ -282,7 +282,7 @@ def full_register_term(registry_uri: str, *args, signature: str) -> str:
         "deployerId(`rho:rchain:deployerId`), "
         "deployId(`rho:rchain:deployId`) in {\n"
         f"  rl!(`{registry_uri}`, *ch) |\n"
-        "  for (Registry <- ch) {\n"
+        "  for (CurrencyRegistry <- ch) {\n"
         f"    {body}\n"
         "  }\n"
         "}"
@@ -314,6 +314,17 @@ def render_params(currency: str, params: dict, params_hash: str, sponsor: str,
     return render_params_term(currency, params, params_hash, sponsor, root)
 
 
+def kinds_arg(kinds) -> str:
+    """Rholang argument for a shop's `kinds`.
+
+    T1's issuer shop takes a list; T3's BufferFacetShop takes the literal
+    string "buffer" (it accepts exactly one kind).
+    """
+    if list(kinds) == ["buffer"]:
+        return json.dumps("buffer")
+    return "[" + ", ".join(json.dumps(k) for k in kinds) + "]"
+
+
 def build_provision_term(calls: list[tuple], consumer_uri: str,
                          consumer_tag: str, sponsor: str) -> str:
     """One deploy that calls each shop's `provision` in sequence.
@@ -325,7 +336,7 @@ def build_provision_term(calls: list[tuple], consumer_uri: str,
     next_term = 'deployId!([true, "provisioned"])'
     for index in reversed(range(len(calls))):
         shop_uri, kinds, nonce, deadline, signature = calls[index]
-        kinds_literal = "[" + ", ".join(json.dumps(k) for k in kinds) + "]"
+        kinds_literal = kinds_arg(kinds)
         ch = f"ch{index}"
         reply = f"r{index}"
         shop = f"Shop{index}"
@@ -343,7 +354,11 @@ def build_provision_term(calls: list[tuple], consumer_uri: str,
             f" }} }} }} }}"
         )
         next_term = inner
-    return next_term
+    return (
+        "new rl(`rho:registry:lookup`), "
+        "deployId(`rho:rchain:deployId`) in {\n"
+        f"{next_term}\n}}"
+    )
 
 
 def provision_facets(keys: dict, state: dict, consumer: str, consumer_uri: str,
