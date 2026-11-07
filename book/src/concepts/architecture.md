@@ -89,8 +89,9 @@ available, because a user must always be able to reduce risk.
 
 ### Per-currency economy
 
-This is the largest layer. One signed `31_stablecoin` deploy creates an independent system
-for one currency:
+This is the largest layer. A sponsor-signed five-term deployment creates an independent
+system for one currency: T1 issuer, T5 risk parameters, T3 buffer/savings, T4 PSM and T2
+vault.
 
 | Component | Role |
 |---|---|
@@ -103,9 +104,12 @@ for one currency:
 | `SavingsPool` | Per-owner savings shares |
 | `PegStabilityModule` | Par issuance/redemption against a REV reserve |
 
-The eight components are created in one deploy because the mint, burn, custody, settlement,
-PSM and buffer capabilities cannot cross a deploy boundary. They are wired by closures at
-creation time, not by a later registration step.
+Each term owns the authorities whose checks live in its contracts and publishes a facet
+shop. The sponsor provisions each consumer with one signed payload per shop; a facet is a
+fresh service contract that is never published, and the consumer holds it in a private
+bare-name slot. The runtime waterfall still runs in one deploy with pinned callees and P6
+rollback, so a refusal after a value movement aborts the whole deploy. See
+`docs/spec/MULTI-TERM.md`.
 
 Risk isolation is a direct consequence: each currency has its own collateral, debt ceiling,
 buffer, savings pool and PSM reserve. A failure in one does not consume another's backing.

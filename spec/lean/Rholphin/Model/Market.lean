@@ -378,4 +378,48 @@ def marketFactory_createMarket (checks : Bool) (i : Index) (marketId version bas
     Option Index :=
   if checks then marketIndex_stage i marketId version base quote none else none
 
+/-! ## Market authority rotation
+
+The market authority is a cell value, not a status field.  A writer checks the
+value it was handed against the ledger's current value; `rotate` replaces the
+cell behind the governor threshold, so the old value is refused and the new
+value is accepted.  The replacement (`fresh`) is created by the term, not
+supplied by the caller.  The governor nonce ledger supplies replay protection.
+-/
+
+structure AuthLedger where
+  current : Nat
+  rev : Nat
+  deriving Repr
+
+def marketAuth_check (l : AuthLedger) (auth : Nat) : Bool := decide (auth = l.current)
+
+def marketAuth_rotate (l : AuthLedger) (nonce last fresh : Nat) : Option AuthLedger :=
+  if nonce ≤ last then none else some { current := fresh, rev := l.rev + 1 }
+
+theorem rotate_refuses_replay (l : AuthLedger) (nonce last fresh : Nat)
+    (h : nonce ≤ last) : marketAuth_rotate l nonce last fresh = none := by
+  unfold marketAuth_rotate
+  simp [h]
+
+theorem rotate_accepts_new (l l' : AuthLedger) (nonce last fresh : Nat)
+    (h : marketAuth_rotate l nonce last fresh = some l') :
+    marketAuth_check l' fresh = true := by
+  unfold marketAuth_rotate at h
+  split at h
+  · contradiction
+  · injection h with heq
+    subst heq
+    simp [marketAuth_check]
+
+theorem rotate_refuses_old (l l' : AuthLedger) (nonce last old fresh : Nat)
+    (h : marketAuth_rotate l nonce last fresh = some l') (hne : old ≠ fresh) :
+    marketAuth_check l' old = false := by
+  unfold marketAuth_rotate at h
+  split at h
+  · contradiction
+  · injection h with heq
+    subst heq
+    simp [marketAuth_check, hne]
+
 end Rholphin.Model.Market

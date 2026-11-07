@@ -121,15 +121,23 @@ in {
                             if (now >= expiry) {
                               ret2!((false, "expired"))
                             } else {
+                            // OCAP-19: the stored secretHash is the canonical
+                            // hash over the caller-supplied opId and the
+                            // transfer fields, not the bare secret, so a leaked
+                            // secret cannot claim another transfer that reuses
+                            // it. The account allocates `id` inside
+                            // sendTransfer, so opId is the pre-send binding.
                             new rCh, ccCh, hCh in {
                               rl!(`__ROOT_URI__`, *rCh) |
                               for (Root <- rCh) {
-                                Root!("resolve", "component:claim-code", 1, *ccCh) |
-                                for (@(true, claimUri, _) <- ccCh) {
+                                Root!("resolve", "component:codec", 1, *ccCh) |
+                                for (@(true, codecUri, _) <- ccCh) {
                                   new cCh in {
-                                    rl!(claimUri, *cCh) |
-                                    for (ClaimCode <- cCh) {
-                                      ClaimCode!("hash", secret, *hCh) |
+                                    rl!(codecUri, *cCh) |
+                                    for (Codec <- cCh) {
+                                      Codec!("hash", "rcash:claim:v1",
+                                             [opId, assetId,
+                                              amount.toString(), secret.bytesToHex()], *hCh) |
                                       for (@h <- hCh) {
                                         if (h != secretHash) {
                                           ret2!((false, "bad secret"))

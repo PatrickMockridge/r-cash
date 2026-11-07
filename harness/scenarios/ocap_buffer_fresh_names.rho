@@ -1,0 +1,17 @@
+// RT-01b: call the published T3 buffer arm with a fresh name where the raw
+// buffer authority is required. The arm must refuse before the waterfall.
+// Placeholders: __SURPLUS_BUFFER_URI__, __BAD_DEBT__.
+// Expected reply: (false, reason); never (true, ...).
+new
+  rl(`rho:registry:lookup`),
+  bcCh, r,
+  deployId(`rho:rchain:deployId`)
+in {
+  rl!(`__SURPLUS_BUFFER_URI__`, *bcCh) |
+  for (SurplusBuffer <- bcCh) {
+    new attacker in {
+      SurplusBuffer!("cover", __BAD_DEBT__, *attacker, *r) |
+      for (@x <- r) { deployId!(x) }
+    }
+  }
+}

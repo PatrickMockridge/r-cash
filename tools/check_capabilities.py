@@ -23,6 +23,25 @@ Rules:
   G-CAP-REGISTRY a published bundle captures a name bound from a registry.
   G-CAP-BUNDLE   design metric: the authority-looking free names in each
                  published bundle (ratcheted, see the baseline).
+  G-CAP-FACET    a fresh issuer facet name appears in a reply, attestation,
+                 published bundle or data map.  A facet is delivered by
+                 provisioning and never returned (MULTI-TERM §3).
+  G-CAP-PROVISION a `provision` arm must verify the sponsor key bound at
+                 creation, bind issuer/consumer/kind/nonce/deadline, consume
+                 the nonce before the consumer call, and `fail()` on refusal
+                 (MULTI-TERM §4, P5/P7).  Shops are per term: T1's issuer shop
+                 issues mint/burn/settle/custody and T3's BufferFacetShop
+                 issues the buffer facet; a consumer verifies a kind against
+                 the shop pinned for it.
+
+A published bundle may close over a provisioned facet held in a private
+bare-name slot.  That exception is annotated on the slot or the bundle:
+
+    // g-cap-bundle-allow: mintSlot
+    // g-cap-bundle: bare-name-slot mintSlot
+
+Only names listed by an annotation are exempt; an unannotated capture is a
+finding.
 
 Usage:
     python3 tools/check_capabilities.py            # report
@@ -65,6 +84,35 @@ ALLOW_RETURN = {
     ("PurseStore", "facet"),
     ("VaultBook", "open"),
 }
+
+# Issuer facets are fresh service contracts.  They are never published or
+# returned; a consumer receives one only through provisioning.
+FACET_NAME = re.compile(
+    r"(?i)^(mint|burn|settle|custody|buffer(?:operator)?|savings)Facet$"
+)
+KNOWN_FACETS = {
+    "MintFacet",
+    "BurnFacet",
+    "SettlementFacet",
+    "CustodyFacet",
+    "BufferOperatorFacet",
+}
+
+# Annotated bare-name-slot exception for G-CAP-BUNDLE.
+BUNDLE_ALLOW = re.compile(
+    r"(?i)(?:g-cap-bundle-allow[ \t]*:|g-cap-bundle[ \t]*:[ \t]*bare-name-slot)"
+    r"[ \t]*([A-Za-z0-9_, \t]+)"
+)
+
+
+def annotated_bundle_names(text: str) -> set[str]:
+    """Names in `// g-cap-bundle-allow:` / `bare-name-slot` comments."""
+    names: set[str] = set()
+    for match in BUNDLE_ALLOW.finditer(text):
+        for name in re.split(r"[,\s]+", match.group(1).strip()):
+            if name:
+                names.add(name)
+    return names
 
 
 @dataclass(frozen=True)
@@ -184,8 +232,11 @@ def is_authority(name: str) -> bool:
 
 def findings_for(path: Path) -> list[Finding]:
     rel = str(path.relative_to(ROOT))
-    text = strip_comments(path.read_text(encoding="utf-8"))
+    raw = path.read_text(encoding="utf-8")
+    text = strip_comments(raw)
     fresh = fresh_names(text)
+    facet_names = {name for name in fresh if FACET_NAME.match(name)} | KNOWN_FACETS
+    annotated = annotated_bundle_names(raw)
     registry: set[str] = set()
     for match in REGISTRY_CALL.finditer(text):
         call, args = match.group(1), match.group(2)
@@ -230,20 +281,37 @@ def findings_for(path: Path) -> list[Finding]:
                         f'{component}@"{op}" takes authority {bare} but never checks or forwards it')
 
         # G-CAP-LEAK: authority returned as a bare reply/view argument.
+        # G-CAP-FACET: a fresh facet name never crosses a reply or attestation.
         for ret in re.finditer(r"\b(ret[0-9]?|deployId)!\s*\((.*?)\)", body, re.S):
             for arg in top_level_args(ret.group(2)):
                 sent = re.fullmatch(r"\*\s*([A-Za-z_][A-Za-z0-9_]*)", arg.strip())
                 if sent and is_authority(sent.group(1)) and (component, op) not in ALLOW_RETURN:
                     add(line_of(text, match.start() + ret.start()),
                         "G-CAP-LEAK", f'{component}@"{op}" replies with authority {sent.group(1)}')
+                for name in facet_names:
+                    if re.search(rf"\*\s*{re.escape(name)}\b", arg):
+                        add(line_of(text, match.start() + ret.start()),
+                            "G-CAP-FACET",
+                            f'{component}@"{op}" exposes facet {name} in a reply')
 
         # G-CAP-STORE: authority name written into a state map literal.
+        # G-CAP-FACET: a facet name written into a published/state data map.
         for store in re.finditer(r'"([A-Za-z_][A-Za-z0-9_]*)":\s*\*([A-Za-z_][A-Za-z0-9_]*)', body):
             key, name = store.group(1), store.group(2)
+            if name in facet_names:
+                add(line_of(text, match.start() + store.start()),
+                    "G-CAP-FACET", f'{component}@"{op}" publishes facet {name} in a data map')
             if is_authority(name) or is_authority(key):
                 if (component, op) not in {("VaultBook", "open")}:
                     add(line_of(text, match.start() + store.start()),
                         "G-CAP-STORE", f'{component}@{op} stores authority {name} under {key!r}')
+
+        # G-CAP-FACET: a facet name may not be sent to a registry publication.
+        for pub in re.finditer(r"rs!\s*\((.*?)\)", body, re.S):
+            for name in facet_names:
+                if re.search(rf"\*\s*{re.escape(name)}\b", pub.group(1)):
+                    add(line_of(text, match.start() + pub.start()),
+                        "G-CAP-FACET", f'{component}@"{op}" publishes facet {name}')
 
         # G-CAP-DOMAIN: non-canonical signed preimage.
         for sep in re.finditer(r'"[^"\n]*\|[^"\n]*"', body):
@@ -253,6 +321,36 @@ def findings_for(path: Path) -> list[Finding]:
                 add(line_of(text, match.start() + sep.start()),
                     "G-CAP-DOMAIN",
                     f'{component}@"{op}" builds a signed preimage with toString()/|')
+
+        # G-CAP-PROVISION: the P5/P7 shop obligations.
+        if op == "provision":
+            provision_line = line_of(text, match.start())
+            window = f"{raw_params}\n{body}"
+            missing = [
+                field for field in ("issuer", "consumer", "kind", "nonce", "deadline")
+                if field not in window.lower()
+            ]
+            if missing:
+                add(provision_line, "G-CAP-PROVISION",
+                    f'{component}@"provision" does not bind {", ".join(missing)}')
+            if not re.search(r"(?i)sponsor", body) or not re.search(
+                    r"(==|!=|sigOk|verify|hexToBytes)", body):
+                add(provision_line, "G-CAP-PROVISION",
+                    f'{component}@"provision" does not verify the sponsor key')
+            if not re.search(r"1\s*/\s*0|fail\s*\(", body):
+                add(provision_line, "G-CAP-PROVISION",
+                    f'{component}@"provision" does not fail() on refusal')
+            consume = re.search(
+                r"(?i)(nonceState!\s*\(|consumed|\.set\(\s*\"nonce\"|\"nonce\"\s*:)", body)
+            accept = re.search(
+                r"(?i)(acceptFacet|Consumer!\s*\(\s*\"acceptFacet\"|!\(\s*\"acceptFacet\")",
+                body)
+            if not consume:
+                add(provision_line, "G-CAP-PROVISION",
+                    f'{component}@"provision" does not consume the nonce')
+            elif accept and consume.start() > accept.start():
+                add(provision_line, "G-CAP-PROVISION",
+                    f'{component}@"provision" consumes the nonce after the consumer call')
 
     # -- published bundles ------------------------------------------------
     for publish in PUBLISH.finditer(text):
@@ -269,8 +367,15 @@ def findings_for(path: Path) -> list[Finding]:
             n for n in re.findall(r"\*([A-Za-z_][A-Za-z0-9_]*)", body)
             if is_authority(n)
         )
-        add(line, "G-CAP-BUNDLE",
-            f"bundle {name} closes over {', '.join(captured) or 'nothing'}")
+        # A provisioned facet lives in a private bare-name slot (L7).  The
+        # slot or the bundle may be annotated; only annotated captures are
+        # exempt, and an unannotated raw-auth capture stays a finding.
+        allowed = name in annotated or (
+            bool(captured) and all(n in annotated for n in captured)
+        )
+        if not allowed:
+            add(line, "G-CAP-BUNDLE",
+                f"bundle {name} closes over {', '.join(captured) or 'nothing'}")
         if body and re.search(
             rf"for\s*\([^)]*\b{re.escape(name)}\b[^)]*\)\s*(?:<-|<<-)\s*([A-Za-z_][A-Za-z0-9_]*)",
             text,

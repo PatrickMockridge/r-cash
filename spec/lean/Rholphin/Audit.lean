@@ -5,6 +5,7 @@ import Rholphin.Linear.Deploy
 import Rholphin.Linear.Serial
 import Rholphin.Linear.Interleave
 import Rholphin.Linear.Prov
+import Rholphin.Linear.Provisioning
 import Rholphin.Prim.EDSL
 import Rholphin.Crypto.Hash
 import Rholphin.Crypto.Sig
@@ -43,6 +44,45 @@ output containing `sorryAx` or a project-local axiom.
 #print axioms Rholphin.Linear.caller_never_stored
 #print axioms Rholphin.Linear.authority_use_requires_provenance
 #print axioms Rholphin.Linear.bundle_no_registry_cap
+#print axioms Rholphin.Linear.facet_store_scope
+#print axioms Rholphin.Linear.facet_store_rejects_foreign_kind
+#print axioms Rholphin.Linear.facet_store_rejects_foreign_auth
+#print axioms Rholphin.Linear.mint_facet_cannot_store_burn_auth
+#print axioms Rholphin.Linear.burn_facet_cannot_store_mint_auth
+#print axioms Rholphin.Linear.burn_facet_call_carries_payment
+#print axioms Rholphin.Linear.settle_facet_call_carries_payment
+#print axioms Rholphin.Linear.custody_deposit_carries_payment
+#print axioms Rholphin.Linear.buffer_deposit_carries_payment
+#print axioms Rholphin.Linear.mint_facet_call_carries_no_payment
+#print axioms Rholphin.Linear.allowed_arm_has_kind
+#print axioms Rholphin.Linear.nonce_cannot_provision_twice
+#print axioms Rholphin.Linear.provision_requires_pinned_shop
+#print axioms Rholphin.Linear.issuer_shop_cannot_issue_buffer
+#print axioms Rholphin.Linear.buffer_shop_cannot_issue_mint
+#print axioms Rholphin.Linear.provision_refusal_rolls_back
+#print axioms Rholphin.Linear.provision_returns_no_cap
+#print axioms Rholphin.Linear.provision_routes_facets_to_consumer
+#print axioms Rholphin.Linear.forged_facet_refused
+#print axioms Rholphin.Linear.issued_facet_accepted
+#print axioms Rholphin.Linear.slot_write_once
+#print axioms Rholphin.Linear.rotation_preserves_facet
+#print axioms Rholphin.Linear.rotation_refuses_old
+#print axioms Rholphin.Linear.rotation_accepts_new
+#print axioms Rholphin.Linear.rotation_other_cell
+#print axioms Rholphin.Linear.rotation_requires_governor
+#print axioms Rholphin.Linear.authorized_rotation_keeps_facet
+#print axioms Rholphin.Linear.authorized_domain_action
+#print axioms Rholphin.Linear.authorized_rotation_refuses_old
+#print axioms Rholphin.Linear.authorized_rotation_accepts_new
+#print axioms Rholphin.Linear.mint_consumer_refuses_recapitalise
+#print axioms Rholphin.Linear.mint_consumer_recap_pre_effect
+#print axioms Rholphin.Linear.vault_accept_slot_write_once
+#print axioms Rholphin.Linear.call_target_is_not_vault_accept
+#print axioms Rholphin.Linear.auth_set_counts
+#print axioms Rholphin.Linear.auth_domains_nodup
+#print axioms Rholphin.Linear.settlement_interest_routes_to_buffer
+#print axioms Rholphin.Linear.settlement_clean_routes_nothing
+#print axioms Rholphin.Linear.settlement_return_shape
 #print axioms Rholphin.take_put_balance
 #print axioms Rholphin.refuse_quiescent
 #print axioms Rholphin.fail_aborts

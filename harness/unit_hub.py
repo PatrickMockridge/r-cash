@@ -68,9 +68,9 @@ def setup_feed(keys: dict, root: str, registry: str, currency: str, prices: list
 
     height = node.height()
     for index, price in enumerate(prices):
-        payload = f"rcash:oracle-submit:v3|{feed_id}|{currency}|{index}|{price}|{height}"
+        payload = sign_payload.oracle_submit_payload(feed_id, currency, index, price, height)
         sig = sign_payload.sign_payload(keys[f"reporter{index + 1}"]["secret"],
-                                        payload.encode())["signature"]
+                                        payload)["signature"]
         body = (
             f'OracleFeed!("submit", {index}, {price}, {height}, '
             f'"{reporters[index]}", "{sig}".hexToBytes(), *r) |\n'
@@ -95,11 +95,10 @@ def setup_feed(keys: dict, root: str, registry: str, currency: str, prices: list
         "  }"), keys["deployer"]["secret"])
     check(f"{currency} activate", activation, "ok")
 
-    bind_payload = (
-        f"rcash:feed-bind:v3|{currency}|{feed_id}|{uri}|{policy_hash}|{sponsor}"
-    )
+    bind_payload = sign_payload.feed_bind_payload(
+        currency, feed_id, uri, policy_hash, sponsor)
     bind_sig = sign_payload.sign_payload(keys["sponsor"]["secret"],
-                                         bind_payload.encode())["signature"]
+                                         bind_payload)["signature"]
     bind_term = (
         "new rl(`rho:registry:lookup`), ch, r, "
         "deployerId(`rho:rchain:deployerId`), deployId(`rho:rchain:deployId`) in {\n"

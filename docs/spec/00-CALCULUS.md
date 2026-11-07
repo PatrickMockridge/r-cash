@@ -107,6 +107,17 @@ It may **not** close over any name obtained from `Root.resolve`, `StablecoinDire
 over a live `ListingRegistry` capability read from `ComponentRegistry`. v3 carries
 `rootUri` strings and resolves per arm.
 
+**C3a (facets are Fresh; the shop URI is a string).** A provisioned issuer facet is a
+`Fresh` name created by `new` in its owning term; it is not an `Installer` capability and
+not a caller argument. Shops are per term: T1 publishes the issuer `FacetShop`
+(mint/burn/settle/custody) and T3 publishes `BufferFacetShop` (buffer). A consumer maps
+each kind to the shop pinned for it and verifies the delivered facet through that shop's
+pinned `isFacet` arm. T2's provisioning endpoint is the published `VaultAccept` slot owner;
+`VaultBook` and `LiquidationEngine` are call targets that read the slot. A consumer bundle
+may close over its own `new`-bound bare-name slot (L7), but never over a shop capability.
+The shop URI is an immutable string resolved at arm entry. A facet name is never returned
+in a reply, written to an attestation or data map, or published in a bundle.
+
 ## 5. Interface well-formedness
 
 ```
@@ -144,10 +155,15 @@ These hold and must be preserved.
   atomic operation. The `RECV` is the linearization point.
 - **L6 Joint invariants are co-located.** If an invariant cannot be preserved by one cell,
   the state lives in one named atomic cluster, or the operation uses the documented
-  reserve/confirm protocol. Splitting an invariant across cells is a design error.
+  reserve/confirm protocol. One named atomic cluster may span pinned components within a
+  single deploy: the guarantee is restored at deploy end, and any refusal after a
+  component effect calls `fail()`, which aborts the whole deploy. Splitting an invariant
+  across cells is a design error; splitting it across deploys requires P5.
 - **L7 Data-only state, with named exceptions.** State stores strings, integers, bytes,
   lists and maps. Live names are allowed only for own `new`-bound cells, ERTP
-  purses/payments, per-vault issuer auths, per-transfer cells and claim tokens.
+  purses/payments, per-vault issuer auths, per-transfer cells and claim tokens. A
+  provisioned issuer facet may also live in a private, write-once bare-name slot owned by
+  its consumer; it is a process name, never a data-map value.
   Registry-resolved capabilities and caller-supplied caps are never stored.
 - **L8 Bounded units.** Every unit has a byte, depth and contract-count budget. A unit over
   budget is split; it is never inlined further.
@@ -215,14 +231,45 @@ write preceded the native call, a refusal calls `fail()`; it never returns `(fal
 reserve id; perform external work; confirm
 ```
 
-Only for operations that must cross a deploy boundary. Not used in v3; kept as a documented
-fallback for a future multi-deploy saga.
+For operations that cross a deploy boundary or that must deliver a name to another term.
+The provisioning saga is the reference instance: verify the sponsor bound at creation and
+the canonical payload; reserve the nonce; resolve the pinned consumer URI from the payload;
+call `acceptFacet`; confirm. Shops are per term, and each consumer maps a kind to the shop
+pinned for it. A refusal from the consumer calls `fail()`, so the nonce and every slot roll
+back together. A consumed nonce is refused on replay.
 
 ### P6 — Fail-closed
 
 All business validation precedes the first write. After a withdrawal, mint, burn, swap or
 escrow move, an unexpected refusal calls `fail()`. No arm returns `(false, reason)` after
 moving value.
+
+### P7 — Intra-deploy grant
+
+```
+reserve nonce; deliver the facet as a process to the pinned consumer in the same deploy;
+consumer verifies isFacet; write the private bare-name slot once; reply an ack
+```
+
+P7 is the delivery half of P5 when the consumer call is intra-deploy. The facet crosses as
+a process, never as a data-map value or URI. The caller-visible reply carries no
+capability. A forged facet or a facet from the wrong term's shop is refused by the
+consumer's `isFacet` check, and a filled slot is never replaced. T2's slot is owned by the
+published `VaultAccept` endpoint; `VaultBook` and `LiquidationEngine` are call targets.
+
+Two consumer-side obligations follow from the split:
+
+- T1 cannot read T3's buffer cell, so the `sin > surplus` recapitalisation check is a
+  pre-effect guard on every mint consumer (T2 `VaultBook.mint`, T4 `PSM.buyStable`), not
+  inside `MintFacet`.
+- `SettlementFacet.settle` returns `(true, principal, Nil)` or
+  `(true, principal, interestPay)`; T2 deposits `interestPay` through
+  `BufferOperatorFacet`.
+
+Rotation is not an `AuthAdmin` contract: a ledger rotates only after the published
+`Governor@"authorize"` accepts `domain, nonce, action, argsHash, sigs`. `domain` is unique
+per auth set (`auth:<currency>:<kind>`), the action is `"rotate"`, and the ledger creates
+the new auth internally.
 
 ## 8. Safety rules
 
@@ -231,7 +278,7 @@ moving value.
 | S1 | Never peek a cell, await an external component, then write the peeked snapshot. Consume after the await or not at all. |
 | S2 | Never await a caller-supplied name while holding a consumed cell. |
 | S3 | Never store a caller-supplied capability as authority. |
-| S4 | Never close a bundled contract over a capability resolved from a registry. Carry URIs and resolve at arm entry. |
+| S4 | Never close a bundled contract over a capability resolved from a registry. Carry URIs and resolve at arm entry. A provisioned issuer facet is `Fresh` and may be held in the consumer's private bare-name slot; the `FacetShop` URI is a string, not a capability, and is resolved at arm entry. |
 | S5 | Revalidate the consumed state after any external read or effect. |
 | S6 | Every refusal after a write or value movement calls `fail()`. |
 | S7 | Match ERTP replies exhaustively; never a catch-all `@_`. |
@@ -246,6 +293,9 @@ moving value.
 | S16 | Activation evidence is immutable attestation, never live mutable reserves. |
 | S17 | Every callee that can move value is pinned by `MarketDirectory`, `CurrencyRegistry` or `Root` and checked against the terms hash. |
 | S18 | Every deploy term passes the size, depth and capture gates before it is signed. |
+| S19 | Every mint consumer checks `sin ≤ surplus` before calling its provisioned `MintFacet`; the check cannot live inside T1 because T1 cannot read T3's buffer cell. |
+| S20 | `SettlementFacet.settle` returns `(true, principal, Nil)` or `(true, principal, interestPay)`; T2 deposits `interestPay` through `BufferOperatorFacet` and a clean reply deposits nothing. |
+| S21 | A ledger rotates only after `Governor@"authorize"` accepts `domain, nonce, action, argsHash, sigs`; there is no `AuthAdmin` contract and no caller-supplied new auth. |
 
 ## 9. Resource budgets
 

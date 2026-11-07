@@ -63,31 +63,41 @@ in {
         new LiquidityLock, lockState, uLock in {
           contract LiquidityLock(@"fund", dId, lpPayment, @beneficiaryId,
                                  @untilHeight, ret2) = {
-            new nowCh2, pkCh, aCh in {
+            new nowCh2, pkCh, aCh, benCh in {
               lockNow!(*nowCh2) |
               deployerIdOps!("pubKeyBytes", *dId, *pkCh) |
               for (@now2 <- nowCh2; @pk <- pkCh) {
                 revAddress!("fromPublicKey", pk, *aCh) |
-                for (@funder <- aCh) {
+                revAddress!("fromPublicKey",
+                            terms.get("lockBeneficiaryPubKey").hexToBytes(), *benCh) |
+                for (@funder <- aCh; @beneficiaryAddr <- benCh) {
                   for (@s <- lockState) {
                     if (s.get("funded")) { lockState!(s) | ret2!((false, "funded", *lpPayment)) }
                     else {
                       if (untilHeight <= 0) { lockState!(s) | ret2!((false, "height", *lpPayment)) }
                       else {
-                        if (untilHeight < now2 + terms.get("lockMinBlocks")) {
-                          lockState!(s) | ret2!((false, "lock too short", *lpPayment))
+                        if (funder != beneficiaryAddr) {
+                          lockState!(s) | ret2!((false, "not beneficiary", *lpPayment))
                         } else {
-                          new amtCh in {
-                            @lockPurse!("deposit", *lpPayment, *amtCh) |
-                            for (@amt <- amtCh) {
-                              match amt {
-                                (true, shares) => {
-                                  lockState!(s.set("funded", true).set("untilHeight", untilHeight)
-                                               .set("beneficiary", beneficiaryId)
-                                               .set("funder", funder).set("shares", shares)) |
-                                  ret2!((true, shares))
+                          if (untilHeight != terms.get("lockUntilHeight")) {
+                            lockState!(s) | ret2!((false, "lock height", *lpPayment))
+                          } else {
+                            if (untilHeight < now2 + terms.get("lockMinBlocks")) {
+                              lockState!(s) | ret2!((false, "lock too short", *lpPayment))
+                            } else {
+                              new amtCh in {
+                                @lockPurse!("deposit", *lpPayment, *amtCh) |
+                                for (@amt <- amtCh) {
+                                  match amt {
+                                    (true, shares) => {
+                                      lockState!(s.set("funded", true).set("untilHeight", untilHeight)
+                                                   .set("beneficiary", beneficiaryId)
+                                                   .set("funder", funder).set("shares", shares)) |
+                                      ret2!((true, shares))
+                                    }
+                                    _ => { ret2!(1 / 0) }
+                                  }
                                 }
-                                _ => { ret2!(1 / 0) }
                               }
                             }
                           }

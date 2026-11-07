@@ -89,6 +89,7 @@ STEP_KEYS = {
         "component:market-factory",
         "component:tradability-gate",
         "component:listing-views",
+        "component:market-auth-ledger",
     ],
     "identity": ["component:account-factory"],
 }
