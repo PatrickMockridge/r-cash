@@ -11,7 +11,6 @@ Usage:
 
 from __future__ import annotations
 
-import hashlib
 import json
 import sys
 from pathlib import Path
@@ -33,11 +32,11 @@ PHLO = 40_000_000
 
 
 def canonical(schema: str, values: list[str]) -> str:
-    return schema + "|" + "|".join(f"{len(v)}:{v}" for v in values)
+    return sign_payload.canonical(schema, values)
 
 
 def blake2b256(text: str) -> str:
-    return hashlib.blake2b(text.encode(), digest_size=32).hexdigest()
+    return sign_payload.blake2b256(text.encode()).hex()
 
 
 def deploy_feed(term: str, secret: str):
@@ -101,9 +100,9 @@ def main() -> int:
     height = node.height()
     prices = [100, 101, 99]
     for index, price in enumerate(prices):
-        payload = f"rcash:oracle-submit:v3|{feed_id}|{currency}|{index}|{price}|{height}"
+        payload = sign_payload.oracle_submit_payload(feed_id, currency, index, price, height)
         sig = sign_payload.sign_payload(keys[f"reporter{index + 1}"]["secret"],
-                                        payload.encode())["signature"]
+                                        payload)["signature"]
         body = (
             f'OracleFeed!("submit", {index}, {price}, {height}, '
             f'"{reporters[index]}", "{sig}".hexToBytes(), *r) |\n'
@@ -131,11 +130,10 @@ def main() -> int:
 
     registry = state.get("oracle_registry_uri")
     if registry:
-        bind_payload = (
-            f"rcash:feed-bind:v3|{currency}|{feed_id}|{uri}|{policy_hash}|{sponsor}"
-        )
+        bind_payload = sign_payload.feed_bind_payload(
+            currency, feed_id, uri, policy_hash, sponsor)
         bind_sig = sign_payload.sign_payload(keys["sponsor"]["secret"],
-                                             bind_payload.encode())["signature"]
+                                             bind_payload)["signature"]
         def bind_term(sig: str, feed_uri: str = uri, feed: str = feed_id) -> str:
             return (
                 "new rl(`rho:registry:lookup`), ch, r, "
@@ -165,7 +163,7 @@ def main() -> int:
         check("feed bind bad deployer",
               one(bind_term(bind_sig), secret), "bad sponsor")
         bad_sig = sign_payload.sign_payload(keys["admin1"]["secret"],
-                                            bind_payload.encode())["signature"]
+                                            bind_payload)["signature"]
         check("feed bind bad signature",
               one(bind_term(bad_sig), keys["sponsor"]["secret"]),
               "bad sponsor signature")

@@ -35,6 +35,16 @@ MARKET_TERMS_SCHEMA = "rcash:market-terms:v4"
 MARKET_AUTH_SCHEMA = "rcash:market-auth:v1"
 PROVISION_SCHEMA = "rcash:provision:v1"
 
+# Market authority rotation is an admin action through the published
+# `Governor@"authorize"` choke point. The signed preimage is the canonical
+# `rcash:admin:v1` payload over [domain, nonce, action, argsHash]:
+#   domain   auth:market
+#   action   rotate
+#   argsHash marketAuth   (the ledger this action rotates)
+AUTH_MARKET_DOMAIN = "auth:market"
+MARKET_AUTH_ACTION = "rotate"
+MARKET_AUTH_ARGS = "marketAuth"
+
 
 def blake2b256(data: bytes) -> bytes:
     return hashlib.blake2b(data, digest_size=32).digest()
@@ -83,10 +93,13 @@ def admin_canonical_payload(domain: str, nonce: int, action: str,
 
 def admin_payload(component: str, nonce: int, action: str,
                   args: list[object]) -> bytes:
-    """Legacy v0.3 admin preimage (kept byte-identical for existing callers)."""
-    # Args are strings or integers. Strings may not contain '|' or ','; validate at the caller.
+    """Canonical admin preimage verified by `AdminGuard@"verify"`.
+
+    The args are joined into the opaque `argsHash` the arm receives; the
+    canonical length prefix makes an embedded `|` unambiguous.
+    """
     body = ",".join(str(a) for a in args)
-    return f"{ADMIN_DOMAIN}|{component}|{nonce}|{action}|{body}".encode()
+    return admin_canonical_payload(component, nonce, action, body)
 
 
 def oracle_submit_payload(feed_id: str, currency: str, index: int,
@@ -108,6 +121,16 @@ def market_create_payload(market_id: str, terms_hash: str,
     """Canonical sponsor preimage verified by the market factory/terms store."""
     return canonical(MARKET_CREATE_SCHEMA,
                      [market_id, terms_hash, sponsor_hex]).encode()
+
+
+def market_auth_rotate_payload(nonce: int) -> bytes:
+    """Signed admin preimage for `MarketAuthLedger@"rotate"`.
+
+    The rotate arm creates the replacement authority itself; this payload
+    authorises the rotation and binds its nonce, not a caller-supplied name.
+    """
+    return admin_canonical_payload(AUTH_MARKET_DOMAIN, nonce,
+                                   MARKET_AUTH_ACTION, MARKET_AUTH_ARGS)
 
 
 def sign_payload(secret_hex: str, payload: bytes) -> dict:
@@ -137,6 +160,17 @@ def self_check() -> None:
         "rcash:admin:v1|12:market-index|1:7|9:setStatus|17:REV/V4T:v1|paused"
     )
     assert canonical(ADMIN_SCHEMA, []) == ADMIN_SCHEMA
+    assert admin_canonical_payload("market-index", 7, "setStatus",
+                                   "REV/V4T:v1|paused") == (
+        b"rcash:admin:v1|12:market-index|1:7|9:setStatus|17:REV/V4T:v1|paused")
+    assert oracle_submit_payload("NGN-1", "NGN", 0, 100, 7) == (
+        b"rcash:oracle-submit:v3|5:NGN-1|3:NGN|1:0|3:100|1:7")
+    assert feed_bind_payload("NGN", "NGN-1", "rho:id:feed", "ab", "04aa") == (
+        b"rcash:feed-bind:v3|3:NGN|5:NGN-1|11:rho:id:feed|2:ab|4:04aa")
+    assert market_create_payload("REV/V4T:v1", "h", "04aa") == (
+        b"rcash:market-create:v1|10:REV/V4T:v1|1:h|4:04aa")
+    assert market_auth_rotate_payload(9) == (
+        b"rcash:admin:v1|11:auth:market|1:9|6:rotate|10:marketAuth")
     assert hash_canonical("rcash:market-terms:v4", ["a"]).hex() == blake2b256(
         b"rcash:market-terms:v4|1:a").hex()
 
