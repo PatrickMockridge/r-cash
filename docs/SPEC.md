@@ -254,9 +254,10 @@ reporter allowlist changes.
 
 ### 7.1 System creation and listing
 
-One system per currency code. `31_stablecoin.rho` is deployed by the installer and
-validates a sponsor signature over `rcash:stablecoin-create:v1|currency|paramsHash|sponsor`,
-`Bounds.checkIssuer`, and `Codec.hash` of the signed params.
+One system per currency code. The sponsor deploys five terms — T1 issuer, T5 risk
+parameters, T3 buffer/savings, T4 PSM and T2 vault — and each sponsor-signed deploy
+validates the canonical create preimage, `Bounds.checkIssuer`, and `Codec.hash` of the
+signed params before creating anything.
 
 Issuer params are `rcash:stablecoin-params:v2`, 11 values:
 
@@ -270,12 +271,15 @@ minDebt, maxDebt, maxOracleAge, savingsShareBps, psmFeeBps
 `maxDebt minDebt..ceiling`, `maxOracleAge 1..1000`, `savingsShareBps 0..10000`,
 `psmFeeBps 0..1000`.
 
-The deploy returns `[stablecoinUri, custodyUri, paramsUri, vaultUri, liquidationUri,
-savingsUri, psmUri, bufferUri, attestation]`. `CurrencyRegistry.register` takes all eight
-URIs plus the params hash and sponsor, verifies the signature over
-`rcash:currency-register:v3|code|sc|custody|params|vault|liq|savings|psm|buffer|paramsHash|sponsor`,
-verifies the live `attest`, and writes the entry and the `StablecoinDirectory` in one
-commit.
+The five deploy results supply the eight component URIs. The sponsor then provisions the
+facets: T3's burn facet from the issuer shop, T4's mint/burn from the issuer shop, and T2's
+mint/burn/settle/custody from the issuer shop plus its buffer facet from the buffer shop.
+`CurrencyRegistry.register` takes all eight URIs, the params hash, the sponsor and the
+submitter id, verifies the signature over
+`Codec.hash("rcash:currency-register:v4", [code, sc, custody, params, vault, liq, savings,
+psm, buffer, paramsHash, sponsor])`, requires all eight live attestations to carry the
+matching currency, params hash, sponsor and kind, and writes the entry and the
+`StablecoinDirectory` in one commit. The submitter must be the sponsor.
 
 ### 7.2 Vault lifecycle
 
@@ -315,9 +319,9 @@ governed currency pause; it gates `mint`, `withdraw` and PSM `buyStable` only.
 
 | ID | Level | Requirement | Owner | Status |
 |---|---|---|---|---|
-| SPEC-ISS-01 | MUST | One system per currency; listing binds all eight URIs in the v3 preimage. | 31_stablecoin, CurrencyRegistry | implemented |
-| SPEC-ISS-02 | MUST | Params are the signed v2 11-value set; bounds and hash are enforced at creation. | Bounds, 31_stablecoin | implemented |
-| SPEC-ISS-03 | MUST | `savingsShareBps` and `psmFeeBps` are seeded from the signed params. | 31_stablecoin | implemented |
+| SPEC-ISS-01 | MUST | One system per currency; listing binds all eight URIs in the canonical v4 preimage. | T1/T2/T3/T4/T5, CurrencyRegistry | implemented |
+| SPEC-ISS-02 | MUST | Params are the signed v2 11-value set; bounds and hash are enforced at creation. | Bounds, T1/T5 | implemented |
+| SPEC-ISS-03 | MUST | `savingsShareBps` and `psmFeeBps` are seeded from the signed params. | T3, T4, T5 | implemented |
 | SPEC-ISS-04 | MUST | Health is required on mint and collateral withdrawal; stale or zero rate refuses `"stale feed"`/`"no rate"`. | VaultBook | implemented |
 | SPEC-ISS-05 | MUST | Min/max debt, debt ceiling and max supply are enforced before minting. | VaultBook, Stablecoin | implemented |
 | SPEC-ISS-06 | MUST | Interest accrues per block and is ceiled; a repay splits principal and interest via `settle`. | VaultBook, Stablecoin | implemented |
@@ -695,7 +699,7 @@ no issuer, vault, PSM or savings URIs.
 |---|---|---|---|---|
 | SPEC-REG-01 | MUST | Root registration is installer-signed; rotation/freeze are 2-of-3 and versioned. | Root | implemented |
 | SPEC-REG-02 | MUST | Exactly one system per currency; duplicate listing refuses `"currency exists"`/`"duplicate"`. | CurrencyRegistry | implemented |
-| SPEC-REG-03 | MUST | Currency registration binds all eight URIs plus params hash and sponsor in the v3 preimage. | CurrencyRegistry | implemented |
+| SPEC-REG-03 | MUST | Currency registration binds all eight URIs plus params hash and sponsor in the canonical v4 preimage; the submitter is the sponsor. | CurrencyRegistry | implemented |
 | SPEC-REG-04 | MUST | The directory is written only after the live attestation matches. | CurrencyRegistry | implemented |
 | SPEC-REG-05 | MUST | Asset resolution is per-call; no registry capability is cached in a bundle. | AssetResolver | implemented |
 | SPEC-REG-06 | MUST | Install order matches §14 and each step's Root keys resolve before the next. | installers | implemented |
@@ -869,11 +873,11 @@ bad buffer authority  bad burn authority  bad custody authority  bad directory a
 bad index authority  bad liquidation authority  bad mint authority  bad savings authority
 bad secret  bad settlement authority  bad signature  bad sponsor  bad sponsor signature
 bad vault auth  bad version  balance  band  base feed  base feed policy  base spread  below MCR
-below threshold  bonus  book expiry  bps  buffer  burn  ceiling  changed  close  close factor
+below threshold  bonus  book expiry  bps  brand mismatch  buffer  burn  ceiling  changed  close  close factor
 closed  conflict  currency mismatch  custody  default expiry  deposit  depth  depth floor  duplicate  early
 exists  expired  expiry  external attestation  external decimals  external kind  feed attestation
 feed inactive  feed info  first deposit balance  frozen  funded  future price  healthy  height
-height not monotonic  lock beneficiary  lock height  lock too short  lock unfunded  locked  max debt
+height not monotonic  issuer mismatch  kind mismatch  lock beneficiary  lock height  lock too short  lock unfunded  locked  max debt
 max expiry  max memo  max op id  max stipend  max supply  max trade  mcr  memo  min amount  min debt
 min liquidity  min rev  min stable  min ticket  minimum  no account  no attestation  no currency
 no feed  no lock  no market  no purse  no rate  no shares  no slot  no system  no terms  no vault  not LP
@@ -921,11 +925,11 @@ records the decision for each one.
 | ID | `09_identity.rho` | `v4_balance`, account reads | Accounts, Receive | unit-accounts |
 | PAY | `40_transfer.rho`, `09_identity.rho` | `v4_send_transfer`, claim/refund, transfers | Pay, Claim, History | unit-transfer, unit-transfer-memo |
 | ORA | `31_feed.rho`, `12/13` | oracle reads | Markets (status) | unit-feed, unit-hub |
-| ISS | `31_stablecoin.rho`, `32_currency_registry.rho` | `v4_vault_*`, currency | Vault | unit-stablecoin, unit-interest |
-| LIQ | `31_stablecoin.rho` | `v4_liquidate`, vault views | Vault (keeper) | unit-liquidation, unit-buffer |
-| BUF | `31_stablecoin.rho` | buffer info, schedule/apply | Earn (info) | unit-buffer, unit-timelock |
-| SAV | `31_stablecoin.rho` | savings methods | Earn | unit-savings, unit-interest |
-| PSM | `31_stablecoin.rho` | PSM methods | Redeem | unit-psm |
+| ISS | `31_issuer.rho`, `31_params.rho`, `32_currency_registry.rho` | `v4_vault_*`, currency | Vault | unit-stablecoin, unit-interest |
+| LIQ | `31_vault.rho` | `v4_liquidate`, vault views | Vault (keeper) | unit-liquidation, unit-buffer |
+| BUF | `31_buffer_savings.rho` | buffer info, schedule/apply | Earn (info) | unit-buffer, unit-timelock |
+| SAV | `31_buffer_savings.rho` | savings methods | Earn | unit-savings, unit-interest |
+| PSM | `31_psm.rho` | PSM methods | Redeem | unit-psm |
 | MKT/POOL | `50_market.rho`, `51_pool.rho` | market/pool methods | Markets, Liquidity | unit-market, unit-pool |
 | GOV | `04_governor.rho`, contracts | governance commands | Governance (read) | unit-timelock, unit-v3 |
 | REG | `00_root.rho`, `32`, `14` | manifest/currency reads | Settings | unit-v3 |
