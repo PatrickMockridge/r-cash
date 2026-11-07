@@ -7,6 +7,13 @@ interest. The repay waterfall must deposit the interest into the surplus buffer,
 cover outstanding sin, move the configured share to the savings pool, and leave
 the rest in the buffer. The saver then withdraws more than the deposit.
 
+In the multi-term split these URIs name T3 (`31_buffer_savings.rho`):
+`savingsUri` is `SavingsPool` and `bufferUri` is `SurplusBuffer`. The privileged
+buffer mutations run through the provisioned `BufferOperatorFacet`, so the suite
+checks the term attestations and assumes `unit_stablecoin` completed the three
+provisioning deploys (MULTI-TERM.md §4). `stablecoin_support.py` owns those
+deploys; if it exposes `ensure_provisioned` this suite calls it.
+
 Usage:
     python3 harness/unit_savings.py
 """
@@ -57,6 +64,35 @@ def buffer_info(secret: str, buffer_uri: str) -> dict:
                secret)[1]
 
 
+def attest(uri: str, binding: str, secret: str) -> dict:
+    return one(call(uri, binding,
+                    f'{binding}!("attest", *r) | for (@x <- r) {{ deployId!(x) }}'),
+               secret)[1]
+
+
+def ensure_provisioned() -> None:
+    """Ensure T3's BurnFacet and T2's operator facet were provisioned.
+
+    `unit_stablecoin` performs the three provisioning deploys (T2 five kinds,
+    T4 two, T3 one) through `stablecoin_support.py`. This suite runs after it;
+    if the support helper exists, use it so a standalone run cannot hang on an
+    unfilled bare-name slot. Missing helper: report, do not reimplement the
+    sponsor-signed preimage here.
+    """
+    try:
+        import stablecoin_support
+    except ImportError:
+        print("note: stablecoin_support.py missing; assuming unit_stablecoin "
+              "provisioned the T3 BurnFacet")
+        return
+    ensure = getattr(stablecoin_support, "ensure_provisioned", None)
+    if ensure is None:
+        print("note: stablecoin_support.ensure_provisioned missing; assuming "
+              "unit_stablecoin provisioned the T3 BurnFacet")
+        return
+    ensure(KEYS, "V4T")
+
+
 def main() -> int:
     keys = json.loads(KEYS.read_text())
     state = json.loads(STATE.read_text())
@@ -76,6 +112,13 @@ def main() -> int:
     vault = entry["vaultUri"]
     savings = entry["savingsUri"]
     buffer = entry["bufferUri"]
+    ensure_provisioned()
+    savings_att = attest(savings, "SavingsPool", deployer)
+    buffer_att = attest(buffer, "SurplusBuffer", deployer)
+    check("savings term kind", savings_att.get("kind"), "savings")
+    check("buffer term kind", buffer_att.get("kind"), "buffer")
+    check("savings term currency", savings_att.get("currency"), "V4T")
+    check("buffer term currency", buffer_att.get("currency"), "V4T")
 
     saver = keys["key13"]
     borrower = keys["key17"]

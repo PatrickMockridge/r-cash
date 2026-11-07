@@ -3,11 +3,18 @@
 # contracts/build/arm_inventory.json by tools/check_flows.py. Guards, effects,
 # acceptance IDs, model/vector and invariants are the authored content; status is
 # not a synonym for tested. See README.md for the schema and protocol labels.
+#
+# Multi-term transition: the monolith still supplies these arm keys until it is
+# deleted, so `check_flows` reports duplicate/source findings for it. The lines
+# below name the T3 term and are the ones that remain valid after deletion.
+# The privileged buffer mutations moved from SurplusBuffer to the unpublished
+# BufferOperatorFacet; the auth ledger rotates the local per-auth cells.
 
 schema: rcash.flows/v1
 subsystem: buffer
 source_globs:
 - contracts/src/deploy/v3/31_stablecoin.rho
+- contracts/src/deploy/v3/31_buffer_savings.rho
 invariants: {}
 components:
 - name: SavingsPool
@@ -17,7 +24,7 @@ components:
     transition: buffer.SavingsPool.deposit
     lean: Rholphin.Model.BufferSavings.savingsPool_deposit
     kind: mutate
-    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1487}
+    source: {file: contracts/src/deploy/v3/31_buffer_savings.rho, line: 82}
     guards:
     - {id: amount_pos, expr: amount > 0, refusal: {reason: amount, phase: pre}}
     - {id: payment_asset, expr: isStablecoinPayment(payment), refusal: {reason: asset, phase: pre}}
@@ -48,7 +55,7 @@ components:
     transition: buffer.SavingsPool.withdraw
     lean: Rholphin.Model.BufferSavings.savingsPool_withdraw
     kind: mutate
-    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1540}
+    source: {file: contracts/src/deploy/v3/31_buffer_savings.rho, line: 135}
     guards:
     - {id: held, expr: 'shares[ownerId] = held', refusal: {reason: shares, phase: pre}}
     - {id: shares_bounds, expr: 0 < shares <= held and totalShares > 0 and totalAssets > 0, refusal: {reason: shares, phase: pre}}
@@ -78,7 +85,7 @@ components:
     transition: buffer.SavingsPool.notify
     lean: Rholphin.Model.BufferSavings.savingsPool_notify
     kind: mutate
-    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1576}
+    source: {file: contracts/src/deploy/v3/31_buffer_savings.rho, line: 171}
     guards:
     - {id: auth, expr: auth = savingsNotifyAuth, refusal: {reason: bad savings authority, phase: pre}}
     - {id: payment_asset, expr: isStablecoinPayment(payment), refusal: {reason: asset, phase: pre}}
@@ -88,11 +95,12 @@ components:
     access:
     - {cell: savingsState, mode: consume, actor: arm, phase: commit}
     - {cell: savingsState, mode: post, actor: arm, phase: commit}
-    nested_calls: []
+    nested_calls:
+    - {callee: savingsNotifyCheck, protocol: P0, takes: [], puts: [], post_owner: helper}
     refusals:
     - {reason: asset, phase: pre, reposts: false, fail: false}
     - {reason: bad savings authority, phase: pre, reposts: false, fail: false}
-    - {reason: no shares, phase: after_consume, reposts: true, fail: false}
+    - {reason: no shares, phase: pre, reposts: true, fail: false}
     invariants:
     - S10
     status: verified
@@ -103,7 +111,7 @@ components:
     transition: buffer.SavingsPool.info
     lean: Rholphin.Model.BufferSavings.savingsPool_info
     kind: read
-    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1611}
+    source: {file: contracts/src/deploy/v3/31_buffer_savings.rho, line: 211}
     guards: []
     effects:
     - {target: reply, formula: '(true, {totalShares, totalAssets, shareValueE8: floor(totalAssets * 1e8 / totalShares), rev})'}
@@ -120,7 +128,7 @@ components:
     transition: buffer.SavingsPool.position
     lean: Rholphin.Model.BufferSavings.savingsPool_position
     kind: read
-    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1628}
+    source: {file: contracts/src/deploy/v3/31_buffer_savings.rho, line: 228}
     guards: []
     effects:
     - {target: reply, formula: '(true, shares[ownerId])'}
@@ -133,6 +141,21 @@ components:
     status: verified
     acceptance:
     - AC-SPEC-BUF-01.1
+  - arm: SavingsPool@"attest"
+    transition: buffer.SavingsPool.attest
+    lean: Rholphin.Model.BufferSavings.savingsPool_attest
+    kind: read
+    source: {file: contracts/src/deploy/v3/31_buffer_savings.rho, line: 237}
+    guards: []
+    effects:
+    - {target: reply, formula: '(true, {currency, paramsHash, sponsor, kind: "savings"})'}
+    access: []
+    nested_calls: []
+    refusals: []
+    invariants: []
+    status: verified
+    acceptance:
+    - AC-SPEC-BUF-01.1
   states:
   - Empty
   - Funded
@@ -140,97 +163,34 @@ components:
 - name: SurplusBuffer
   lean_module: Rholphin.Model.BufferSavings
   arms:
-  - arm: SurplusBuffer@"deposit"
-    transition: buffer.SurplusBuffer.deposit
-    lean: Rholphin.Model.BufferSavings.surplusBuffer_deposit
+  - arm: SurplusBuffer@"acceptFacet"
+    transition: buffer.SurplusBuffer.acceptFacet
+    lean: Rholphin.Model.BufferSavings.surplusBuffer_acceptFacet
     kind: mutate
-    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1637}
+    source: {file: contracts/src/deploy/v3/31_buffer_savings.rho, line: 248}
     guards:
-    - {id: auth, expr: auth = bufferDepositAuth, refusal: {reason: bad buffer authority, phase: pre}}
-    - {id: payment_asset, expr: isStablecoinPayment(payment), refusal: {reason: asset, phase: pre}}
+    - {id: kind, expr: kind = "burn", refusal: {reason: action, phase: pre}}
+    - {id: write_once, expr: not bufferFacetState.burn, refusal: {reason: duplicate, phase: pre}}
     effects:
-    - {target: surplus, formula: surplus + amount}
-    - {target: rev, formula: rev + 1}
+    - {target: bufferFacetState.burn, formula: 'true'}
+    - {target: burnSlot, formula: facet}
     access:
-    - {cell: bufferState, mode: consume, actor: arm, phase: commit}
-    - {cell: bufferState, mode: post, actor: arm, phase: commit}
+    - {cell: bufferFacetState, mode: consume, actor: arm, phase: commit}
+    - {cell: bufferFacetState, mode: post, actor: arm, phase: commit}
     nested_calls: []
     refusals:
-    - {reason: asset, phase: pre, reposts: false, fail: false}
-    - {reason: bad buffer authority, phase: pre, reposts: false, fail: false}
-    invariants:
-    - S3
-    - S9
+    - {reason: action, phase: pre, reposts: false, fail: false}
+    - {reason: duplicate, phase: pre, reposts: true, fail: false}
+    - {reason: verify failed, phase: pre, reposts: false, fail: false}
+    invariants: []
     status: verified
     acceptance:
     - AC-SPEC-BUF-01.1
-  - arm: SurplusBuffer@"paySavings"
-    transition: buffer.SurplusBuffer.paySavings
-    lean: Rholphin.Model.BufferSavings.surplusBuffer_paySavings
-    kind: mutate
-    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1665}
-    guards:
-    - {id: auth, expr: auth = bufferPayAuth, refusal: {reason: bad buffer authority, phase: pre}}
-    effects:
-    - {target: move, formula: floor(surplus * savingsShareBps / 10000)}
-    - {target: surplus, formula: surplus - (move if move > 0 and savings.totalShares > 0 else 0)}
-    - {target: savings.totalAssets, formula: totalAssets + (move if move > 0 and savings.totalShares > 0 else 0)}
-    access:
-    - {cell: bufferState, mode: peek, actor: arm, phase: pre}
-    - {cell: bufferState, mode: consume, actor: arm, phase: commit}
-    - {cell: bufferState, mode: post, actor: arm, phase: commit}
-    nested_calls: []
-    refusals:
-    - {reason: bad buffer authority, phase: pre, reposts: false, fail: false}
-    - {reason: no shares, phase: pre, reposts: false, fail: false}
-    - {reason: payment, phase: pre, reposts: false, fail: false}
-    invariants:
-    - S9
-    - S10
-    status: verified
-    acceptance:
-    - AC-SPEC-BUF-01.1
-    model: buffer.cover
-  - arm: SurplusBuffer@"cover"
-    transition: buffer.SurplusBuffer.cover
-    lean: Rholphin.Model.BufferSavings.surplusBuffer_cover
-    kind: mutate
-    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1714}
-    guards:
-    - {id: auth, expr: auth = bufferCoverAuth, refusal: {reason: bad buffer authority, phase: pre}}
-    - {id: nonneg, expr: badDebt >= 0, refusal: {reason: amount, phase: pre}}
-    - {id: payment_ok, expr: bufferPurse.withdraw ok, refusal: {reason: payment, phase: pre}}
-    effects:
-    - {target: newSin, formula: sin + badDebt}
-    - {target: cancelled, formula: 'min(surplus, newSin)'}
-    - {target: sin, formula: newSin - cancelled}
-    - {target: surplus, formula: surplus - cancelled}
-    - {target: supply, formula: supply - cancelled}
-    - {target: rev, formula: rev + 1}
-    access:
-    - {cell: bufferState, mode: peek, actor: arm, phase: pre}
-    - {cell: bufferState, mode: consume, actor: arm, phase: commit}
-    - {cell: bufferState, mode: post, actor: arm, phase: commit}
-    nested_calls:
-    - {callee: bufferCancelled, protocol: P0, takes: [], puts: [], post_owner: helper}
-    refusals:
-    - {reason: amount, phase: pre, reposts: false, fail: false}
-    - {reason: bad buffer authority, phase: pre, reposts: false, fail: false}
-    - {reason: payment, phase: pre, reposts: false, fail: false}
-    invariants:
-    - S3
-    - S6
-    - S9
-    status: verified
-    acceptance:
-    - AC-SPEC-BUF-01.1
-    model: buffer.cover
-    vector: buffer.cover.cancelled
   - arm: SurplusBuffer@"info"
     transition: buffer.SurplusBuffer.info
     lean: Rholphin.Model.BufferSavings.surplusBuffer_info
     kind: read
-    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1770}
+    source: {file: contracts/src/deploy/v3/31_buffer_savings.rho, line: 274}
     guards: []
     effects:
     - {target: reply, formula: '(true, {surplus, sin, savingsShareBps, rev})'}
@@ -247,7 +207,7 @@ components:
     transition: buffer.SurplusBuffer.scheduleShare
     lean: Rholphin.Model.BufferSavings.surplusBuffer_scheduleShare
     kind: create
-    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1778}
+    source: {file: contracts/src/deploy/v3/31_buffer_savings.rho, line: 282}
     guards:
     - {id: bps_range, expr: 0 <= bps <= 10000, refusal: {reason: bps, phase: pre}}
     effects:
@@ -266,7 +226,7 @@ components:
     transition: buffer.SurplusBuffer.applyShare
     lean: Rholphin.Model.BufferSavings.surplusBuffer_applyShare
     kind: mutate
-    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1797}
+    source: {file: contracts/src/deploy/v3/31_buffer_savings.rho, line: 301}
     guards:
     - {id: action, expr: action = "setSavingsShare", refusal: {reason: action, phase: pre}}
     - {id: bps_range, expr: 0 <= args <= 10000, refusal: {reason: bps, phase: pre}}
@@ -288,7 +248,192 @@ components:
     status: verified
     acceptance:
     - AC-SPEC-BUF-01.1
+  - arm: SurplusBuffer@"attest"
+    transition: buffer.SurplusBuffer.attest
+    lean: Rholphin.Model.BufferSavings.surplusBuffer_attest
+    kind: read
+    source: {file: contracts/src/deploy/v3/31_buffer_savings.rho, line: 333}
+    guards: []
+    effects:
+    - {target: reply, formula: '(true, {currency, paramsHash, sponsor, kind: "buffer"})'}
+    access: []
+    nested_calls: []
+    refusals: []
+    invariants: []
+    status: verified
+    acceptance:
+    - AC-SPEC-BUF-01.1
   states:
   - Idle
   - Active
   initial: Idle
+- name: BufferOperatorFacet
+  lean_module: Rholphin.Model.BufferSavings
+  arms:
+  - arm: BufferOperatorFacet@"deposit"
+    transition: buffer.BufferOperatorFacet.deposit
+    lean: Rholphin.Model.BufferSavings.surplusBuffer_deposit
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/31_buffer_savings.rho, line: 344}
+    guards:
+    - {id: payment_asset, expr: isStablecoinPayment(payment), refusal: {reason: asset, phase: pre}}
+    effects:
+    - {target: surplus, formula: surplus + amount}
+    - {target: rev, formula: rev + 1}
+    access:
+    - {cell: bufferState, mode: consume, actor: arm, phase: commit}
+    - {cell: bufferState, mode: post, actor: arm, phase: commit}
+    nested_calls: []
+    refusals:
+    - {reason: asset, phase: pre, reposts: false, fail: false}
+    invariants:
+    - S3
+    - S9
+    status: verified
+    acceptance:
+    - AC-SPEC-BUF-01.1
+  - arm: BufferOperatorFacet@"paySavings"
+    transition: buffer.BufferOperatorFacet.paySavings
+    lean: Rholphin.Model.BufferSavings.surplusBuffer_paySavings
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/31_buffer_savings.rho, line: 373}
+    guards:
+    - {id: auth, expr: bufferPayAuthCell, refusal: {reason: payment, phase: pre}}
+    - {id: payment_ok, expr: bufferPurse.withdraw ok, refusal: {reason: payment, phase: pre}}
+    effects:
+    - {target: move, formula: floor(surplus * savingsShareBps / 10000)}
+    - {target: surplus, formula: surplus - (move if move > 0 and savings.totalShares > 0 else 0)}
+    - {target: savings.totalAssets, formula: totalAssets + (move if move > 0 and savings.totalShares > 0 else 0)}
+    - {target: rev, formula: rev + 1}
+    access:
+    - {cell: bufferState, mode: peek, actor: arm, phase: pre}
+    - {cell: bufferState, mode: consume, actor: arm, phase: commit}
+    - {cell: bufferState, mode: post, actor: arm, phase: commit}
+    nested_calls: []
+    refusals:
+    - {reason: no shares, phase: pre, reposts: false, fail: false}
+    - {reason: payment, phase: pre, reposts: false, fail: false}
+    invariants:
+    - S9
+    - S10
+    status: verified
+    acceptance:
+    - AC-SPEC-BUF-01.1
+  - arm: BufferOperatorFacet@"cover"
+    transition: buffer.BufferOperatorFacet.cover
+    lean: Rholphin.Model.BufferSavings.surplusBuffer_cover
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/31_buffer_savings.rho, line: 425}
+    guards:
+    - {id: nonneg, expr: badDebt >= 0, refusal: {reason: amount, phase: pre}}
+    - {id: payment_ok, expr: bufferPurse.withdraw ok, refusal: {reason: payment, phase: pre}}
+    effects:
+    - {target: newSin, formula: sin + badDebt}
+    - {target: cancelled, formula: 'min(surplus, newSin)'}
+    - {target: sin, formula: newSin - cancelled}
+    - {target: surplus, formula: surplus - cancelled}
+    - {target: supply, formula: supply - cancelled}
+    - {target: rev, formula: rev + 1}
+    access:
+    - {cell: bufferState, mode: peek, actor: arm, phase: pre}
+    - {cell: bufferState, mode: consume, actor: arm, phase: commit}
+    - {cell: bufferState, mode: post, actor: arm, phase: commit}
+    nested_calls:
+    - {callee: bufferCancelled, protocol: P0, takes: [], puts: [], post_owner: helper}
+    - {callee: 'BurnFacet@"burn"', protocol: P4, internal: true}
+    refusals:
+    - {reason: amount, phase: pre, reposts: false, fail: false}
+    - {reason: payment, phase: pre, reposts: false, fail: false}
+    invariants:
+    - S3
+    - S6
+    - S9
+    status: verified
+    acceptance:
+    - AC-SPEC-BUF-01.1
+    model: buffer.cover
+    vector: buffer.cover.cancelled
+  states:
+  - Idle
+  - Active
+  initial: Idle
+- name: BufferAuthLedger
+  lean_module: Rholphin.Model.BufferSavings
+  arms:
+  - arm: BufferAuthLedger@"rotate"
+    transition: buffer.BufferAuthLedger.rotate
+    lean: Rholphin.Model.BufferSavings.bufferAuthLedger_rotate
+    kind: create
+    source: {file: contracts/src/deploy/v3/31_buffer_savings.rho, line: 492}
+    guards:
+    - {id: governor_authorized, expr: Governor.authorize ok, refusal: {reason: replay, phase: pre}}
+    - {id: kind, expr: kind = "bufferDeposit" or kind = "bufferPay" or kind = "bufferCover" or kind = "savingsNotify", refusal: {reason: action, phase: pre}}
+    effects:
+    - {target: auth, formula: fresh new-bound auth}
+    access: []
+    nested_calls:
+    - {callee: vaultGovernor, protocol: P0, takes: [], puts: [], post_owner: helper}
+    refusals:
+    - {reason: action, phase: pre, reposts: false, fail: false}
+    invariants: []
+    status: verified
+    acceptance:
+    - AC-SPEC-BUF-01.1
+  states:
+  - Live
+  initial: Live
+- name: BufferFacetShop
+  lean_module: Rholphin.Model.BufferSavings
+  arms:
+  - arm: BufferFacetShop@"provision"
+    transition: buffer.BufferFacetShop.provision
+    lean: Rholphin.Model.BufferSavings.bufferFacetShop_provision
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/31_buffer_savings.rho, line: 546}
+    guards:
+    - {id: sponsor, expr: sponsorHex = sponsorPublic, refusal: {reason: bad sponsor, phase: pre}}
+    - {id: kinds, expr: kinds = "buffer", refusal: {reason: action, phase: pre}}
+    - {id: signature, expr: sigOk over canonical payload, refusal: {reason: bad sponsor signature, phase: pre}}
+    - {id: deadline, expr: deadline >= block height, refusal: {reason: expired, phase: pre}}
+    - {id: nonce, expr: nonce unused, refusal: {reason: replay, phase: pre}}
+    effects:
+    - {target: 'nonces[nonce]', formula: consumed}
+    - {target: facet, formula: BufferOperatorFacet}
+    access:
+    - {cell: bufferShopUriState, mode: consume, actor: arm, phase: commit}
+    - {cell: bufferShopUriState, mode: post, actor: arm, phase: commit}
+    - {cell: bufferProvisionState, mode: consume, actor: arm, phase: commit}
+    - {cell: bufferProvisionState, mode: post, actor: arm, phase: commit}
+    nested_calls: []
+    refusals:
+    - {reason: action, phase: pre, reposts: false, fail: false}
+    - {reason: bad sponsor, phase: pre, reposts: false, fail: false}
+    - {reason: bad sponsor signature, phase: pre, reposts: false, fail: false}
+    - {reason: expired, phase: pre, reposts: false, fail: false}
+    - {reason: replay, phase: pre, reposts: true, fail: false}
+    invariants: []
+    status: verified
+    acceptance:
+    - AC-SPEC-BUF-01.1
+  - arm: BufferFacetShop@"isFacet"
+    transition: buffer.BufferFacetShop.isFacet
+    lean: Rholphin.Model.BufferSavings.bufferFacetShop_isFacet
+    kind: read
+    source: {file: contracts/src/deploy/v3/31_buffer_savings.rho, line: 609}
+    guards:
+    - {id: kind, expr: kind = "buffer", refusal: {reason: action, phase: pre}}
+    - {id: identity, expr: facet = BufferOperatorFacet, refusal: {reason: unknown, phase: pre}}
+    effects:
+    - {target: reply, formula: '(true, "buffer")'}
+    access: []
+    nested_calls: []
+    refusals:
+    - {reason: action, phase: pre, reposts: false, fail: false}
+    - {reason: unknown, phase: pre, reposts: false, fail: false}
+    invariants: []
+    status: verified
+    acceptance:
+    - AC-SPEC-BUF-01.1
+  states:
+  - Live
+  initial: Live
