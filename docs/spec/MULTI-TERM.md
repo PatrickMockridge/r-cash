@@ -21,15 +21,26 @@ contracts.
 |---|---|---|---|
 | T1 issuer | `31_issuer.rho` | `Stablecoin`, `CollateralCustody`, `AuthLedger`, `FacetShop` | `mintAuth`, `burnAuth`, `settlementAuth`, `custodyAuth` |
 | T2 vault | `31_vault.rho` | `VaultBook`, `LiquidationEngine` | `liquidationAuth`, per-vault auths |
-| T3 buffer/savings | `31_buffer_savings.rho` | `SavingsPool`, `SurplusBuffer` | `bufferDepositAuth`, `bufferPayAuth`, `bufferCoverAuth`, `savingsNotifyAuth` |
+| T3 buffer/savings | `31_buffer_savings.rho` | `SavingsPool`, `SurplusBuffer`, `BufferFacetShop` | `bufferDepositAuth`, `bufferPayAuth`, `bufferCoverAuth`, `savingsNotifyAuth` |
 | T4 PSM | `31_psm.rho` | `PegStabilityModule` | `psmMintAuth`, `psmBurnAuth` |
 | T5 params | `31_params.rho` | `RiskParameters` | none |
 
 Each auth is a value in a per-auth cell owned by that term's `AuthLedger`
 (`mintAuthCell`, ...). A facet captures only the cells it needs and reads the
-current value per call. `AuthLedger@"rotate"` is `rootAuthorize`-gated; it
-takes and posts the cell, so the old value is refused and the facet keeps
-working.
+current value per call.
+
+Rotation uses the published `Governor@"authorize"` choke point, not the
+internal `rootAuthorize` helper (which cannot be reached from another term):
+
+```
+Governor!("authorize", domain, nonce, "rotate", argsHash, sigs, ret)
+```
+
+`domain` is unique per auth set (`auth:<currency>:<kind>`), and the ledger
+creates a fresh auth internally — no new auth is supplied by the caller, so it
+cannot leak. The ledger then takes and posts the cell, so the old value is
+refused and the facet keeps working. `Governor` is resolved through
+`component:governor` at arm entry, never captured in a bundle.
 
 ## 3. Facets
 
@@ -40,12 +51,18 @@ capability.
 
 ABI:
 
+The signatures mirror the privileged arms they wrap (a facet never invents a
+different shape):
+
 ```
 MintFacet!(   "mint",     @amount, ret)
-BurnFacet!(   "burn",     @amount, ret)
-SettlementFacet!("settle",@amount, ret)
-CustodyFacet!( "deposit", payment, ret)   CustodyFacet!("withdraw", (brand, amount), ret)
-BufferOperatorFacet!("deposit"|"paySavings"|"cover", @amount, ret)
+BurnFacet!(   "burn",     payment, @maxAmount, ret)
+SettlementFacet!("settle",payment, @principal, @interest, ret)
+CustodyFacet!( "deposit", payment, ret)
+CustodyFacet!( "withdraw",@amount, ret)
+BufferOperatorFacet!("deposit", payment, ret)
+BufferOperatorFacet!("paySavings", @amount, ret)
+BufferOperatorFacet!("cover", @amount, ret)
 ```
 
 The facet names are fresh names created by `new` in the owning term. They are
@@ -81,6 +98,13 @@ sponsor]`):
 A third party cannot obtain a facet: the sponsor signature gates delivery, the
 shop picks the destination, and the facet is never exposed. The sponsor is the
 same trust anchor that creates the currency today.
+
+**Shops are per term.** T1 publishes the issuer `FacetShop`
+(mint/burn/settle/custody); T3 publishes `BufferFacetShop` (buffer). A consumer
+maps each kind to the shop pinned for it (`__ISSUER_SHOP_URI__` or
+`__BUFFER_SHOP_URI__`) and verifies the received facet with that shop's
+`isFacet`. T1 cannot issue a facet that lives in T3's closure, so a single
+central shop is not an option.
 
 ## 5. The bare-name slot (the Phase 0 finding)
 
