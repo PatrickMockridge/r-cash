@@ -27,6 +27,7 @@ sys.path.insert(0, str(ROOT / "harness"))
 
 import netconfig  # noqa: E402
 
+import deploy as node  # noqa: E402
 import sign_payload  # noqa: E402
 from feed_refresh import feed_uri, set_price  # noqa: E402
 from install_v3 import render  # noqa: E402
@@ -40,7 +41,7 @@ from unit_v3 import call, check, faucet_top_up, one  # noqa: E402
 #   deploy_currency_system(keys, state, currency:, params:, params_hash:,
 #                          sponsor_sig:) -> dict with sc_uri, custody_uri,
 #       params_uri, vault_uri, liq_uri, savings_uri, psm_uri, buffer_uri,
-#       vault_consumer_uri
+#       vault_consumer_uri, liquidation_auth_ledger_uri
 #   provision_facets(keys, state, consumer, consumer_uri, kinds) -> dict
 #       mapping each kind to True on acceptance.
 # The T2 term receives five kinds (mint, burn, settle, custody, buffer). The
@@ -125,6 +126,25 @@ def check_invariant(label: str, keys: dict, sc_uri: str, vault_uri: str) -> dict
     return tot
 
 
+def rotate_liquidation_auth(keys: dict, ledger_uri: str) -> list:
+    """Governor-authorized rotation of T2's liquidation auth.
+
+    The signed preimage is
+    rcash:admin:v1|auth:<currency>:liquidation|<nonce>|rotateLiquidationAuth|liquidation.
+    The engine reads the cell per call, so liquidation keeps working afterwards.
+    """
+    nonce = node.height()
+    payload = (f"rcash:admin:v1|auth:{CURRENCY}:liquidation|{nonce}|"
+               "rotateLiquidationAuth|liquidation")
+    sigs = ", ".join(
+        f'"{sign_payload.sign_payload(keys[n]["secret"], payload.encode())["signature"]}".hexToBytes()'
+        for n in ("admin1", "admin2"))
+    body = (f'LiquidationAuthLedger!("rotate", {nonce}, [{sigs}], *r) | '
+            "for (@x <- r) { deployId!(x) }")
+    return one(call(ledger_uri, "LiquidationAuthLedger", body),
+               keys["deployer"]["secret"])
+
+
 def liquidate(keys: dict, holder: str, liq_uri: str, vault_uri: str,
               owner_id: str, amount: int, min_collateral: int = 0) -> list:
     term = render_scenario("stablecoin_liquidate.rho", {
@@ -184,6 +204,11 @@ def main() -> int:
                          'VaultBook!("attest", *r) | for (@x <- r) { deployId!(x) }'),
                     secret)[1]
     check("vault attestation kind", vault_att.get("kind"), "vault")
+
+    # Rotate T2's liquidation auth. The engine reads the cell per call, so the
+    # liquidations below exercise the post-rotation cell.
+    rotated = rotate_liquidation_auth(keys, system["liquidation_auth_ledger_uri"])
+    check("liquidation auth rotation", isinstance(rotated, tuple) and rotated[0] is True, True)
     print(f"stablecoin: {sc_uri}")
     print(f"vault book: {vault_uri}")
     print(f"liquidation engine: {liq_uri}")

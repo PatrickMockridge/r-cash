@@ -532,4 +532,9 @@ theorem facet_survives_rotation (c : AuthCell) (newAuth : Nat) :
     facetMint (c.rotate newAuth) newAuth = some 1 := by
   simp [facetMint, rotate_new_accepted]
 
+/-- Governor-authorized liquidation-auth rotation: the cell is reposted with a
+fresh value, so the old auth is refused and the engine stays live. -/
+def liquidationAuthLedger_rotate (c : AuthCell) (newAuth : Nat) : AuthCell :=
+  c.rotate newAuth
+
 end Rholphin.Model.Vault

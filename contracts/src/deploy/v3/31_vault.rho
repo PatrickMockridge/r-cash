@@ -15,8 +15,8 @@
 //               __ISSUER_SHOP_URI__, __BUFFER_SHOP_URI__.
 new
   VaultBook, vaultState, provisionedState,
-  LiquidationEngine, VaultAccept,
-  liquidationAuth,
+  LiquidationEngine, LiquidationAuthLedger, VaultAccept,
+  liquidationAuth, liquidationAuthState,
   mintSlot, burnSlot, settleSlot, custodySlot, bufferSlot,
   vaultResolve, vaultParams, vaultBufferInfo, vaultInstallSlot,
   vaultUpdate, vaultCommit, vaultWriteOff,
@@ -25,7 +25,7 @@ new
   rs(`rho:registry:insertArbitrary`),
   deployId(`rho:rchain:deployId`),
   currencyCh, paramsHashCh, sponsorCh,
-  uVault, uLiq, uAccept
+  uVault, uLiq, uAccept, uAuthLedger
 in {
 
   // Resolve a Root component URI at arm entry and return the capability. The
@@ -305,9 +305,11 @@ in {
 
   // Repay commit: settle through T1, deposit the interest through T3, cover
   // outstanding sin, pay the savings share, then consume/revalidate and post.
-  // T1 no longer holds bufferDepositAuth, so T2 performs the deposit with its
-  // provisioned buffer facet. After settle every refusal fails the deploy so
-  // burn, deposit, cover and pay roll back together.
+  // SettlementFacet replies (true, principal, Nil) when interest == 0 and
+  // (true, principal, interestPay) otherwise; the guard below deposits only the
+  // non-zero interest payment. T1 no longer holds bufferDepositAuth, so T2
+  // performs the deposit with its provisioned buffer facet. After settle every
+  // refusal fails the deploy so burn, deposit, cover and pay roll back together.
   contract repayCommit(@s, @v, @ownerId, @now2, @accrued, @amount,
                        @interestPaid, @principalPaid, payment,
                        settleFacet, bufferFacet, ret2) = {
@@ -468,6 +470,7 @@ in {
         "rev": 0
       }) |
       provisionedState!({}) |
+      liquidationAuthState!(*liquidationAuth) |
 
       // Retire a leaked vault capability. Gated by the current auth; the new
       // auth is a fresh unforgeable name held by the owner.
@@ -857,9 +860,10 @@ in {
       // Permissionless liquidation. The only authority is the liquidation cap
       // held by this term and passed by LiquidationEngine.
       contract VaultBook(@"liquidate", @ownerId, @auth, payment, @minCollateral, ret2) = {
-        if (auth != *liquidationAuth) {
-          ret2!((false, "bad liquidation authority", *payment))
-        } else {
+        for (@current <<- liquidationAuthState) {
+          if (auth != current) {
+            ret2!((false, "bad liquidation authority", *payment))
+          } else {
           new amtCh, scCh in {
             rl!(`__SC_URI__`, *scCh) |
             for (SC <- scCh) {
@@ -923,6 +927,7 @@ in {
               }
             }
           }
+        }
         }
       } |
 
@@ -1053,10 +1058,12 @@ in {
         }))
       } |
 
-      // The engine holds the liquidation cap; the VaultBook keeps the accounting.
-      // Anyone may call the engine, but nothing else can act as a liquidator.
+      // The engine reads the auth cell per call; rotation replaces the cell value
+      // so an old leaked auth is refused while the engine stays live.
       contract LiquidationEngine(@"liquidate", @ownerId, payment, @minCollateral, ret2) = {
-        VaultBook!("liquidate", ownerId, *liquidationAuth, *payment, minCollateral, *ret2)
+        for (@current <<- liquidationAuthState) {
+          VaultBook!("liquidate", ownerId, current, *payment, minCollateral, *ret2)
+        }
       } |
 
       contract LiquidationEngine(@"attest", ret2) = {
@@ -1067,6 +1074,33 @@ in {
           "kind": "liquidation",
           "template": "rcash:liquidation-engine:v1"
         }))
+      } |
+
+      // Governor-authorized rotation of the liquidation auth. The signed preimage
+      // is rcash:admin:v1|auth:<currency>:liquidation|<nonce>|rotateLiquidationAuth|liquidation.
+      // The cell is consumed and reposted with a fresh internal name, so the old
+      // auth is refused and the engine keeps working.
+      contract LiquidationAuthLedger(@"rotate", @nonce, @sigs, ret2) = {
+        new gCh, vCh in {
+          vaultResolve!("component:governor", *gCh) |
+          for (Governor <- gCh) {
+            Governor!("authorize", "auth:" ++ currency ++ ":liquidation", nonce,
+                      "rotateLiquidationAuth", "liquidation", sigs, *vCh) |
+            for (@v <- vCh) {
+              match v {
+                (true, Nil) => {
+                  new auth in {
+                    for (@old <- liquidationAuthState) {
+                      liquidationAuthState!(*auth) |
+                      ret2!((true, Nil))
+                    }
+                  }
+                }
+                _ => { ret2!(v) }
+              }
+            }
+          }
+        }
       } |
 
       // Provisioning consumer: the shop resolves this URI from the sponsor-signed
@@ -1136,6 +1170,7 @@ in {
       rs!(bundle+{*VaultBook}, *uVault) |
       rs!(bundle+{*LiquidationEngine}, *uLiq) |
       rs!(bundle+{*VaultAccept}, *uAccept) |
-      deployId!([uVault, uLiq, uAccept])
+      rs!(bundle+{*LiquidationAuthLedger}, *uAuthLedger) |
+      deployId!([uVault, uLiq, uAccept, uAuthLedger])
   }
 }

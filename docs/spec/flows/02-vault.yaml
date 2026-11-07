@@ -27,7 +27,7 @@ components:
     transition: vault.VaultBook.rotate
     lean: Rholphin.Model.Vault.vaultBook_rotate
     kind: mutate
-    source: {file: contracts/src/deploy/v3/31_vault.rho, line: 474}
+    source: {file: contracts/src/deploy/v3/31_vault.rho, line: 477}
     guards:
     - {id: vault, expr: vault exists, refusal: {reason: no vault, phase: pre}}
     - {id: auth, expr: 'vaults[ownerId].auth = auth', refusal: {reason: bad vault auth, phase: pre}}
@@ -49,7 +49,7 @@ components:
     transition: vault.VaultBook.open
     lean: Rholphin.Model.Vault.vaultBook_open
     kind: mutate
-    source: {file: contracts/src/deploy/v3/31_vault.rho, line: 492}
+    source: {file: contracts/src/deploy/v3/31_vault.rho, line: 495}
     guards:
     - {id: proof, expr: 'AccountFactory.verify(ownerId, proof)', refusal: {reason: verify failed, phase: pre}}
     effects:
@@ -73,7 +73,7 @@ components:
     transition: vault.VaultBook.deposit
     lean: Rholphin.Model.Vault.vaultBook_deposit
     kind: mutate
-    source: {file: contracts/src/deploy/v3/31_vault.rho, line: 544}
+    source: {file: contracts/src/deploy/v3/31_vault.rho, line: 547}
     guards:
     - {id: slot, expr: 'provisionedState.custody = true', refusal: {reason: no slot, phase: pre}}
     - {id: exists, expr: 'vaults[ownerId] != Nil', refusal: {reason: no vault, phase: pre}}
@@ -112,7 +112,7 @@ components:
     transition: vault.VaultBook.mint
     lean: Rholphin.Model.Vault.vaultBook_mint
     kind: mutate
-    source: {file: contracts/src/deploy/v3/31_vault.rho, line: 610}
+    source: {file: contracts/src/deploy/v3/31_vault.rho, line: 613}
     guards:
     - {id: amount_pos, expr: amount > 0, refusal: {reason: amount, phase: pre}}
     - {id: slot, expr: 'provisionedState.mint = true', refusal: {reason: no slot, phase: pre}}
@@ -171,7 +171,7 @@ components:
     transition: vault.VaultBook.withdraw
     lean: Rholphin.Model.Vault.vaultBook_withdraw
     kind: mutate
-    source: {file: contracts/src/deploy/v3/31_vault.rho, line: 689}
+    source: {file: contracts/src/deploy/v3/31_vault.rho, line: 692}
     guards:
     - {id: amount_pos, expr: amount > 0, refusal: {reason: amount, phase: pre}}
     - {id: slot, expr: 'provisionedState.custody = true', refusal: {reason: no slot, phase: pre}}
@@ -225,7 +225,7 @@ components:
     transition: vault.VaultBook.repay
     lean: Rholphin.Model.Vault.vaultBook_repay
     kind: mutate
-    source: {file: contracts/src/deploy/v3/31_vault.rho, line: 782}
+    source: {file: contracts/src/deploy/v3/31_vault.rho, line: 785}
     guards:
     - {id: slots, expr: 'provisionedState.settle = true and provisionedState.buffer = true', refusal: {reason: no slot, phase: pre}}
     - {id: exists, expr: 'vaults[ownerId] != Nil', refusal: {reason: no vault, phase: pre}}
@@ -246,7 +246,6 @@ components:
     - {target: supply, formula: supply - principalPaid - cancelled}
     - {target: sin, formula: sin - cancelled}
     - {target: surplus, formula: surplus - cancelled - move}
-    - {target: savings.totalAssets, formula: totalAssets + move}
     - {target: vaults.rev, formula: rev + 1}
     access:
     - {cell: provisionedState, mode: peek, actor: arm, phase: pre}
@@ -258,6 +257,11 @@ components:
     - {callee: vaultResolve, protocol: P0, takes: [], puts: [], post_owner: helper}
     - {callee: vaultAccrue, protocol: P0, takes: [], puts: [], post_owner: helper}
     - {callee: repayCommit, protocol: H2b, takes: [vaultState], puts: [vaultState], post_owner: helper}
+    # T3 effects the waterfall drives; cross_term marks a write outside this
+    # term's cells. The paySavings write is modelled here, not as a direct effect.
+    - {callee: 'BufferOperatorFacet@"deposit"', protocol: P6, cross_term: true}
+    - {callee: 'BufferOperatorFacet@"cover"', protocol: P6, cross_term: true}
+    - {callee: 'BufferOperatorFacet@"paySavings"', protocol: P6, cross_term: true}
     refusals:
     - {reason: amount, phase: pre, reposts: false, fail: false}
     - {reason: asset, phase: pre, reposts: false, fail: false}
@@ -279,9 +283,9 @@ components:
     transition: vault.VaultBook.liquidate
     lean: Rholphin.Model.Vault.vaultBook_liquidate
     kind: mutate
-    source: {file: contracts/src/deploy/v3/31_vault.rho, line: 859}
+    source: {file: contracts/src/deploy/v3/31_vault.rho, line: 862}
     guards:
-    - {id: auth_liquidation, expr: auth = liquidationAuth, refusal: {reason: bad liquidation authority, phase: pre}}
+    - {id: auth_liquidation, expr: auth = liquidationAuthState, refusal: {reason: bad liquidation authority, phase: pre}}
     - {id: payment_asset, expr: 'Stablecoin.amountOf(payment)', refusal: {reason: not a stablecoin payment, phase: pre}}
     - {id: amount_pos, expr: amount > 0, refusal: {reason: amount, phase: pre}}
     - {id: slots, expr: 'provisionedState.burn = true and provisionedState.custody = true and provisionedState.buffer = true', refusal: {reason: no slot, phase: pre}}
@@ -306,6 +310,7 @@ components:
     - {target: surplus, formula: surplus - cancelled}
     - {target: vaults.rev, formula: rev + 1}
     access:
+    - {cell: liquidationAuthState, mode: peek, actor: arm, phase: pre}
     - {cell: provisionedState, mode: peek, actor: arm, phase: pre}
     - {cell: vaultState, mode: peek, actor: arm, phase: pre}
     - {cell: vaultState, mode: consume, actor: 'helper:vaultLiquidateDecide', phase: commit}
@@ -343,7 +348,7 @@ components:
     transition: vault.VaultBook.vault
     lean: Rholphin.Model.Vault.vaultBook_vault
     kind: read
-    source: {file: contracts/src/deploy/v3/31_vault.rho, line: 929}
+    source: {file: contracts/src/deploy/v3/31_vault.rho, line: 934}
     guards:
     - {id: exists, expr: 'vaults[ownerId] != Nil', refusal: {reason: no vault, phase: pre}}
     effects:
@@ -367,7 +372,7 @@ components:
     transition: vault.VaultBook.vaults
     lean: Rholphin.Model.Vault.vaultBook_vaults
     kind: read
-    source: {file: contracts/src/deploy/v3/31_vault.rho, line: 977}
+    source: {file: contracts/src/deploy/v3/31_vault.rho, line: 982}
     guards: []
     effects:
     - {target: reply, formula: '(true, keys(vaults))'}
@@ -383,7 +388,7 @@ components:
     transition: vault.VaultBook.totals
     lean: Rholphin.Model.Vault.vaultBook_totals
     kind: read
-    source: {file: contracts/src/deploy/v3/31_vault.rho, line: 981}
+    source: {file: contracts/src/deploy/v3/31_vault.rho, line: 986}
     guards: []
     effects:
     - {target: reply, formula: '(true, {totalDebt, totalAccruedInterest, totalCollateral, badDebt, sin, psmDebt, paused, rev})'}
@@ -401,7 +406,7 @@ components:
     transition: vault.VaultBook.params
     lean: Rholphin.Model.Vault.vaultBook_params
     kind: read
-    source: {file: contracts/src/deploy/v3/31_vault.rho, line: 1010}
+    source: {file: contracts/src/deploy/v3/31_vault.rho, line: 1015}
     guards: []
     effects:
     - {target: reply, formula: '(true, params)'}
@@ -417,7 +422,7 @@ components:
     transition: vault.VaultBook.pause
     lean: Rholphin.Model.Vault.vaultBook_pause
     kind: mutate
-    source: {file: contracts/src/deploy/v3/31_vault.rho, line: 1014}
+    source: {file: contracts/src/deploy/v3/31_vault.rho, line: 1019}
     guards:
     - {id: governor, expr: 'Governor.authorize(setPaused, paused.toString())', refusal: {reason: authorize, phase: pre}}
     effects:
@@ -440,7 +445,7 @@ components:
     transition: vault.VaultBook.attest
     lean: Rholphin.Model.Vault.vaultBook_attest
     kind: read
-    source: {file: contracts/src/deploy/v3/31_vault.rho, line: 1046}
+    source: {file: contracts/src/deploy/v3/31_vault.rho, line: 1051}
     guards: []
     effects:
     - {target: reply, formula: '(true, {currency, paramsHash, sponsor, kind, template})'}
@@ -462,11 +467,12 @@ components:
     transition: vault.LiquidationEngine.liquidate
     lean: Rholphin.Model.Vault.liquidationEngine_liquidate
     kind: mutate
-    source: {file: contracts/src/deploy/v3/31_vault.rho, line: 1058}
+    source: {file: contracts/src/deploy/v3/31_vault.rho, line: 1063}
     guards: []
     effects:
-    - {target: delegate, formula: 'VaultBook.liquidate(ownerId, liquidationAuth, payment, minCollateral)'}
-    access: []
+    - {target: delegate, formula: 'VaultBook.liquidate(ownerId, liquidationAuthState, payment, minCollateral)'}
+    access:
+    - {cell: liquidationAuthState, mode: peek, actor: arm, phase: pre}
     nested_calls:
     - {callee: 'VaultBook@"liquidate"', protocol: P4, internal: true}
     refusals: []
@@ -480,7 +486,7 @@ components:
     transition: vault.LiquidationEngine.attest
     lean: Rholphin.Model.Vault.liquidationEngine_attest
     kind: read
-    source: {file: contracts/src/deploy/v3/31_vault.rho, line: 1062}
+    source: {file: contracts/src/deploy/v3/31_vault.rho, line: 1069}
     guards: []
     effects:
     - {target: reply, formula: '(true, {currency, paramsHash, sponsor, kind, template})'}
@@ -494,6 +500,33 @@ components:
   states:
   - Open
   initial: Open
+- name: LiquidationAuthLedger
+  lean_module: Rholphin.Model.Vault
+  arms:
+  - arm: LiquidationAuthLedger@"rotate"
+    transition: vault.LiquidationAuthLedger.rotate
+    lean: Rholphin.Model.Vault.liquidationAuthLedger_rotate
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/31_vault.rho, line: 1083}
+    guards:
+    - {id: governor, expr: 'Governor.authorize(auth:currency:liquidation, nonce, rotateLiquidationAuth)', refusal: {reason: replay, phase: pre}}
+    effects:
+    - {target: liquidationAuthState, formula: fresh}
+    - {target: reply, formula: '(true, Nil)'}
+    access:
+    - {cell: liquidationAuthState, mode: consume, actor: arm, phase: commit}
+    - {cell: liquidationAuthState, mode: post, actor: arm, phase: commit}
+    nested_calls:
+    - {callee: vaultResolve, protocol: P0, takes: [], puts: [], post_owner: helper}
+    refusals: []
+    invariants:
+    - I21
+    status: verified
+    acceptance:
+    - AC-SPEC-ISS-01.1
+  states:
+  - Open
+  initial: Open
 - name: VaultAccept
   lean_module: Rholphin.Model.Vault
   arms:
@@ -501,7 +534,7 @@ components:
     transition: vault.VaultAccept.acceptFacet
     lean: Rholphin.Model.Vault.vaultAccept_acceptFacet
     kind: mutate
-    source: {file: contracts/src/deploy/v3/31_vault.rho, line: 1077}
+    source: {file: contracts/src/deploy/v3/31_vault.rho, line: 1111}
     guards:
     - {id: kind, expr: 'Shop.isFacet(kind, facet)', refusal: {reason: verify failed, phase: pre}}
     - {id: once, expr: 'provisionedState[kind] != true', refusal: {reason: no slot, phase: pre}}
