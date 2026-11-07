@@ -4,6 +4,10 @@ import Rholphin.Linear.Prim
 import Rholphin.Linear.Deploy
 import Rholphin.Linear.Interleave
 import Rholphin.Prim.EDSL
+import Rholphin.Crypto.Hash
+import Rholphin.Crypto.Sig
+import Rholphin.Crypto.Claim
+import Rholphin.Crypto.Codec
 import Rholphin.Invariants
 import Rholphin.Model.Registry
 import Rholphin.Model.Transfer
@@ -43,6 +47,16 @@ output containing `sorryAx` or a project-local axiom.
 #print axioms Rholphin.step_preserves_linear
 #print axioms Rholphin.held_take_unavailable
 #print axioms Rholphin.steps_preserve_linear
+#print axioms Rholphin.terms_put_integrity
+#print axioms Rholphin.terms_put_rejects_mismatch
+#print axioms Rholphin.hash_distinct
+#print axioms Rholphin.verify_true_implies_signer
+#print axioms Rholphin.authorized_imp_signer
+#print axioms Rholphin.claim_requires_preimage
+#print axioms Rholphin.wrong_secret_refused
+#print axioms Rholphin.claim_secret_unique
+#print axioms Rholphin.codec_no_pipe_collision
+#print axioms Rholphin.codec_injective
 #print axioms Rholphin.Model.Issuer.repay_S3
 #print axioms Rholphin.Model.Issuer.writeOff_S3
 #print axioms Rholphin.Model.Vault.deposit_S2
@@ -50,6 +64,14 @@ output containing `sorryAx` or a project-local axiom.
 #print axioms Rholphin.Model.BufferSavings.deposit_S10
 #print axioms Rholphin.Model.BufferSavings.withdraw_S10
 #print axioms Rholphin.Model.Psm.sell_floor
+#print axioms Rholphin.Model.Psm.buyChecked_ceiling
+#print axioms Rholphin.Model.Psm.buyChecked_adds
+#print axioms Rholphin.Model.Psm.buyChecked_refuses_negative
+#print axioms Rholphin.Model.Psm.sellChecked_floor
+#print axioms Rholphin.Model.Psm.sellChecked_subtracts
+#print axioms Rholphin.Model.Psm.sellChecked_refuses_below_floor
+#print axioms Rholphin.Model.BufferSavings.notifyChecked_refuses_zero
+#print axioms Rholphin.Model.BufferSavings.notifyChecked_preserves_S10
 #print axioms Rholphin.Invariants.S9_waterfall_le
 #print axioms Rholphin.Invariants.S7_settle_S1
 #print axioms Rholphin.Invariants.S6_writeOff_badDebt

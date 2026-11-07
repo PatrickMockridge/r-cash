@@ -55,6 +55,29 @@ def notify (s : Savings) (amount : Nat) : Savings :=
 theorem notify_S10 (s : Savings) (amount : Nat) (h : S10 s) :
     S10 (notify s amount) := h
 
+/-- Interest is accepted only while the pool has shares. -/
+def notifyChecked (s : Savings) (amount : Nat) : Option Savings :=
+  if 0 < s.totalShares then some (notify s amount) else none
+
+theorem notifyChecked_refuses_zero {s : Savings} {amount : Nat}
+    (h : s.totalShares = 0) : notifyChecked s amount = none := by
+  unfold notifyChecked
+  have hnot : ¬ 0 < s.totalShares := by omega
+  simp [hnot]
+
+theorem notifyChecked_succeeds {s : Savings} {amount : Nat} (h : 0 < s.totalShares) :
+    notifyChecked s amount = some (notify s amount) := by
+  simp [notifyChecked, h]
+
+theorem notifyChecked_preserves_S10 {s s' : Savings} {amount : Nat}
+    (h : notifyChecked s amount = some s') (hs : S10 s) : S10 s' := by
+  unfold notifyChecked at h
+  split at h
+  · injection h with heq
+    subst heq
+    exact notify_S10 s amount hs
+  · contradiction
+
 /-! ## The waterfall -/
 
 def cover (b : Buffer) (badDebt : Nat) : Buffer :=

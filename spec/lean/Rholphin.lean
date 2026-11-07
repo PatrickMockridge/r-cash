@@ -10,6 +10,10 @@ import Rholphin.Linear.Prim
 import Rholphin.Linear.Deploy
 import Rholphin.Linear.Interleave
 import Rholphin.Prim.EDSL
+import Rholphin.Crypto.Hash
+import Rholphin.Crypto.Sig
+import Rholphin.Crypto.Claim
+import Rholphin.Crypto.Codec
 import Rholphin.Model.Types
 import Rholphin.Model.Issuer
 import Rholphin.Model.Vault
