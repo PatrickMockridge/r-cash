@@ -914,6 +914,26 @@ in {
     }))
   } |
 
+  // Retire a leaked vault capability. Gated by the current auth; the new auth
+  // is a fresh unforgeable name held by the owner.
+  contract VaultBook(@"rotate", @ownerId, @auth, @newAuth, ret2) = {
+    for (@s <- vaultState) {
+      match s.get("vaults").get(ownerId) {
+        Nil => { vaultState!(s) | ret2!((false, "no vault")) }
+        v => {
+          if (v.get("auth") != auth) {
+            vaultState!(s) | ret2!((false, "bad vault auth"))
+          } else {
+            vaultState!(s.set("vaults",
+              s.get("vaults").set(ownerId, v.set("auth", newAuth)))
+              .set("rev", s.get("rev") + 1)) |
+            ret2!((true, Nil))
+          }
+        }
+      }
+    }
+  } |
+
   contract VaultBook(@"open", @ownerId, @proof, ret2) = {
     new afCh, vCh, nowCh2 in {
       vaultAccountFactory!(*afCh) |

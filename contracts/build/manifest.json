@@ -128,12 +128,12 @@
     },
     "contracts/build/deploy/v3/31_stablecoin.rho": {
       "brace_depth": 40,
-      "contracts": 68,
+      "contracts": 69,
       "grammar_depth": 65,
-      "minified_bytes": 45666,
+      "minified_bytes": 46091,
       "operator_run": 5,
-      "sha256": "5775d94bd3540bbf49234842b7437b399b1ad1336dd46b709e3971a331528bd9",
-      "source_bytes": 83397
+      "sha256": "d85e698d43e0e9abf3f42d02ba0216bf093e658860d0d9a299fb6db9358c9fa7",
+      "source_bytes": 84096
     },
     "contracts/build/deploy/v3/32_currency_registry.rho": {
       "brace_depth": 34,

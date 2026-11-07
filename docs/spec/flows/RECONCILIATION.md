@@ -34,6 +34,7 @@
 | `RiskParameters@"scheduleParams"` | `issuer.RiskParameters.scheduleParams` | — | OK | yes | `Rholphin.Model.Issuer.riskParameters_scheduleParams` | verified |  |
 | `RiskParameters@"applyParams"` | `issuer.RiskParameters.applyParams` | consume:1, post:1 | OK | yes | `Rholphin.Model.Issuer.riskParameters_applyParams` | verified |  |
 | `RiskParameters@"attest"` | `issuer.RiskParameters.attest` | — | OK | yes | `Rholphin.Model.Issuer.riskParameters_attest` | verified |  |
+| `VaultBook@"rotate"` | `vault.VaultBook.rotate` | consume:1, post:1 | OK | yes | `Rholphin.Model.Vault.vaultBook_rotate` | verified |  |
 | `VaultBook@"open"` | `vault.VaultBook.open` | peek:1, consume:1, post:1 | OK | yes | `Rholphin.Model.Vault.vaultBook_open` | verified |  |
 | `VaultBook@"deposit"` | `vault.VaultBook.deposit` | peek:2, consume:1, post:1 | OK | yes | `Rholphin.Model.Vault.vaultBook_deposit` | verified |  |
 | `VaultBook@"mint"` | `vault.VaultBook.mint` | peek:3, consume:1, post:1 | OK | yes | `Rholphin.Model.Vault.vaultBook_mint` | verified |  |

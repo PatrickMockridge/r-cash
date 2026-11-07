@@ -110,6 +110,63 @@ new HostileVault, rs(`rho:registry:insertArbitrary`), u,
     check("vaultOpen did not reach the hostile vault", reply[0][1] != "captured", True)
 
 
+def rt13_vault_rotation(factory: str, registry: str, pub: str, secret: str) -> None:
+    """RT-13: a rotated vault auth retires the old capability."""
+    term = f'''
+new ertpCh, regCh, eCh, afCh, oCh, zCh, r1, r2, r3, vc,
+    rl(`rho:registry:lookup`), deployId(`rho:rchain:deployId`),
+    deployerId(`rho:rchain:deployerId`) in {{
+  rl!(`{registry}`, *regCh) |
+  for (Registry <- regCh) {{
+    Registry!("currency", "V4T", *eCh) |
+    for (@e <- eCh) {{
+      match e {{
+        (true, entry) => {{
+          rl!(`{factory}`, *afCh) |
+          for (AccountFactory <- afCh) {{
+            AccountFactory!("getOrCreate", "{pub}".hexToBytes(), *oCh) |
+            for (@(true, account, ownerId) <- oCh) {{
+              @account!("vaultOpen", *deployerId, "V4T", *zCh) |
+              for (@z <- zCh) {{
+                match z {{
+                  (true, auth) => {{
+                    new newAuth in {{
+                      rl!(entry.get("vaultUri"), *vc) |
+                      for (VaultBook <- vc) {{
+                        VaultBook!("rotate", ownerId, auth, *newAuth, *r1) |
+                        for (@rot <- r1) {{
+                          VaultBook!("mint", ownerId, auth, 1, *r2) |
+                          VaultBook!("mint", ownerId, *newAuth, 1, *r3) |
+                          for (@m1 <- r2; @m2 <- r3) {{
+                            deployId!([rot, m1, m2])
+                          }}
+                        }}
+                      }}
+                    }}
+                  }}
+                  _ => {{ deployId!(z) }}
+                }}
+              }}
+            }}
+          }}
+        }}
+        _ => {{ deployId!(e) }}
+      }}
+    }}
+  }}
+}}'''
+    reply = one(minify(term), secret)
+    if isinstance(reply, tuple) and reply and reply[0] is False:
+        print(f"skip vault rotation (no listed V4T system): {reply}")
+        return
+    if not (isinstance(reply, list) and len(reply) == 3):
+        raise AssertionError(f"rotation probe did not run: {reply!r}")
+    rotation, old_auth, new_auth = reply
+    check("vault rotation succeeds", rotation, (True,))
+    check("rotated-out auth is refused", old_auth, (False, "bad vault auth"))
+    check("rotated-in auth is not refused", new_auth != (False, "bad vault auth"), True)
+
+
 def main() -> int:
     keys = json.loads(KEYS.read_text())
     state = json.loads(STATE.read_text())
@@ -126,6 +183,8 @@ def main() -> int:
     rt11_gate_active(state["tradability_gate_uri"], secret)
     rt02_registry_fresh_auth(state["market_directory_uri"], secret)
     rt03_vault_substitution(factory, deployer["public"], secret)
+    rt13_vault_rotation(factory, state["currency_registry_uri"],
+                        deployer["public"], secret)
     print("ocap red-team: all checks passed")
     return 0
 

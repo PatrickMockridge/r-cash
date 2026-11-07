@@ -223,7 +223,9 @@ def findings_for(path: Path) -> list[Finding]:
                     rf"(==|!=)\s*\*?{re.escape(bare)}\b|\*?{re.escape(bare)}\s*(==|!=)", body))
                 forwarded = bool(re.search(
                     rf"!\s*\([^)]*\b{re.escape(bare)}\b|\*\s*{re.escape(bare)}\b", body))
-                if not compared and not forwarded:
+                installed = bool(re.search(
+                    rf'set\("auth",\s*{re.escape(bare)}\b', body))
+                if not compared and not forwarded and not installed:
                     add(line, "G-CAP-AUTH",
                         f'{component}@"{op}" takes authority {bare} but never checks or forwards it')
 

@@ -17,7 +17,7 @@ components:
     transition: buffer.SavingsPool.deposit
     lean: Rholphin.Model.BufferSavings.savingsPool_deposit
     kind: mutate
-    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1467}
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1487}
     guards:
     - {id: amount_pos, expr: amount > 0, refusal: {reason: amount, phase: pre}}
     - {id: payment_asset, expr: isStablecoinPayment(payment), refusal: {reason: asset, phase: pre}}
@@ -48,7 +48,7 @@ components:
     transition: buffer.SavingsPool.withdraw
     lean: Rholphin.Model.BufferSavings.savingsPool_withdraw
     kind: mutate
-    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1520}
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1540}
     guards:
     - {id: held, expr: 'shares[ownerId] = held', refusal: {reason: shares, phase: pre}}
     - {id: shares_bounds, expr: 0 < shares <= held and totalShares > 0 and totalAssets > 0, refusal: {reason: shares, phase: pre}}
@@ -78,7 +78,7 @@ components:
     transition: buffer.SavingsPool.notify
     lean: Rholphin.Model.BufferSavings.savingsPool_notify
     kind: mutate
-    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1556}
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1576}
     guards:
     - {id: auth, expr: auth = savingsNotifyAuth, refusal: {reason: bad savings authority, phase: pre}}
     - {id: payment_asset, expr: isStablecoinPayment(payment), refusal: {reason: asset, phase: pre}}
@@ -103,7 +103,7 @@ components:
     transition: buffer.SavingsPool.info
     lean: Rholphin.Model.BufferSavings.savingsPool_info
     kind: read
-    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1591}
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1611}
     guards: []
     effects:
     - {target: reply, formula: '(true, {totalShares, totalAssets, shareValueE8: floor(totalAssets * 1e8 / totalShares), rev})'}
@@ -120,7 +120,7 @@ components:
     transition: buffer.SavingsPool.position
     lean: Rholphin.Model.BufferSavings.savingsPool_position
     kind: read
-    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1608}
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1628}
     guards: []
     effects:
     - {target: reply, formula: '(true, shares[ownerId])'}
@@ -144,7 +144,7 @@ components:
     transition: buffer.SurplusBuffer.deposit
     lean: Rholphin.Model.BufferSavings.surplusBuffer_deposit
     kind: mutate
-    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1617}
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1637}
     guards:
     - {id: auth, expr: auth = bufferDepositAuth, refusal: {reason: bad buffer authority, phase: pre}}
     - {id: payment_asset, expr: isStablecoinPayment(payment), refusal: {reason: asset, phase: pre}}
@@ -168,7 +168,7 @@ components:
     transition: buffer.SurplusBuffer.paySavings
     lean: Rholphin.Model.BufferSavings.surplusBuffer_paySavings
     kind: mutate
-    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1645}
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1665}
     guards:
     - {id: auth, expr: auth = bufferPayAuth, refusal: {reason: bad buffer authority, phase: pre}}
     effects:
@@ -195,7 +195,7 @@ components:
     transition: buffer.SurplusBuffer.cover
     lean: Rholphin.Model.BufferSavings.surplusBuffer_cover
     kind: mutate
-    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1694}
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1714}
     guards:
     - {id: auth, expr: auth = bufferCoverAuth, refusal: {reason: bad buffer authority, phase: pre}}
     - {id: nonneg, expr: badDebt >= 0, refusal: {reason: amount, phase: pre}}
@@ -230,7 +230,7 @@ components:
     transition: buffer.SurplusBuffer.info
     lean: Rholphin.Model.BufferSavings.surplusBuffer_info
     kind: read
-    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1750}
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1770}
     guards: []
     effects:
     - {target: reply, formula: '(true, {surplus, sin, savingsShareBps, rev})'}
@@ -247,7 +247,7 @@ components:
     transition: buffer.SurplusBuffer.scheduleShare
     lean: Rholphin.Model.BufferSavings.surplusBuffer_scheduleShare
     kind: create
-    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1758}
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1778}
     guards:
     - {id: bps_range, expr: 0 <= bps <= 10000, refusal: {reason: bps, phase: pre}}
     effects:
@@ -266,7 +266,7 @@ components:
     transition: buffer.SurplusBuffer.applyShare
     lean: Rholphin.Model.BufferSavings.surplusBuffer_applyShare
     kind: mutate
-    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1777}
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1797}
     guards:
     - {id: action, expr: action = "setSavingsShare", refusal: {reason: action, phase: pre}}
     - {id: bps_range, expr: 0 <= args <= 10000, refusal: {reason: bps, phase: pre}}
