@@ -298,12 +298,14 @@ components:
     guards:
     - {id: unfunded, expr: not funded, refusal: {reason: funded, phase: pre}}
     - {id: height, expr: untilHeight > 0, refusal: {reason: height, phase: pre}}
+    - {id: beneficiary, expr: funder = address(terms.lockBeneficiaryPubKey), refusal: {reason: not beneficiary, phase: pre}}
+    - {id: lock_height, expr: untilHeight = terms.lockUntilHeight, refusal: {reason: lock height, phase: pre}}
     - {id: lock_min, expr: untilHeight >= now + terms.lockMinBlocks, refusal: {reason: lock too short, phase: pre}}
     effects:
     - {target: funded, formula: 'true'}
     - {target: untilHeight, formula: untilHeight}
     - {target: beneficiary, formula: beneficiaryId}
-    - {target: funder, formula: caller address}
+    - {target: funder, formula: address(terms.lockBeneficiaryPubKey)}
     - {target: shares, formula: LP amount}
     access:
     - {cell: lockState, mode: consume, actor: arm, phase: commit}
@@ -313,7 +315,9 @@ components:
     refusals:
     - {reason: funded, phase: pre, reposts: false, fail: false}
     - {reason: height, phase: pre, reposts: false, fail: false}
+    - {reason: lock height, phase: after_consume, reposts: true, fail: false}
     - {reason: lock too short, phase: after_consume, reposts: true, fail: false}
+    - {reason: not beneficiary, phase: after_consume, reposts: true, fail: false}
     invariants:
     - I13
     status: verified
@@ -325,7 +329,7 @@ components:
     transition: pool.LiquidityLock.release
     lean: Rholphin.Model.Pool.liquidityLock_release
     kind: mutate
-    source: {file: contracts/src/deploy/v3/51_lock.rho, line: 103}
+    source: {file: contracts/src/deploy/v3/51_lock.rho, line: 113}
     guards:
     - {id: funded, expr: funded, refusal: {reason: unfunded, phase: pre}}
     - {id: open, expr: not released and not cancelled, refusal: {reason: closed, phase: pre}}
@@ -357,7 +361,7 @@ components:
     transition: pool.LiquidityLock.cancel
     lean: Rholphin.Model.Pool.liquidityLock_cancel
     kind: mutate
-    source: {file: contracts/src/deploy/v3/51_lock.rho, line: 141}
+    source: {file: contracts/src/deploy/v3/51_lock.rho, line: 151}
     guards:
     - {id: authorize, expr: 'Governor.authorize(liquidity-lock, nonce, cancel, marketId)', refusal: {reason: below threshold, phase: pre}}
     - {id: open, expr: funded and not released and not cancelled, refusal: {reason: closed, phase: pre}}
@@ -387,7 +391,7 @@ components:
     transition: pool.LiquidityLock.info
     lean: Rholphin.Model.Pool.liquidityLock_info
     kind: read
-    source: {file: contracts/src/deploy/v3/51_lock.rho, line: 185}
+    source: {file: contracts/src/deploy/v3/51_lock.rho, line: 195}
     guards: []
     effects:
     - {target: reply, formula: '(true, {marketId, funded, released, cancelled, untilHeight, beneficiary, funder, shares})'}

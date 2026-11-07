@@ -152,11 +152,17 @@ theorem currencyRegistry_register_resolves {s s' : CurrencyStore} {code : Nat} {
     subst h
     simp [lookup, insert]
 
-/-- List an external asset.  The adapter has already been attested; the model
-records the one-entry-per-code and 8-decimal rules. -/
-def currencyRegistry_registerExternal (s : CurrencyStore) (code uri : Nat) : Option CurrencyStore :=
-  if (lookup s.currencies code).isSome then none
-  else some { s with currencies := insert s.currencies code (Entry.external uri), rev := s.rev + 1 }
+/-- List an external asset.  OCAP-10/11: the submitter must be the sponsor, and
+the adapter's brand and issuer must match the sponsor-signed identifiers; the
+model records those three guards plus the one-entry-per-code and 8-decimal
+rules. -/
+def currencyRegistry_registerExternal (s : CurrencyStore) (code uri : Nat)
+    (submitterOk brandOk issuerOk : Bool) : Option CurrencyStore :=
+  if submitterOk = true ∧ brandOk = true ∧ issuerOk = true then
+    (if (lookup s.currencies code).isSome then none
+     else some { s with currencies := insert s.currencies code (Entry.external uri),
+                        rev := s.rev + 1 })
+  else none
 
 @[simp] theorem Entry.external_kind (uri : Nat) :
     (Entry.external uri).kind = AssetKind.external := rfl
@@ -165,15 +171,31 @@ def currencyRegistry_registerExternal (s : CurrencyStore) (code uri : Nat) : Opt
     (Entry.external uri).decimals = 8 := rfl
 
 theorem currencyRegistry_registerExternal_shape {s s' : CurrencyStore} {code uri : Nat}
-    (h : currencyRegistry_registerExternal s code uri = some s') :
+    {submitterOk brandOk issuerOk : Bool}
+    (h : currencyRegistry_registerExternal s code uri submitterOk brandOk issuerOk = some s') :
     (lookup s'.currencies code).map (fun e => (e.kind, e.decimals))
       = some (AssetKind.external, 8) := by
   unfold currencyRegistry_registerExternal at h
   split at h
+  · split at h
+    · contradiction
+    · simp only [Option.some.injEq] at h
+      subst h
+      simp [Entry.external, lookup, insert]
   · contradiction
-  · simp only [Option.some.injEq] at h
-    subst h
-    simp [Entry.external, lookup, insert]
+
+/-- The directory write authority cell (`AuthLedger`).  Rotation replaces the
+whole value; the new name is created internally after the Governor authorises
+the `auth:registry:directory` rotation. -/
+structure DirectoryAuthStore where
+  current : Nat
+
+def currencyRegistry_rotateDirectoryAuth (a : DirectoryAuthStore) (newAuth : Nat) :
+    DirectoryAuthStore :=
+  { current := newAuth }
+
+theorem currencyRegistry_rotateDirectoryAuth_current (a : DirectoryAuthStore) (newAuth : Nat) :
+    (currencyRegistry_rotateDirectoryAuth a newAuth).current = newAuth := rfl
 
 def currencyRegistry_currency (s : CurrencyStore) (code : Nat) : Option Entry :=
   lookup s.currencies code

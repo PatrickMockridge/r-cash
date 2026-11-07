@@ -30,6 +30,7 @@ in {
       contract ExternalAsset(@"attest", ret) = {
         ret!((true, {"asset": "__CODE__", "kind": "external",
                      "sponsor": "__SPONSOR__", "decimals": __DECIMALS__,
+                     "brand": "__BRAND__", "issuer": "__ISSUER__",
                      "chain": "test", "custodian": "test"}))
       } |
       contract ExternalAsset(@"issuer", ret) = { ret!((true, issuer)) } |
@@ -41,32 +42,47 @@ in {
 }"""
 
 
-def deploy_adapter(keys: dict, code: str, decimals: int) -> str:
+def deploy_adapter(keys: dict, code: str, decimals: int) -> tuple[str, str, str]:
     sponsor = keys["sponsor"]["public"]
+    brand = f"{code}-brand"
+    issuer = f"{code}-issuer"
     term = (ADAPTER.replace("__CODE__", code)
             .replace("__SPONSOR__", sponsor)
-            .replace("__DECIMALS__", str(decimals)))
-    return one(term, keys["deployer"]["secret"])[0]
+            .replace("__DECIMALS__", str(decimals))
+            .replace("__BRAND__", brand)
+            .replace("__ISSUER__", issuer))
+    return one(term, keys["deployer"]["secret"])[0], brand, issuer
 
 
-def register(keys: dict, state: dict, code: str, adapter: str):
+def register(keys: dict, state: dict, code: str, adapter: str,
+             brand: str, issuer: str):
     sponsor = keys["sponsor"]
-    payload = f"rcash:external-asset-register:v1|{code}|{adapter}|{sponsor['public']}"
+    payload = (f"rcash:external-asset-register:v2|{code}|{adapter}|{brand}|"
+               f"{issuer}|{sponsor['public']}")
     sig = sign_payload.sign_payload(sponsor["secret"], payload.encode())["signature"]
     body = (
         f'CurrencyRegistry!("registerExternal", "{code}", "{adapter}", '
-        f'"{sponsor["public"]}", "{sig}".hexToBytes(), *r) |\n'
+        f'"{brand}", "{issuer}", "{sponsor["public"]}", "{sig}".hexToBytes(), '
+        "*deployerId, *r) |\n"
         "  for (@x <- r) { deployId!(x) }"
     )
-    return one(call(state["currency_registry_uri"], "CurrencyRegistry", body),
-               keys["deployer"]["secret"])
+    term = (
+        "new rl(`rho:registry:lookup`), ch, r, "
+        "deployerId(`rho:rchain:deployerId`), "
+        "deployId(`rho:rchain:deployId`) in {\n"
+        f"  rl!(`{state['currency_registry_uri']}`, *ch) |\n"
+        f"  for (CurrencyRegistry <- ch) {{ {body} }}\n"
+        "}"
+    )
+    # OCAP-11: the sponsor key must submit the listing.
+    return one(term, sponsor["secret"])
 
 
 def main() -> int:
     keys, state = load_env()
     faucet_top_up(keys["sponsor"]["address"])
-    adapter = deploy_adapter(keys, "USDC", 8)
-    reply = register(keys, state, "USDC", adapter)
+    adapter, brand, issuer = deploy_adapter(keys, "USDC", 8)
+    reply = register(keys, state, "USDC", adapter, brand, issuer)
     check("external registered", reply[0], True)
     check("external kind", reply[1].get("kind"), "external")
     check("external decimals", reply[1].get("decimals"), 8)
@@ -86,11 +102,11 @@ def main() -> int:
                       "for (@x <- r) { deployId!(x) }"), keys["deployer"]["secret"])
     check("resolver issuer", issuer[0], True)
 
-    bad = deploy_adapter(keys, "USDX", 6)
-    refused = register(keys, state, "USDX", bad)
+    bad, bad_brand, bad_issuer = deploy_adapter(keys, "USDX", 6)
+    refused = register(keys, state, "USDX", bad, bad_brand, bad_issuer)
     check("6-decimal adapter refused", refused, (False, "external decimals"))
 
-    duplicate = register(keys, state, "USDC", adapter)
+    duplicate = register(keys, state, "USDC", adapter, brand, issuer)
     check("duplicate external refused", duplicate[0], False)
     print("unit_external: all checks passed")
     return 0
