@@ -144,6 +144,19 @@ def main() -> int:
     check("currency lookup", entry[0], True)
     if fresh_listing:
         check("currency lookup vault", entry[1].get("vaultUri"), vault_uri)
+    else:
+        # The registry pins the previously listed system. Exercise that system
+        # from here on: vaultOpen resolves the registry URI, so a scenario that
+        # addressed the freshly deployed (unlisted) system would split its
+        # capability across two vault books.
+        sc_uri = entry[1]["stablecoinUri"]
+        custody_uri = entry[1]["custodyUri"]
+        params_uri = entry[1]["paramsUri"]
+        vault_uri = entry[1]["vaultUri"]
+        liq_uri = entry[1]["liquidationUri"]
+        savings_uri = entry[1]["savingsUri"]
+        psm_uri = entry[1]["psmUri"]
+        buffer_uri = entry[1]["bufferUri"]
     directory_entry = one(call(directory, "StablecoinDirectory",
                                f'StablecoinDirectory!("lookup", "{currency}", *r) | '
                                "for (@x <- r) { deployId!(x) }"), secret)
@@ -208,7 +221,7 @@ def main() -> int:
     set_price(keys, rev_feed, "REV", 5000000)
 
     # Savings: mint, route through the account, deposit, withdraw and repay.
-    savings_uri = system[5]
+    savings_uri = entry[1].get("savingsUri") or system[5]
     savings_text = (ROOT / "harness/scenarios/stablecoin_savings.rho").read_text()
     for key, value in {
         "__ROOT_URI__": root,
