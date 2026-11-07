@@ -1,0 +1,21 @@
+{
+  "psm.buy.ok": {"inputs": [1000, 5000, 250], "out": "1250"},
+  "psm.buy.over": {"inputs": [5000, 5000, 1], "out": "-1"},
+  "psm.buy.negative": {"inputs": [1000, 5000, 0], "out": "-1"},
+  "psm.sell.ok": {"inputs": [1000, 10000, 250], "out": "750"},
+  "psm.sell.belowFloor": {"inputs": [0, 10000, 20000], "out": "-1"},
+  "savings.notify.zero": {"inputs": [0], "out": "0"},
+  "savings.notify.ok": {"inputs": [10], "out": "1"},
+  "vault.mint.healthy": {"inputs": [1000, 100], "out": "100"},
+  "vault.mint.unhealthy": {"inputs": [10, 100], "out": "-1"},
+  "market.admit.active": {"inputs": [1], "out": "1"},
+  "market.admit.draft": {"inputs": [1], "out": "0"},
+  "market.admit.minTicket": {"inputs": [1], "out": "0"},
+  "market.admit.maxTrade": {"inputs": [1], "out": "0"},
+  "hash.put.match": {"inputs": [1, 2], "out": "1"},
+  "hash.put.mismatch": {"inputs": [1, 2], "out": "0"},
+  "sig.ok": {"inputs": [1, 42], "out": "1"},
+  "sig.wrongSigner": {"inputs": [1, 42], "out": "0"},
+  "claim.ok": {"inputs": [7], "out": "1"},
+  "claim.wrong": {"inputs": [8], "out": "0"}
+}
