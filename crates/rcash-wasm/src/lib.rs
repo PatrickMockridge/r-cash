@@ -21,11 +21,18 @@ pub fn version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
 }
 
-/// The pinned node revision the client was built against.
-/// The BLAKE2b-256 claim hash of a 32-byte secret (hex in, hex out).
+/// The canonical `rcash:claim:v1` hash over the caller-supplied operation id,
+/// asset, display amount and 32-byte secret (hex in, hex out). Binds the claim
+/// to `[opId, assetId, amount, secretHex]`, matching `TransferContract@"claim"`.
 #[wasm_bindgen]
-pub fn claim_hash(secret_hex: &str) -> Result<String, JsValue> {
-    rcash_chain::claim::claim_hash(secret_hex).map_err(js_err)
+pub fn claim_hash(
+    op_id: &str,
+    asset: &str,
+    amount: &str,
+    secret_hex: &str,
+) -> Result<String, JsValue> {
+    let amount = parse_amount(amount)?;
+    rcash_chain::claim::claim_hash(op_id, asset, amount, secret_hex).map_err(js_err)
 }
 
 #[wasm_bindgen]
@@ -350,7 +357,9 @@ impl Rcash {
         let min_dest = parse_amount(min_dest)?;
         let client = self.client().map_err(js_err)?;
         let secret = rcash_chain::claim::generate_secret_hex().map_err(js_err)?;
-        let hash = rcash_chain::claim::claim_hash(&secret).map_err(js_err)?;
+        // Legacy v0.4 `AccountBody` path: its TransferBook still verifies the
+        // raw secret digest, which the campaign did not canonicalise.
+        let hash = rcash_chain::claim::legacy_secret_digest(&secret).map_err(js_err)?;
         let tip = client.node().latest_block_number().await.map_err(js_err)?;
         let expiry = tip + expiry_blocks;
         let transfer_id = client

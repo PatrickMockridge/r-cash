@@ -29,8 +29,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT / "harness"))
 sys.path.insert(0, str(ROOT / "harness" / "merge"))
+sys.path.insert(0, str(ROOT / "tools"))
 
 import devnet as dn  # noqa: E402
+import sign_payload  # noqa: E402
 from chainclient import _strings  # noqa: E402
 
 OUT = ROOT / ".devnet" / "merge-evidence"
@@ -143,7 +145,15 @@ def term_account_setup(root: str, pub: str, amount: int) -> str:
     )
 
 
-def term_send(root: str, pub: str, amount: int, secret_hash: str, expiry: int) -> str:
+def claim_digest(op_id: str, secret: bytes) -> str:
+    """Canonical `rcash:claim:v1` commitment over opId, asset, amount and secret."""
+    preimage = sign_payload.canonical(
+        "rcash:claim:v1", [op_id, "REV", AMOUNT, secret.hex()])
+    return hashlib.blake2b(preimage.encode(), digest_size=32).hexdigest()
+
+
+def term_send(root: str, pub: str, amount: int, secret_hash: str, op_id: str,
+              expiry: int) -> str:
     return (
         "new rl(`rho:registry:lookup`), rCh, fCh, fc, rCh2, facetCh, sCh, "
         "deployerId(`rho:rchain:deployerId`), deployId(`rho:rchain:deployId`) in {"
@@ -154,8 +164,9 @@ def term_send(root: str, pub: str, amount: int, secret_hash: str, expiry: int) -
         " for (@(true, account, _) <- rCh2) {"
         ' @account!("depositFacet", "REV", *facetCh) |'
         " for (@(true, facet) <- facetCh) {"
-        f' @account!("sendTransfer", *deployerId, "REV", facet, {amount}, '
-        f'"{secret_hash}".hexToBytes(), {expiry}, *sCh) |'
+        f' @account!("sendTransfer", *deployerId, "REV", facet, '
+        f'"{pub}".hexToBytes(), {amount}, "{secret_hash}".hexToBytes(), {expiry}, '
+        f'"", "{op_id}", 0, *sCh) |'
         " for (@x <- sCh) { match x {"
         " (true, id, uri) => deployId!([id, uri])"
         " _ => deployId!(x) } }"
@@ -234,12 +245,13 @@ def owner_account(steps: list, manifest: dict, owner: dict, container: str) -> N
 
 
 def send_submit(container: str, manifest: dict, owner: dict, secret_hash: str,
-                expiry: int) -> str:
+                op_id: str, expiry: int) -> str:
     """Submit a send without waiting: the partitioned side needs a proposal first."""
     height = dn.tip(container)["blockNumber"]
     return dn.deploy(
         container,
-        term_send(manifest["root_uri"], owner["public"], AMOUNT, secret_hash, expiry),
+        term_send(manifest["root_uri"], owner["public"], AMOUNT, secret_hash, op_id,
+                  expiry),
         owner["secret"],
         height,
     )
@@ -263,14 +275,15 @@ def pinned(steps: list, name: str, deploy_id: str, container: str) -> dict:
 
 def arm_a(steps: list, manifest: dict, owner_a: dict, owner_b: dict, timeout: float) -> None:
     expiry = dn.tip(dn.CONTAINERS[0])["blockNumber"] + 200
-    hash_a = hashlib.blake2b(secrets.token_bytes(32), digest_size=32).hexdigest()
-    hash_b = hashlib.blake2b(secrets.token_bytes(32), digest_size=32).hexdigest()
+    op_a, op_b = "fork-a-1", "fork-a-2"
+    hash_a = claim_digest(op_a, secrets.token_bytes(32))
+    hash_b = claim_digest(op_b, secrets.token_bytes(32))
     base = dn.tip(dn.CONTAINERS[0])
     height = base["blockNumber"]
     dn.partition()
     record(steps, "A.partition", {"base": base["blockHash"], "height": height})
-    deploy_a = send_submit(dn.CONTAINERS[1], manifest, owner_a, hash_a, expiry)
-    deploy_b = send_submit(dn.CONTAINERS[2], manifest, owner_b, hash_b, expiry)
+    deploy_a = send_submit(dn.CONTAINERS[1], manifest, owner_a, hash_a, op_a, expiry)
+    deploy_b = send_submit(dn.CONTAINERS[2], manifest, owner_b, hash_b, op_b, expiry)
     tip_a, tip_b, _, _ = dn.advance_pair(timeout)
     uri_a = send_result(dn.CONTAINERS[1], deploy_a)
     uri_b = send_result(dn.CONTAINERS[2], deploy_b)
@@ -323,13 +336,14 @@ def arm_a(steps: list, manifest: dict, owner_a: dict, owner_b: dict, timeout: fl
 
 def arm_b(steps: list, manifest: dict, owner: dict, timeout: float) -> None:
     expiry = dn.tip(dn.CONTAINERS[0])["blockNumber"] + 200
-    hash_a = hashlib.blake2b(secrets.token_bytes(32), digest_size=32).hexdigest()
-    hash_b = hashlib.blake2b(secrets.token_bytes(32), digest_size=32).hexdigest()
+    op_a, op_b = "fork-b-1", "fork-b-2"
+    hash_a = claim_digest(op_a, secrets.token_bytes(32))
+    hash_b = claim_digest(op_b, secrets.token_bytes(32))
     base = dn.tip(dn.CONTAINERS[0])
     height = base["blockNumber"]
     dn.partition()
-    deploy_a = send_submit(dn.CONTAINERS[1], manifest, owner, hash_a, expiry)
-    deploy_b = send_submit(dn.CONTAINERS[2], manifest, owner, hash_b, expiry)
+    deploy_a = send_submit(dn.CONTAINERS[1], manifest, owner, hash_a, op_a, expiry)
+    deploy_b = send_submit(dn.CONTAINERS[2], manifest, owner, hash_b, op_b, expiry)
     tip_a, tip_b, _, _ = dn.advance_pair(timeout)
     uri_a = send_result(dn.CONTAINERS[1], deploy_a)
     uri_b = send_result(dn.CONTAINERS[2], deploy_b)
@@ -362,10 +376,12 @@ def arm_b(steps: list, manifest: dict, owner: dict, timeout: float) -> None:
     # Retry the rejected send on the healed chain. A new deploy is a new signature; the
     # rejected operation moved no value, so reusing the secret hash is safe.
     loser_hash = hash_a if deploy_a.lower() in rejected_now else hash_b
+    loser_op = op_a if deploy_a.lower() in rejected_now else op_b
     proposer = dn.Proposer(dn.CONTAINERS[1], interval=0.5)
     proposer.start()
     try:
-        deploy_retry = send_submit(dn.CONTAINERS[1], manifest, owner, loser_hash, expiry + 100)
+        deploy_retry = send_submit(dn.CONTAINERS[1], manifest, owner, loser_hash,
+                                   loser_op, expiry + 100)
         uri_retry = send_result(dn.CONTAINERS[0], deploy_retry)
     finally:
         proposer.stop()

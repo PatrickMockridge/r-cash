@@ -27,6 +27,7 @@ sys.path.insert(0, str(ROOT / "harness"))
 import netconfig  # noqa: E402
 
 import deploy as node  # noqa: E402
+import sign_payload  # noqa: E402
 from minify_rho import minify  # noqa: E402
 from unit_v3 import call, check, faucet_top_up, one  # noqa: E402
 
@@ -47,7 +48,13 @@ def render(name: str, values: dict[str, str]) -> str:
 
 
 def digest(secret: bytes) -> str:
-    return hashlib.blake2b(secret, digest_size=32).hexdigest()
+    """Canonical claim commitment over opId, asset, amount and the secret.
+
+    The opId is the caller-supplied "memo-op-1", not the allocated transfer id.
+    """
+    preimage = sign_payload.canonical(
+        "rcash:claim:v1", ["memo-op-1", "REV", AMOUNT, secret.hex()])
+    return hashlib.blake2b(preimage.encode(), digest_size=32).hexdigest()
 
 
 def native_balance(pub: str, secret: str) -> int:

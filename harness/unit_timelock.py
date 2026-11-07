@@ -36,10 +36,12 @@ DOMAIN = "stablecoin:V4T"
 
 
 def sigs_for(keys: dict, nonce: int, action: str, args_hash: str) -> str:
-    payload = f"rcash:admin:v1|{DOMAIN}|{nonce}|{action}|{args_hash}"
+    # Canonical `rcash:admin:v1` preimage over [domain, nonce, action, argsHash],
+    # the same form `AdminGuard@"verify"` builds with `Codec@"canonical"`.
+    payload = sign_payload.admin_payload(DOMAIN, nonce, action, [args_hash])
     sigs = []
     for name in ("admin1", "admin2"):
-        sig = sign_payload.sign_payload(keys[name]["secret"], payload.encode())["signature"]
+        sig = sign_payload.sign_payload(keys[name]["secret"], payload)["signature"]
         sigs.append(f'"{sig}".hexToBytes()')
     return "[" + ", ".join(sigs) + "]"
 
