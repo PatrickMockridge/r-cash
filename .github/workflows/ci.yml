@@ -127,6 +127,7 @@ jobs:
   # for now; the protocol demo and all unit gates run without Docker.
   tla:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4

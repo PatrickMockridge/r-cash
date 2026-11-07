@@ -53,7 +53,7 @@ Conflict ==
 Effect ==
     /\ phase = "effect"
     /\ phase' = "post"
-    /\ revLive' = revLive + 1
+    /\ revLive' = IF revLive = 0 THEN 1 ELSE 0
     /\ UNCHANGED <<held, revSeen>>
 
 Post ==
