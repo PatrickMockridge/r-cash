@@ -136,4 +136,10 @@ def surplusBuffer_acceptFacet (provisioned : Bool) : Bool := provisioned
 /-- Rotation retires the old auth value and installs the new one. -/
 def bufferAuthLedger_rotate (_old new : Nat) : Nat := new
 
+/-- The buffer shop is one-shot: a consumed nonce cannot be provisioned again. -/
+def bufferFacetShop_provision (oneShotConsumed : Bool) : Bool := !oneShotConsumed
+
+/-- The buffer shop only vouches for its own facet kind. -/
+def bufferFacetShop_isFacet (kindOk : Bool) : Bool := kindOk
+
 end Rholphin.Model.BufferSavings

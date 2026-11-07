@@ -3,24 +3,28 @@
 // the only privileged mutation path and is delivered by provisioning, never
 // published. T3 consumes T1's BurnFacet through a private bare-name slot for
 // `cover`; a name read out of a map cannot be called, so the slot is a name.
+// T3 owns the buffer facet, so it publishes its own BufferFacetShop; T1 cannot
+// issue a facet that lives in this closure.
 // Placeholders: __ROOT_URI__, __STABLECOIN_URI__, __FACET_SHOP_URI__,
-//               __AUTHADMIN_URI__, __CURRENCY__, __PARAMS_HASH__,
-//               __SPONSOR_PUB__, __SAVINGS_SHARE_BPS__.
+//               __CURRENCY__, __PARAMS_HASH__, __SPONSOR_PUB__,
+//               __SAVINGS_SHARE_BPS__.
 new
   SavingsPool, savingsState, savingsPurse,
   SurplusBuffer, bufferState, bufferPurse,
-  BufferOperatorFacet, BufferAuthLedger,
+  BufferOperatorFacet, BufferAuthLedger, BufferFacetShop,
+  bufferProvisionState, bufferShopUriState,
   bufferCancelled, callerOwner, savingsNotifyCheck, vaultGovernor,
   savingsNotifyAuthCell, bufferDepositAuthCell, bufferPayAuthCell, bufferCoverAuthCell,
   burnSlot, bufferFacetState,
   rl(`rho:registry:lookup`),
   rs(`rho:registry:insertArbitrary`),
+  bd(`rho:block:data`),
   deployerId(`rho:rchain:deployerId`),
   deployerIdOps(`rho:rchain:deployerId:ops`),
   revAddress(`rho:rev:address`),
   deployId(`rho:rchain:deployId`),
   scCh, brandCh, issuerCh, savingsPurseCh, bufferPurseCh,
-  uriSavingsCh, uriBufferCh, attSavingsCh, attBufferCh
+  uriSavingsCh, uriBufferCh, uriShopCh, attSavingsCh, attBufferCh
 in {
 
   // Pinned T1 stablecoin. The issuer is a pinned callee resolved once at term
@@ -479,45 +483,134 @@ in {
     }
   } |
 
-  // Local per-auth ledger. `rotate` is root-authorized through the pinned
-  // AuthAdmin verifier; it takes and posts the cell so the old value is
-  // refused and every facet that reads the cell keeps working.
-  contract BufferAuthLedger(@"rotate", @kind, @nonce, newAuth, @sigs, ret) = {
-    new rlCh, vCh in {
-      rl!(`__AUTHADMIN_URI__`, *rlCh) |
-      for (AuthAdmin <- rlCh) {
-        AuthAdmin!("verify", "buffer", nonce, "rotate", kind, sigs, *vCh) |
+  // Local per-auth ledger. `rotate` is authorized by the published Governor
+  // choke point at domain auth:<currency>:<kind> with action "rotate" and
+  // argsHash equal to the kind. On approval it takes the cell and posts a
+  // fresh internally created auth; no new auth is supplied by the caller, so
+  // none can leak. The old value is refused and every facet that reads the
+  // cell keeps working.
+  contract BufferAuthLedger(@"rotate", @kind, @nonce, @sigs, ret) = {
+    new gCh, vCh in {
+      vaultGovernor!(*gCh) |
+      for (Governor <- gCh) {
+        Governor!("authorize", "auth:" ++ "__CURRENCY__" ++ ":" ++ kind,
+                  nonce, "rotate", kind, sigs, *vCh) |
         for (@v <- vCh) {
           match v {
             (true, Nil) => {
               match kind {
                 "bufferDeposit" => {
                   for (old <- bufferDepositAuthCell) {
-                    bufferDepositAuthCell!(*newAuth) | ret!((true, Nil))
+                    new freshAuth in {
+                      bufferDepositAuthCell!(*freshAuth) | ret!((true, Nil))
+                    }
                   }
                 }
                 "bufferPay" => {
                   for (old <- bufferPayAuthCell) {
-                    bufferPayAuthCell!(*newAuth) | ret!((true, Nil))
+                    new freshAuth in {
+                      bufferPayAuthCell!(*freshAuth) | ret!((true, Nil))
+                    }
                   }
                 }
                 "bufferCover" => {
                   for (old <- bufferCoverAuthCell) {
-                    bufferCoverAuthCell!(*newAuth) | ret!((true, Nil))
+                    new freshAuth in {
+                      bufferCoverAuthCell!(*freshAuth) | ret!((true, Nil))
+                    }
                   }
                 }
                 "savingsNotify" => {
                   for (old <- savingsNotifyAuthCell) {
-                    savingsNotifyAuthCell!(*newAuth) | ret!((true, Nil))
+                    new freshAuth in {
+                      savingsNotifyAuthCell!(*freshAuth) | ret!((true, Nil))
+                    }
                   }
                 }
                 _ => { ret!((false, "action")) }
               }
             }
-            _ => { ret!((false, "verify failed")) }
+            _ => { ret!(v) }
           }
         }
       }
+    }
+  } |
+
+  // T3 owns BufferOperatorFacet, so T1's shop cannot issue it. This shop runs
+  // the same sponsor-signed one-shot protocol as MULTI-TERM.md section 4 and
+  // publishes only the local facet. The canonical preimage is
+  // rcash:provision:v1 over [shopUri, consumerUri, consumerTag, kinds,
+  // nonce, deadline, sponsor]; `kinds` is a comma-separated string and this
+  // shop accepts only "buffer".
+  contract BufferFacetShop(@"provision", @consumerUri, @consumerTag, @kinds, @nonce, @deadline, @sponsorHex, @sig, ret) = {
+    new rCh, codecCh, verCh, cc, vc, digestCh, okCh, nowCh, sCh, consumerCh in {
+      rl!(`__ROOT_URI__`, *rCh) |
+      for (Root <- rCh) {
+        Root!("resolve", "component:codec", 1, *codecCh) |
+        Root!("resolve", "component:verifier", 1, *verCh) |
+        for (@(true, codecUri, _) <- codecCh; @(true, verUri, _) <- verCh) {
+          rl!(codecUri, *cc) | rl!(verUri, *vc) |
+          for (Codec <- cc; Verifier <- vc) {
+            for (@shopUri <- bufferShopUriState) {
+              bufferShopUriState!(shopUri) |
+              if (sponsorHex != "__SPONSOR_PUB__") { ret!((false, "bad sponsor")) }
+              else {
+                if (kinds != "buffer") { ret!((false, "action")) }
+                else {
+                  Codec!("hash", "rcash:provision:v1",
+                         [shopUri, consumerUri, consumerTag, kinds,
+                          nonce.toString(), deadline.toString(), sponsorHex], *digestCh) |
+                  for (@digest <- digestCh) {
+                    Verifier!("sigOk", digest, sig, sponsorHex.hexToBytes(), *okCh) |
+                    for (@ok <- okCh) {
+                      if (ok == false) { ret!((false, "bad sponsor signature")) }
+                      else {
+                        bd!(*nowCh) |
+                        for (@height, @sender, @ts <- nowCh) {
+                          if (deadline < height) { ret!((false, "expired")) }
+                          else {
+                            for (@s <- bufferProvisionState) {
+                              match s.get("nonces").get(nonce) {
+                                Nil => {
+                                  bufferProvisionState!(s.set("nonces",
+                                    s.get("nonces").set(nonce, true))) |
+                                  rl!(consumerUri, *consumerCh) |
+                                  for (Consumer <- consumerCh) {
+                                    Consumer!("acceptFacet", "buffer",
+                                              *BufferOperatorFacet, nonce, deadline, *sCh) |
+                                    for (@c <- sCh) {
+                                      match c {
+                                        (true, _) => { ret!((true, "provisioned")) }
+                                        _ => { ret!(1 / 0) }
+                                      }
+                                    }
+                                  }
+                                }
+                                _ => {
+                                  bufferProvisionState!(s) | ret!((false, "replay"))
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  } |
+
+  contract BufferFacetShop(@"isFacet", @kind, @facet, ret) = {
+    if (kind != "buffer") { ret!((false, "action")) }
+    else {
+      if (facet != *BufferOperatorFacet) { ret!((false, "unknown")) }
+      else { ret!((true, "buffer")) }
     }
   } |
 
@@ -536,14 +629,18 @@ in {
                 "savingsShareBps": __SAVINGS_SHARE_BPS__,
                 "rev": 0}) |
   bufferFacetState!({"burn": false}) |
+  bufferProvisionState!({"nonces": {}}) |
 
   rs!(bundle+{*SavingsPool}, *uriSavingsCh) |
   rs!(bundle+{*SurplusBuffer}, *uriBufferCh) |
-  for (@savingsUri <- uriSavingsCh; @bufferUri <- uriBufferCh) {
+  rs!(bundle+{*BufferFacetShop}, *uriShopCh) |
+  for (@savingsUri <- uriSavingsCh; @bufferUri <- uriBufferCh;
+       @shopUri <- uriShopCh) {
+    bufferShopUriState!(shopUri) |
     SavingsPool!("attest", *attSavingsCh) |
     SurplusBuffer!("attest", *attBufferCh) |
     for (@attS <- attSavingsCh; @attB <- attBufferCh) {
-      deployId!([savingsUri, bufferUri, attS, attB])
+      deployId!([savingsUri, bufferUri, shopUri, attS, attB])
     }
   }
 
