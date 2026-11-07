@@ -114,7 +114,7 @@ def render_issuer(currency: str, params_hash: str, sponsor: str, root: str) -> s
 
 def render_legacy(currency: str, root: str, issuer_uri: str, params_uri: str,
                   issuer_shop_uri: str, buffer_shop_uri: str = "") -> str:
-    """Render the transitional monolith (T2/T3/T4 stand-in)."""
+    """Retired transitional monolith; kept only for older branches."""
     return render("31_stablecoin", {
         "__ROOT_URI__": root,
         "__CURRENCY__": currency,
@@ -123,6 +123,60 @@ def render_legacy(currency: str, root: str, issuer_uri: str, params_uri: str,
         "__ISSUER_SHOP_URI__": issuer_shop_uri,
         "__BUFFER_SHOP_URI__": buffer_shop_uri,
     })
+
+
+def render_buffer_savings(currency: str, params: dict, params_hash: str,
+                          sponsor: str, root: str, sc_uri: str,
+                          issuer_shop_uri: str) -> str:
+    return render("31_buffer_savings", {
+        "__ROOT_URI__": root,
+        "__STABLECOIN_URI__": sc_uri,
+        "__FACET_SHOP_URI__": issuer_shop_uri,
+        "__CURRENCY__": currency,
+        "__PARAMS_HASH__": params_hash,
+        "__SPONSOR_PUB__": sponsor,
+        "__SAVINGS_SHARE_BPS__": str(params["savingsShareBps"]),
+    })
+
+
+def render_psm(currency: str, params: dict, params_hash: str, sponsor: str,
+               root: str, sc_uri: str, issuer_shop_uri: str) -> str:
+    return render("31_psm", {
+        "__ROOT_URI__": root,
+        "__STABLECOIN_URI__": sc_uri,
+        "__FACET_SHOP_URI__": issuer_shop_uri,
+        "__CURRENCY__": currency,
+        "__PARAMS_HASH__": params_hash,
+        "__SPONSOR_PUB__": sponsor,
+        "__PSM_FEE_BPS__": str(params["psmFeeBps"]),
+        "__PSM_CEILING__": str(params["debtCeiling"]),
+        "__MAX_SUPPLY__": str(2_000_000_000_000_000),
+        "__MAX_ORACLE_AGE__": str(params["maxOracleAge"]),
+    })
+
+
+def render_vault(currency: str, params_hash: str, sponsor: str, root: str,
+                 sc_uri: str, params_uri: str, buffer_uri: str, psm_uri: str,
+                 issuer_shop_uri: str, buffer_shop_uri: str) -> str:
+    return render("31_vault", {
+        "__ROOT_URI__": root,
+        "__CURRENCY__": currency,
+        "__PARAMS_URI__": params_uri,
+        "__PARAMS_HASH__": params_hash,
+        "__SPONSOR_PUB__": sponsor,
+        "__SC_URI__": sc_uri,
+        "__BUFFER_URI__": buffer_uri,
+        "__PSM_URI__": psm_uri,
+        "__ISSUER_SHOP_URI__": issuer_shop_uri,
+        "__BUFFER_SHOP_URI__": buffer_shop_uri,
+    })
+
+
+DEFAULT_RENDERERS = {
+    "vault": render_vault,
+    "buffer_savings": render_buffer_savings,
+    "psm": render_psm,
+}
 
 
 # ---------------------------------------------------------------------------
@@ -364,23 +418,31 @@ def deploy_currency_system(keys: dict, state: dict, currency: str,
     (sc_uri, custody_uri, auth_ledger_uri, issuer_shop_uri,
      issuer_attest) = issuer_result
 
+    renderers = DEFAULT_RENDERERS if renderers is None else renderers
     if renderers:
-        # Extension point: each renderer takes keyword pins and returns a
-        # deploy term. Result conventions documented in TERM_RENDERERS below.
-        deployed = {
-            name: deploy_term(renderers[name](
-                root=root, currency=currency, sc_uri=sc_uri,
-                params_uri=params_uri, issuer_shop_uri=issuer_shop_uri,
-                buffer_shop_uri=buffer_shop_uri), secret)
-            for name in ("vault", "buffer_savings", "psm")
-        }
-        vault_uri, liq_uri = deployed["vault"][0], deployed["vault"][1]
-        vault_consumer_uri = deployed["vault"][2]
-        liquidation_auth_ledger_uri = deployed["vault"][3]
-        savings_uri, buffer_uri = (deployed["buffer_savings"][0],
-                                   deployed["buffer_savings"][1])
-        buffer_shop_uri = deployed["buffer_savings"][2]
-        psm_uri = deployed["psm"][0]
+        # T3 publishes the buffer shop T2 needs, T4 is independent of T2 at
+        # deploy (it resolves the registry per arm), and T2 pins both.
+        deployed_bs = deploy_term(renderers["buffer_savings"](
+            root=root, currency=currency, params=params,
+            params_hash=params_hash, sponsor=sponsor, sc_uri=sc_uri,
+            issuer_shop_uri=issuer_shop_uri), secret)
+        savings_uri, buffer_uri, buffer_shop_uri = (
+            deployed_bs[0], deployed_bs[1], deployed_bs[2])
+        deployed_psm = deploy_term(renderers["psm"](
+            root=root, currency=currency, params=params,
+            params_hash=params_hash, sponsor=sponsor, sc_uri=sc_uri,
+            issuer_shop_uri=issuer_shop_uri), secret)
+        psm_uri = deployed_psm[0]
+        deployed_vault = deploy_term(renderers["vault"](
+            root=root, currency=currency, params_hash=params_hash,
+            sponsor=sponsor, sc_uri=sc_uri, params_uri=params_uri,
+            buffer_uri=buffer_uri, psm_uri=psm_uri,
+            issuer_shop_uri=issuer_shop_uri,
+            buffer_shop_uri=buffer_shop_uri), secret)
+        vault_uri, liq_uri, vault_consumer_uri = (
+            deployed_vault[0], deployed_vault[1], deployed_vault[2])
+        liquidation_auth_ledger_uri = (
+            deployed_vault[3] if len(deployed_vault) > 3 else None)
     else:
         legacy_result = deploy_term(
             render_legacy(currency, root, sc_uri, params_uri, issuer_shop_uri,
@@ -391,11 +453,26 @@ def deploy_currency_system(keys: dict, state: dict, currency: str,
         liquidation_auth_ledger_uri = None
 
     provision_consumer = consumer_uri or vault_consumer_uri
-    provision_kinds = tuple(kinds) if kinds is not None else ISSUER_KINDS
+    provision_kinds = tuple(kinds) if kinds is not None else T2_KINDS
+    base_nonce = nonce if nonce is not None else node.height()
+    # T3 consumes the issuer burn facet; T4 the issuer mint/burn; T2 all four
+    # issuer facets plus the buffer facet from T3's shop. Distinct issuer-shop
+    # nonces keep the one-shot ledger honest across the three deploys.
+    provisioned_t3 = provision_facets(
+        keys, state, "buffer", buffer_uri, T3_KINDS,
+        issuer_shop_uri=issuer_shop_uri, buffer_shop_uri=buffer_shop_uri,
+        sponsor_key=sponsor_key, nonce=base_nonce, deadline=deadline,
+        secret=secret)
+    provisioned_t4 = provision_facets(
+        keys, state, "psm", psm_uri, T4_KINDS,
+        issuer_shop_uri=issuer_shop_uri, buffer_shop_uri=buffer_shop_uri,
+        sponsor_key=sponsor_key, nonce=base_nonce + 1, deadline=deadline,
+        secret=secret)
     provisioned = provision_facets(
         keys, state, consumer_tag, provision_consumer, provision_kinds,
         issuer_shop_uri=issuer_shop_uri, buffer_shop_uri=buffer_shop_uri,
-        sponsor_key=sponsor_key, nonce=nonce, deadline=deadline, secret=secret)
+        sponsor_key=sponsor_key, nonce=base_nonce + 2, deadline=deadline,
+        secret=secret)
     state["issuer_shop_uri"] = issuer_shop_uri
     state["buffer_shop_uri"] = buffer_shop_uri
 
@@ -423,6 +500,8 @@ def deploy_currency_system(keys: dict, state: dict, currency: str,
         "buffer_uri": buffer_uri,
         "psm_uri": psm_uri,
         "provisioned": provisioned,
+        "provisioned_t3": provisioned_t3,
+        "provisioned_t4": provisioned_t4,
     }
 
 
@@ -498,7 +577,7 @@ T2_ACCEPT_CONTRACT = "VaultAccept"
 TERM_RENDERERS = {
     "T5_params": render_params_term,
     "T1_issuer": render_issuer,
-    "T2_vault": None,           # extension point
-    "T3_buffer_savings": None,  # extension point
-    "T4_psm": None,             # extension point
+    "T2_vault": render_vault,
+    "T3_buffer_savings": render_buffer_savings,
+    "T4_psm": render_psm,
 }
