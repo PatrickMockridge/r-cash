@@ -166,6 +166,8 @@ def main() -> int:
     secret = keys["deployer"]["secret"]
     for name in ("key13", "key20"):
         faucet_top_up(keys[name]["address"])
+    # OCAP-11: the listing is submitted by the sponsor key, so it must be funded.
+    faucet_top_up(keys["sponsor"]["address"])
     sponsor = keys["sponsor"]["public"]
     params = ('{"mcrBps": 20000, "bonusBps": 800, "closeFactorBps": 5000, '
               '"ratePerBlock": 3171, "debtCeiling": 10000000000000, '
@@ -220,26 +222,35 @@ def main() -> int:
 
     # The account resolves an asset through CurrencyRegistry, so the isolated
     # system must be listed before its stablecoin can be held in an account.
+    # The preimage is canonical v4, the ABI carries the deployed id, and the
+    # deploy is submitted with the sponsor key (OCAP-11).
     registry_uri = state["currency_registry_uri"]
-    listing = (f"rcash:currency-register:v3|{CURRENCY}|{sc_uri}|{custody_uri}|"
-               f"{params_uri}|{vault_uri}|{liq_uri}|{savings_uri}|{psm_uri}|"
-               f"{buffer_uri}|{params_hash}|{sponsor}")
+    listing_values = [CURRENCY, sc_uri, custody_uri, params_uri, vault_uri,
+                      liq_uri, savings_uri, psm_uri, buffer_uri, params_hash, sponsor]
+    listing = canonical("rcash:currency-register:v4", listing_values)
     listing_sig = sign_payload.sign_payload(keys["sponsor"]["secret"],
                                             listing.encode())["signature"]
-    register_body = (
-        f'CurrencyRegistry!("register", "{CURRENCY}", "{sc_uri}", "{custody_uri}", '
-        f'"{params_uri}", "{vault_uri}", "{liq_uri}", "{savings_uri}", "{psm_uri}", '
-        f'"{buffer_uri}", "{params_hash}", "{sponsor}", '
-        f'"{listing_sig}".hexToBytes(), *r) |\n'
-        "  for (@x <- r) {\n"
-        "    match x {\n"
-        '      (true, entry) => deployId!([true, entry])\n'
-        "      (false, why) => deployId!([false, why])\n"
-        "      _ => deployId!(x)\n"
+    register_term = (
+        "new rl(`rho:registry:lookup`), ch, r, "
+        "deployerId(`rho:rchain:deployerId`), "
+        "deployId(`rho:rchain:deployId`) in {\n"
+        f"  rl!(`{registry_uri}`, *ch) |\n"
+        "  for (CurrencyRegistry <- ch) {\n"
+        f'    CurrencyRegistry!("register", *deployerId, "{CURRENCY}", "{sc_uri}", '
+        f'"{custody_uri}", "{params_uri}", "{vault_uri}", "{liq_uri}", '
+        f'"{savings_uri}", "{psm_uri}", "{buffer_uri}", "{params_hash}", '
+        f'"{sponsor}", "{listing_sig}".hexToBytes(), *r) |\n'
+        "    for (@x <- r) {\n"
+        "      match x {\n"
+        '        (true, entry) => deployId!([true, entry])\n'
+        "        (false, why) => deployId!([false, why])\n"
+        "        _ => deployId!(x)\n"
+        "      }\n"
         "    }\n"
-        "  }"
+        "  }\n"
+        "}"
     )
-    listed = one(call(registry_uri, "CurrencyRegistry", register_body), secret)
+    listed = one(register_term, keys["sponsor"]["secret"])
     if listed[0] is not True:
         print(f"{CURRENCY} register refused (reused chain):", listed)
     check(f"{CURRENCY} listed", listed[0] is True or "exist" in str(listed[1]).lower(), True)
