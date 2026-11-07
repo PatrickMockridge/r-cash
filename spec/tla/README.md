@@ -1,7 +1,7 @@
 # TLA+ models
 
 These finite models encode the safety properties of the v0.3 component calculus. They are
-specifications, not runtime code. CI runs TLC over all seven models in the `tla` job
+specifications, not runtime code. CI runs TLC over all nine models in the `tla` job
 (tla2tools 1.8.0); `make tla-check` remains the local runner and uses `TLC` (default `tlc`).
 
 | Model | Property |
@@ -9,10 +9,12 @@ specifications, not runtime code. CI runs TLC over all seven models in the `tla`
 | `CellLinearity.tla` | one holder at a time; quiescent cell is `Full`; a holder sees `Empty` |
 | `TransferExclusivity.tla` | open ⇒ payment held; terminal ⇒ payment gone; at most one terminal transition |
 | `PoolConservation.tla` | reserves equal custody; `totalShares = minted − burned` |
-| `CapabilityProvenance.tla` | a caller-supplied capability never enters authoritative storage |
+| `CapabilityProvenance.tla` | a caller-supplied capability never enters authoritative storage; facet-kind attenuation; no facet name published |
 | `AdminNonce.tla` | no nonce replay; every executed nonce is at or below the governor nonce |
 | `MarketCreateAtomicity.tla` | a committed sealed market slot always has a staged index record |
 | `PoolCriticalSection.tla` | a pool cell is never held across an external read phase |
+| `Provisioning.tla` | per-term shops (T1 issuer, T3 buffer): a nonce is one-shot and a consumer slot is write-once; replay and forged/cross-shop facets cannot change state; `VaultAccept` owns T2's slot; the mint consumer checks `sin ≤ surplus` before the effect; settlement interest is routed to the buffer exactly once |
+| `AuthRotation.tla` | rotation only through `Governor@"authorize"` (`domain, nonce, action, argsHash, sigs`): the old auth is refused, the new auth is accepted, the facet stays live, and the catalogue covers four T1/two T4/four T3, the liquidation ledger and market/directory domains |
 
 Each `.tla` has a `.cfg` with the invariants TLC should check. The models use small bounded
 domains (2 actors, 2 transfers, reserves up to 12) so TLC terminates.
@@ -49,11 +51,17 @@ make tla-check
 The five original models were checked with TLC 2.19 (tla2tools 1.7.4) on 2026-10-23:
 `AdminNonce` 64 states, `CapabilityProvenance` 13, `CellLinearity` 5,
 `PoolConservation` 60586, `TransferExclusivity` 13. `MarketCreateAtomicity` and
-`PoolCriticalSection` were added with the 2026-11-03 HAZOP; the CI `tla` job now checks all
-seven. The first CI run found an unconstrained `checked'` in `MarketCreateAtomicity.Create`
-and an unbounded `revLive` in `PoolCriticalSection`; both are fixed (the latter uses a
-two-value revision toggle so the state space is finite). The finite bounds are deliberately small; the models check the protocol shape,
-not production-scale state spaces.
+`PoolCriticalSection` were added with the 2026-11-03 HAZOP. `Provisioning` and
+`AuthRotation` were added with the multi-term provisioning protocol
+(`docs/spec/MULTI-TERM.md`); the CI `tla` job now checks all nine. The first CI run found
+an unconstrained `checked'` in `MarketCreateAtomicity.Create` and an unbounded `revLive`
+in `PoolCriticalSection`; both are fixed (the latter uses a two-value revision toggle so
+the state space is finite). The finite bounds are deliberately small; the models check
+the protocol shape, not production-scale state spaces.
+
+Local TLC run on 2026-11-07: `Provisioning` 162,177 states generated / 5,760 distinct,
+`AuthRotation` 137 / 20, `CapabilityProvenance` (with the attenuation and leak additions)
+193 / 32. These are small protocol-shape checks, not production-scale state spaces.
 
 The models are abstractions. They do not model phlo, the node scheduler or the Rholang
 parser; those are covered by `tools/measure_contracts.py` and the devnet scenarios.
