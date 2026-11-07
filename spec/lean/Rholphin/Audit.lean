@@ -72,6 +72,11 @@ output containing `sorryAx` or a project-local axiom.
 #print axioms Rholphin.Model.Psm.sellChecked_refuses_below_floor
 #print axioms Rholphin.Model.BufferSavings.notifyChecked_refuses_zero
 #print axioms Rholphin.Model.BufferSavings.notifyChecked_preserves_S10
+#print axioms Rholphin.health_iff_maxDebt
+#print axioms Rholphin.Model.Vault.mintChecked_preserves_health
+#print axioms Rholphin.Model.Vault.mintChecked_refuses_unhealthy
+#print axioms Rholphin.Model.Vault.withdrawChecked_preserves_health
+#print axioms Rholphin.Model.Vault.withdrawChecked_refuses_unhealthy
 #print axioms Rholphin.Invariants.S9_waterfall_le
 #print axioms Rholphin.Invariants.S7_settle_S1
 #print axioms Rholphin.Invariants.S6_writeOff_badDebt

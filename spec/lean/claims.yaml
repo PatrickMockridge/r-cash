@@ -334,8 +334,15 @@ invariants:
     statement: Mint and collateral withdrawal preserve health.
     predicate: Rholphin.Model.Issuer.health
     status: partial
-    note: Both audited theorems restate the post-state health hypothesis; Phase 5 replaces them.
+    note: >-
+      The checked transitions refuse an unhealthy post-state and prove health
+      from the success case; the old restatements remain for compatibility.
     theorems:
+      - {name: Rholphin.health_iff_maxDebt, strength: substantive, kind: invariant}
+      - {name: Rholphin.Model.Vault.mintChecked_preserves_health, strength: substantive, kind: preservation}
+      - {name: Rholphin.Model.Vault.withdrawChecked_preserves_health, strength: substantive, kind: preservation}
+      - {name: Rholphin.Model.Vault.mintChecked_refuses_unhealthy, strength: substantive, kind: rejection}
+      - {name: Rholphin.Model.Vault.withdrawChecked_refuses_unhealthy, strength: substantive, kind: rejection}
       - {name: Rholphin.Model.Vault.mint_preserves_health, strength: restatement, kind: preservation}
       - {name: Rholphin.Model.Vault.withdraw_preserves_health, strength: restatement, kind: preservation}
   S5:

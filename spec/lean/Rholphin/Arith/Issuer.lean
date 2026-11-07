@@ -56,6 +56,29 @@ def health (collateral debt rate mcrBps : Nat) : Prop :=
 theorem health_zero_debt (collateral rate mcrBps : Nat) :
     health collateral 0 rate mcrBps := Or.inl rfl
 
+/-- The maximum debt a vault may carry at a given collateral and rate. -/
+def maxDebt (collateral rate mcrBps : Nat) : Nat :=
+  (collateral * rate / E8) * Bps / mcrBps
+
+/-- Health is the debt cap, for a positive maintenance ratio. -/
+theorem health_iff_maxDebt {collateral debt rate mcrBps : Nat} (hm : 0 < mcrBps) :
+    health collateral debt rate mcrBps ↔
+      debt = 0 ∨ (0 < rate ∧ debt ≤ maxDebt collateral rate mcrBps) := by
+  unfold health maxDebt
+  constructor
+  · intro h
+    rcases h with hzero | ⟨hrate, hle⟩
+    · exact Or.inl hzero
+    · exact Or.inr ⟨hrate,
+        (Nat.le_div_iff_mul_le (k := mcrBps) (x := debt)
+          (y := collateral * rate / E8 * Bps) hm).mpr hle⟩
+  · intro h
+    rcases h with hzero | ⟨hrate, hle⟩
+    · exact Or.inl hzero
+    · exact Or.inr ⟨hrate,
+        (Nat.le_div_iff_mul_le (k := mcrBps) (x := debt)
+          (y := collateral * rate / E8 * Bps) hm).mp hle⟩
+
 /-- The close-factor ceiling: `ceil(accrued * closeFactorBps / 10000)`. -/
 def closeMax (accrued closeFactorBps : Nat) : Nat :=
   ceilDiv (accrued * closeFactorBps) Bps

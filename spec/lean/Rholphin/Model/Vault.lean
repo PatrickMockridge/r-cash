@@ -308,6 +308,76 @@ theorem withdraw_preserves_health {b : Book} {target : Owner} {amount accrued ra
       ((withdraw b target amount accrued).vaults target).debt rate mcrBps := by
   simpa [withdraw, withdrawVault] using hguard
 
+/-- Decidable form of health, used by the checked transitions. -/
+def healthOk (collateral debt rate mcrBps : Nat) : Bool :=
+  decide (debt = 0 ∨ (0 < rate ∧ (collateral * rate / E8) * Bps ≥ debt * mcrBps))
+
+/-- Mint is accepted only when the post-state is healthy. -/
+def mintChecked (b : Book) (target : Owner) (amount accrued rate mcrBps : Nat) : Option Book :=
+  if healthOk (b.vaults target).collateral (accrued + amount) rate mcrBps then
+    some (mint b target amount accrued)
+  else none
+
+theorem mintChecked_refuses_unhealthy {b : Book} {target : Owner}
+    {amount accrued rate mcrBps : Nat}
+    (h : ¬ health (b.vaults target).collateral (accrued + amount) rate mcrBps) :
+    mintChecked b target amount accrued rate mcrBps = none := by
+  unfold mintChecked
+  have hok : healthOk (b.vaults target).collateral (accrued + amount) rate mcrBps = false := by
+    unfold healthOk
+    exact decide_eq_false (by simpa [health] using h)
+  simp [hok]
+
+theorem mintChecked_preserves_health {b b' : Book} {target : Owner}
+    {amount accrued rate mcrBps : Nat}
+    (h : mintChecked b target amount accrued rate mcrBps = some b') :
+    health (b'.vaults target).collateral (b'.vaults target).debt rate mcrBps := by
+  unfold mintChecked at h
+  split at h
+  · rename_i hok
+    have hdec : decide ((accrued + amount = 0) ∨
+        (0 < rate ∧ ((b.vaults target).collateral * rate / E8) * Bps ≥ (accrued + amount) * mcrBps)) = true := by
+      simpa [healthOk, health] using hok
+    have hg : health (b.vaults target).collateral (accrued + amount) rate mcrBps := by
+      simpa [health] using of_decide_eq_true hdec
+    injection h with heq
+    subst heq
+    simpa [mint, mintVault] using hg
+  · contradiction
+
+/-- Collateral withdrawal is accepted only when the post-state is healthy. -/
+def withdrawChecked (b : Book) (target : Owner) (amount accrued rate mcrBps : Nat) : Option Book :=
+  if healthOk ((b.vaults target).collateral - amount) accrued rate mcrBps then
+    some (withdraw b target amount accrued)
+  else none
+
+theorem withdrawChecked_refuses_unhealthy {b : Book} {target : Owner}
+    {amount accrued rate mcrBps : Nat}
+    (h : ¬ health ((b.vaults target).collateral - amount) accrued rate mcrBps) :
+    withdrawChecked b target amount accrued rate mcrBps = none := by
+  unfold withdrawChecked
+  have hok : healthOk ((b.vaults target).collateral - amount) accrued rate mcrBps = false := by
+    unfold healthOk
+    exact decide_eq_false (by simpa [health] using h)
+  simp [hok]
+
+theorem withdrawChecked_preserves_health {b b' : Book} {target : Owner}
+    {amount accrued rate mcrBps : Nat}
+    (h : withdrawChecked b target amount accrued rate mcrBps = some b') :
+    health (b'.vaults target).collateral (b'.vaults target).debt rate mcrBps := by
+  unfold withdrawChecked at h
+  split at h
+  · rename_i hok
+    have hdec : decide ((accrued = 0) ∨
+        (0 < rate ∧ (((b.vaults target).collateral - amount) * rate / E8) * Bps ≥ accrued * mcrBps)) = true := by
+      simpa [healthOk, health] using hok
+    have hg : health ((b.vaults target).collateral - amount) accrued rate mcrBps := by
+      simpa [health] using of_decide_eq_true hdec
+    injection h with heq
+    subst heq
+    simpa [withdraw, withdrawVault] using hg
+  · contradiction
+
 /-! ## Arm-level surface -/
 
 def vaultBook_open (b : Book) (target : Owner) (height : Nat) : Book :=
