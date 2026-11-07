@@ -32,6 +32,7 @@ sys.path.insert(0, str(ROOT / "harness"))
 import netconfig  # noqa: E402
 
 import deploy as node  # noqa: E402
+import sign_payload  # noqa: E402
 from feed_refresh import feed_uri, set_price  # noqa: E402
 from minify_rho import minify  # noqa: E402
 from unit_v3 import call, check, faucet_top_up, one  # noqa: E402
@@ -45,6 +46,28 @@ RATE = REV_PRICE * 100_000_000 // V4T_PRICE
 REV_IN = 1_000_000
 MINT = 100_000_000
 FEE_BPS = 10
+
+# OCAP-09: the PSM policy preimage is the length-prefixed canonical form built
+# by `Codec@"canonical"` in `PegStabilityModule@"schedulePolicy"`. Keep this
+# byte-identical to the contract and to `tools/sign_payload.canonical`.
+PSM_POLICY_SCHEMA = "rcash:psm-policy:v1"
+
+
+def psm_policy_hash(fee_bps: int, ceiling: int) -> str:
+    return sign_payload.canonical(PSM_POLICY_SCHEMA, [fee_bps, ceiling])
+
+
+def psm_policy_sigs(keys: dict, fee_bps: int, ceiling: int, nonce: int,
+                    domain: str) -> str:
+    """Sign the canonical admin preimage that binds the policy argsHash."""
+    args_hash = psm_policy_hash(fee_bps, ceiling)
+    payload = sign_payload.admin_canonical_payload(
+        domain, nonce, "setPsmPolicy", args_hash)
+    sigs = []
+    for name in ("admin1", "admin2"):
+        sig = sign_payload.sign_payload(keys[name]["secret"], payload)["signature"]
+        sigs.append(f'"{sig}".hexToBytes()')
+    return "[" + ", ".join(sigs) + "]"
 
 
 def render(name: str, values: dict[str, str]) -> str:
