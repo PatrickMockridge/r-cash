@@ -1,0 +1,42 @@
+// RT-17: rotation goes through the published Governor@"authorize" choke point
+// (`domain, nonce, action, argsHash, sigs`), not an AuthAdmin contract. After
+// an authorized rotation the new auth is accepted, a non-current auth is
+// refused, and a facet that holds the auth cell stays live.
+//
+// The old value is not reconstructed here: the Phase 0 spike used a test-only
+// `current` arm to capture it, and that arm must not exist in production. The
+// fresh `stale` name models any auth that is not the current cell value.
+// Placeholders: __GOVERNOR_URI__, __AUTH_LEDGER_URI__, __CONSUMER_URI__,
+//               __DOMAIN__, __NONCE__, __ARGS_HASH__, __SIGS__, __KIND__,
+//               __MINT_AMOUNT__.
+// Expected reply: [rotate, (true, ...), (false, ...), (true, ...)].
+new
+  rl(`rho:registry:lookup`),
+  govCh, ledgerCh, consumerCh, newAuth, stale, gCh, r1, r2, r3, r4,
+  deployId(`rho:rchain:deployId`)
+in {
+  rl!(`__GOVERNOR_URI__`, *govCh) |
+  rl!(`__AUTH_LEDGER_URI__`, *ledgerCh) |
+  rl!(`__CONSUMER_URI__`, *consumerCh) |
+  for (Governor <- govCh; AuthLedger <- ledgerCh; Consumer <- consumerCh) {
+    Governor!("authorize", "__DOMAIN__", __NONCE__, "rotate",
+              "__ARGS_HASH__", __SIGS__, *gCh) |
+    for (@g <- gCh) {
+      match g {
+        (true, _) => {
+          AuthLedger!("rotate", "__DOMAIN__", __NONCE__, "__ARGS_HASH__",
+                      __SIGS__, *r1) |
+          for (@rot <- r1) {
+            AuthLedger!("check", "__KIND__", *newAuth, *r2) |
+            AuthLedger!("check", "__KIND__", *stale, *r3) |
+            Consumer!("mint", __MINT_AMOUNT__, *r4) |
+            for (@a <- r2; @b <- r3; @c <- r4) {
+              deployId!([rot, a, b, c])
+            }
+          }
+        }
+        _ => { deployId!(g) }
+      }
+    }
+  }
+}

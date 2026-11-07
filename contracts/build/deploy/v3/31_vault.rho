@@ -1,0 +1,1186 @@
+// T2 vault term: one REV-collateralised vault book and liquidation engine per
+// currency. Ownership follows the checker: this term owns vaultState,
+// liquidationAuth and every per-vault auth. Privileged effects and the risk
+// parameters live in other terms and are reached through provisioned bare-name
+// slots (T1 mint/burn/settle/custody, T3 buffer) and pinned URI placeholders
+// (T5 params, T1 stablecoin read, T3 buffer read, T4 PSM read).
+//
+// Waterfall: validate on peek, perform the effect to a pinned callee, then
+// consume and revalidate vaultState before posting (P3). Every refusal after a
+// value movement calls fail() so the deploy rolls back the effect (P6). No cell
+// is held across an await and no peeked snapshot is written after an await (S1).
+//
+// Placeholders: __ROOT_URI__, __CURRENCY__, __PARAMS_URI__, __PARAMS_HASH__,
+//               __SPONSOR_PUB__, __SC_URI__, __BUFFER_URI__, __PSM_URI__,
+//               __ISSUER_SHOP_URI__, __BUFFER_SHOP_URI__.
+new
+  VaultBook, vaultState, provisionedState,
+  LiquidationEngine, LiquidationAuthLedger, VaultAccept,
+  liquidationAuth, liquidationAuthState,
+  mintSlot, burnSlot, settleSlot, custodySlot, bufferSlot,
+  vaultResolve, vaultParams, vaultBufferInfo, vaultRate, vaultAccrue,
+  vaultHealth, vaultPayout, vaultLiquidateDecide, vaultInstallSlot,
+  vaultUpdate, vaultCommit, vaultWriteOff,
+  vaultMintCommit, repayCommit, vaultLiquidateCommit,
+  rl(`rho:registry:lookup`),
+  rs(`rho:registry:insertArbitrary`),
+  deployId(`rho:rchain:deployId`),
+  currencyCh, paramsHashCh, sponsorCh,
+  uVault, uLiq, uAccept, uAuthLedger
+in {
+
+  // Resolve a Root component URI at arm entry and return the capability. The
+  // URI is never captured by a published bundle (S4).
+  contract vaultResolve(@key, ret2) = {
+    new rCh, cCh, cc in {
+      rl!(`__ROOT_URI__`, *rCh) |
+      for (Root <- rCh) {
+        Root!("resolve", key, 1, *cCh) |
+        for (@resolveReply <- cCh) { match resolveReply { (true, uri, v) => {
+          rl!(uri, *cc) |
+          for (Cap <- cc) { ret2!(*Cap) }
+        } _ => { ret2!(1 / 0) } }}
+      }
+    }
+  } |
+
+  // T5 risk parameters through the pinned params URI.
+  contract vaultParams(ret2) = {
+    new pCh in {
+      rl!(`__PARAMS_URI__`, *pCh) |
+      for (Params <- pCh) { Params!("params", *ret2) }
+    }
+  } |
+
+  // T3 buffer view through the pinned buffer URI. The mint halt reads sin and
+  // surplus; the T3 cell is not consumed here (T2 does not own it; L6).
+  contract vaultBufferInfo(ret2) = {
+    new bCh in {
+      rl!(`__BUFFER_URI__`, *bCh) |
+      for (Buffer <- bCh) { Buffer!("info", *ret2) }
+    }
+  } |
+
+  // Oracle read: (rate, fresh) for REV/currency. Named separately from the
+  // monolith's vaultPrice so the two source files do not shadow a helper used
+  // by components that are still in 31_stablecoin.rho.
+  contract vaultRate(@currencyIn, @maxAge, ret2) = {
+    new hubCh, rrCh in {
+      vaultResolve!("component:oracle-hub", *hubCh) |
+      for (OracleHub <- hubCh) {
+        OracleHub!("getPair", "REV", currencyIn, maxAge, *rrCh) |
+        for (@rr <- rrCh) {
+          match rr {
+            (true, m) => { ret2!((m.get("rate"), m.get("fresh"))) }
+            _ => { ret2!((0, false)) }
+          }
+        }
+      }
+    }
+  } |
+
+  // Accrual through the collateral-math component.
+  contract vaultAccrue(@debt, @lastHeight, @now2, @ratePerBlock, ret2) = {
+    new mathCh, accCh in {
+      vaultResolve!("component:collateral-math", *mathCh) |
+      for (CollateralMath <- mathCh) {
+        CollateralMath!("accrue", debt, lastHeight, now2, ratePerBlock, *accCh) |
+        for (@accrued <- accCh) { ret2!(accrued) }
+      }
+    }
+  } |
+
+  // Health check through the collateral-math component.
+  contract vaultHealth(@collateral, @debt, @rate, @mcrBps, ret2) = {
+    new mathCh, hCh in {
+      vaultResolve!("component:collateral-math", *mathCh) |
+      for (CollateralMath <- mathCh) {
+        CollateralMath!("health", collateral, debt, rate, mcrBps, *hCh) |
+        for (@healthy <- hCh) { ret2!(healthy) }
+      }
+    }
+  } |
+
+  // Liquidation payout through the collateral-math component.
+  contract vaultPayout(@amount, @bonusBps, @rate, ret2) = {
+    new mathCh, pCh in {
+      vaultResolve!("component:collateral-math", *mathCh) |
+      for (CollateralMath <- mathCh) {
+        CollateralMath!("payout", amount, bonusBps, rate, *pCh) |
+        for (@seized <- pCh) { ret2!(seized) }
+      }
+    }
+  } |
+
+  // Liquidation decision after price and accrual validation: close factor,
+  // payout, slippage, then the effect-then-commit waterfall. Keeping this in a
+  // top-level helper bounds the arm's parse depth.
+  contract vaultLiquidateDecide(@s, @v, @ownerId, @now2, @accrued, @amount,
+                                @rate, @ps, @minCollateral, payment, ret2) = {
+    new hCh in {
+      vaultHealth!(v.get("collateral"), accrued, rate, ps.get("mcrBps"), *hCh) |
+      for (@healthy <- hCh) {
+        if (healthy) { ret2!((false, "healthy", *payment)) }
+        else {
+          match ((accrued * ps.get("closeFactorBps") + 9999) / 10000).toInt() {
+            maxRepay => {
+              if (amount > maxRepay) {
+                ret2!((false, "close factor", *payment))
+              } else {
+                new pCh in {
+                  vaultPayout!(amount, ps.get("bonusBps"), rate, *pCh) |
+                  for (@seized0 <- pCh) {
+                    if (seized0 <= v.get("collateral")) {
+                      if (seized0 < minCollateral) {
+                        ret2!((false, "slippage", *payment))
+                      } else {
+                        new bfCh, cfCh, ufCh in {
+                          for (bfacet <<- burnSlot; cfacet <<- custodySlot;
+                               ufacet <<- bufferSlot) {
+                            vaultLiquidateCommit!(s, v, ownerId, now2, accrued,
+                              amount, seized0, false, *payment, *bfacet, *cfacet,
+                              *ufacet, *ret2)
+                          }
+                        }
+                      }
+                    } else {
+                      if (amount * 100000000 < v.get("collateral") * rate) {
+                        ret2!((false, "underwater repayment", *payment))
+                      } else {
+                        if (v.get("collateral") < minCollateral) {
+                          ret2!((false, "slippage", *payment))
+                        } else {
+                          new bfCh, cfCh, ufCh in {
+                            for (bfacet <<- burnSlot; cfacet <<- custodySlot;
+                                 ufacet <<- bufferSlot) {
+                              vaultLiquidateCommit!(s, v, ownerId, now2, accrued,
+                                amount, v.get("collateral"), true, *payment,
+                                *bfacet, *cfacet, *ufacet, *ret2)
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  } |
+
+  // Write-once facet slot installation. The shop has already consumed the
+  // sponsor nonce; provisionedState is data-only and enforces the single write.
+  contract vaultInstallSlot(@kind, facet, @nonce, @deadline, slot, ret2) = {
+    for (@p <<- provisionedState) {
+      if (p.get(kind) == true) {
+        ret2!((false, "no slot"))
+      } else {
+        for (@p2 <- provisionedState) {
+          if (p2.get(kind) == true) {
+            provisionedState!(p2) |
+            ret2!((false, "no slot"))
+          } else {
+            slot!(*facet) |
+            provisionedState!(p2.set(kind, true)) |
+            ret2!((true, "provisioned"))
+          }
+        }
+      }
+    }
+  } |
+
+  contract vaultUpdate(@s, @ownerId, @vault, @td, @ti, @tc, @bd, @rev, ret2) = {
+    ret2!(s.set("vaults", s.get("vaults").set(ownerId, vault))
+           .set("totalDebt", td)
+           .set("totalAccruedInterest", ti)
+           .set("totalCollateral", tc)
+           .set("badDebt", bd)
+           .set("rev", rev))
+  } |
+
+  // P3 commit: the arm validated and performed its effects; consume the vault
+  // state, revalidate auth and rev, then post. A mismatch after an effect fails
+  // the deploy so the effect rolls back (P6).
+  contract vaultCommit(@s, @ownerId, @auth, @vault, @td, @ti, @tc, @bd, ret2) = {
+    for (@s2 <- vaultState) {
+      match s2.get("vaults").get(ownerId) {
+        Nil => { ret2!(1 / 0) }
+        v2 => {
+          if (v2.get("auth") != auth || s2.get("rev") != s.get("rev")) {
+            ret2!(1 / 0)
+          } else {
+            new nsCh in {
+              vaultUpdate!(s2, ownerId, vault, td, ti, tc, bd,
+                           s2.get("rev") + 1, *nsCh) |
+              for (@ns <- nsCh) {
+                vaultState!(ns) |
+                ret2!((true, Nil))
+              }
+            }
+          }
+        }
+      }
+    }
+  } |
+
+  // Write-off commit: the buffer cover has already run as an effect. Compute
+  // the cleared vault and totals from the validated snapshot, then post.
+  contract vaultWriteOff(@s, @v, @ownerId, @now2, @accrued, @amount, @seized,
+                         @cancelled, @sinOut, ret2) = {
+    new vcCh in {
+      vaultCommit!(s, ownerId, v.get("auth"), {
+        "auth": v.get("auth"),
+        "collateral": 0,
+        "debt": 0,
+        "lastHeight": now2
+      }, s.get("totalDebt") - v.get("debt"),
+      s.get("totalAccruedInterest") + (accrued - v.get("debt")),
+      s.get("totalCollateral") - seized,
+      s.get("badDebt") + (accrued - amount), *vcCh) |
+      for (@vc <- vcCh) {
+        match vc {
+          (true, _) => {
+            ret2!((true, {
+              "repaid": amount,
+              "seized": seized,
+              "badDebt": accrued - amount,
+              "cancelled": cancelled,
+              "sin": sinOut
+            }))
+          }
+          _ => { ret2!(1 / 0) }
+        }
+      }
+    }
+  } |
+
+  // Mint commit: validate the buffer halt on a read, mint through the T1 facet,
+  // then consume/revalidate and post. A facet refusal moves no value, so it is a
+  // business refusal; anything after the mint fails the deploy.
+  contract vaultMintCommit(@s, @v, @ownerId, @now2, @accrued, @amount,
+                           mintFacet, ret2) = {
+    new infoCh, payCh in {
+      vaultBufferInfo!(*infoCh) |
+      for (@bi <- infoCh) {
+        match bi {
+          (true, b) => {
+            if (b.get("sin") > b.get("surplus")) {
+              ret2!((false, "recapitalise"))
+            } else {
+              mintFacet!("mint", amount, *payCh) |
+              for (@p <- payCh) {
+                match p {
+                  (true, payment, supply) => {
+                    new vcCh in {
+                      vaultCommit!(s, ownerId, v.get("auth"), {
+                        "auth": v.get("auth"),
+                        "collateral": v.get("collateral"),
+                        "debt": accrued + amount,
+                        "lastHeight": now2
+                      }, s.get("totalDebt") + (accrued - v.get("debt")) + amount,
+                      s.get("totalAccruedInterest") + (accrued - v.get("debt")),
+                      s.get("totalCollateral"),
+                      s.get("badDebt"), *vcCh) |
+                      for (@vc <- vcCh) {
+                        match vc {
+                          (true, _) => { ret2!((true, payment, accrued + amount)) }
+                          _ => { ret2!(1 / 0) }
+                        }
+                      }
+                    }
+                  }
+                  (false, why) => { ret2!((false, why)) }
+                  _ => { ret2!(1 / 0) }
+                }
+              }
+            }
+          }
+          _ => { ret2!(1 / 0) }
+        }
+      }
+    }
+  } |
+
+  // Repay commit: settle through T1, deposit the interest through T3, cover
+  // outstanding sin, pay the savings share, then consume/revalidate and post.
+  // SettlementFacet replies (true, principal, Nil) when interest == 0 and
+  // (true, principal, interestPay) otherwise; the guard below deposits only the
+  // non-zero interest payment. T1 no longer holds bufferDepositAuth, so T2
+  // performs the deposit with its provisioned buffer facet. After settle every
+  // refusal fails the deploy so burn, deposit, cover and pay roll back together.
+  contract repayCommit(@s, @v, @ownerId, @now2, @accrued, @amount,
+                       @interestPaid, @principalPaid, payment,
+                       settleFacet, bufferFacet, ret2) = {
+    new settleCh in {
+      settleFacet!("settle", *payment, principalPaid, interestPaid, *settleCh) |
+      for (@st <- settleCh) {
+        new depCh, settleDone in {
+          match st {
+            (true, p, Nil) => { settleDone!(true) }
+            (true, p, interestPayment) => {
+              bufferFacet!("deposit", interestPayment, *depCh) |
+              for (@dep <- depCh) {
+                match dep {
+                  (true, _) => { settleDone!(true) }
+                  _ => { settleDone!(false) }
+                }
+              }
+            }
+            (false, why, returned) => { ret2!((false, why, returned)) }
+            _ => { ret2!(1 / 0) }
+          } |
+          for (@ok <- settleDone) {
+            if (ok == true) {
+              new coverCh in {
+                bufferFacet!("cover", 0, *coverCh) |
+                for (@cv <- coverCh) {
+                  match cv {
+                    (true, cancelled, sinOut) => {
+                      new payCh in {
+                        bufferFacet!("paySavings", 0, *payCh) |
+                        for (@pv <- payCh) {
+                          match pv {
+                            (true, moved, left) => {
+                              new vcCh in {
+                                vaultCommit!(s, ownerId, v.get("auth"), {
+                                  "auth": v.get("auth"),
+                                  "collateral": v.get("collateral"),
+                                  "debt": accrued - amount,
+                                  "lastHeight": now2
+                                }, s.get("totalDebt") + (accrued - v.get("debt")) - amount,
+                                s.get("totalAccruedInterest")
+                                   + (accrued - v.get("debt")) - interestPaid,
+                                s.get("totalCollateral"),
+                                s.get("badDebt"), *vcCh) |
+                                for (@vc <- vcCh) {
+                                  match vc {
+                                    (true, _) => {
+                                      ret2!((true, {
+                                        "debt": accrued - amount,
+                                        "repaid": amount,
+                                        "principalPaid": principalPaid,
+                                        "interestPaid": interestPaid,
+                                        "cancelled": cancelled,
+                                        "savingsPaid": moved
+                                      }))
+                                    }
+                                    _ => { ret2!(1 / 0) }
+                                  }
+                                }
+                              }
+                            }
+                            _ => { ret2!(1 / 0) }
+                          }
+                        }
+                      }
+                    }
+                    _ => { ret2!(1 / 0) }
+                  }
+                }
+              }
+            } else { ret2!(1 / 0) }
+          }
+        }
+      }
+    }
+  } |
+
+  // Liquidation commit: burn the liquidator's stablecoin through T1, seize REV
+  // through T1 custody, cover the shortfall through T3 when writing off, then
+  // consume/revalidate and post. Every refusal after the burn fails the deploy.
+  contract vaultLiquidateCommit(@s, @v, @ownerId, @now2, @accrued, @amount,
+                                @seized, @writeOff, payment,
+                                burnFacet, custodyFacet, bufferFacet, ret2) = {
+    new burnCh in {
+      burnFacet!("burn", *payment, amount, *burnCh) |
+      for (@b <- burnCh) {
+        match b {
+          (true, burned, supply) => {
+            new wdCh in {
+              custodyFacet!("withdraw", seized, *wdCh) |
+              for (@w <- wdCh) {
+                match w {
+                  (true, paymentOut) => {
+                    if (writeOff == true) {
+                      new coverCh in {
+                        bufferFacet!("cover", accrued - amount, *coverCh) |
+                        for (@cv <- coverCh) {
+                          match cv {
+                            (true, cancelled, sinOut) => {
+                              vaultWriteOff!(s, v, ownerId, now2, accrued, amount,
+                                             seized, cancelled, sinOut, *ret2)
+                            }
+                            _ => { ret2!(1 / 0) }
+                          }
+                        }
+                      }
+                    } else {
+                      new vcCh in {
+                        vaultCommit!(s, ownerId, v.get("auth"), {
+                          "auth": v.get("auth"),
+                          "collateral": v.get("collateral") - seized,
+                          "debt": accrued - amount,
+                          "lastHeight": now2
+                        }, s.get("totalDebt") + (accrued - v.get("debt")) - amount,
+                        s.get("totalAccruedInterest") + (accrued - v.get("debt")),
+                        s.get("totalCollateral") - seized,
+                        s.get("badDebt"), *vcCh) |
+                        for (@vc <- vcCh) {
+                          match vc {
+                            (true, _) => {
+                              ret2!((true, paymentOut, {
+                                "repaid": amount,
+                                "seized": seized,
+                                "badDebt": 0
+                              }))
+                            }
+                            _ => { ret2!(1 / 0) }
+                          }
+                        }
+                      }
+                    }
+                  }
+                  _ => { ret2!(1 / 0) }
+                }
+              }
+            }
+          }
+          _ => { ret2!(1 / 0) }
+        }
+      }
+    }
+  } |
+
+  currencyCh!("__CURRENCY__") |
+  paramsHashCh!("__PARAMS_HASH__") |
+  sponsorCh!("__SPONSOR_PUB__") |
+  for (@currency <- currencyCh; @paramsHash <- paramsHashCh;
+       @sponsorHex <- sponsorCh) {
+      vaultState!({
+        "vaults": {},
+        "totalDebt": 0,
+        "totalAccruedInterest": 0,
+        "totalCollateral": 0,
+        "badDebt": 0,
+        "paused": false,
+        "pausedRev": 0,
+        "rev": 0
+      }) |
+      provisionedState!({}) |
+      liquidationAuthState!(*liquidationAuth) |
+
+      // Retire a leaked vault capability. Gated by the current auth; the new
+      // auth is a fresh unforgeable name held by the owner.
+      contract VaultBook(@"rotate", @ownerId, @auth, @newAuth, ret2) = {
+        for (@s <- vaultState) {
+          match s.get("vaults").get(ownerId) {
+            Nil => { vaultState!(s) | ret2!((false, "no vault")) }
+            v => {
+              if (v.get("auth") != auth) {
+                vaultState!(s) | ret2!((false, "bad vault auth"))
+              } else {
+                vaultState!(s.set("vaults",
+                  s.get("vaults").set(ownerId, v.set("auth", newAuth)))
+                  .set("rev", s.get("rev") + 1)) |
+                ret2!((true, Nil))
+              }
+            }
+          }
+        }
+      } |
+
+      contract VaultBook(@"open", @ownerId, @proof, ret2) = {
+        new afCh, vCh, clockCh, nowCh2 in {
+          vaultResolve!("component:account-factory", *afCh) |
+          for (AccountFactory <- afCh) {
+            AccountFactory!("verify", ownerId, proof, *vCh) |
+            for (@vr <- vCh) {
+              match vr {
+                (true, true) => {
+                  for (@s <<- vaultState) {
+                    match s.get("vaults").get(ownerId) {
+                      Nil => {
+                        vaultResolve!("component:clock", *clockCh) |
+                        for (Clock <- clockCh) {
+                          Clock!("now", *nowCh2) |
+                          for (@now2 <- nowCh2) {
+                            for (@s2 <- vaultState) {
+                              match s2.get("vaults").get(ownerId) {
+                                Nil => {
+                                  new auth in {
+                                    vaultState!(s2.set("vaults",
+                                      s2.get("vaults").set(ownerId, {
+                                        "auth": *auth,
+                                        "collateral": 0,
+                                        "debt": 0,
+                                        "lastHeight": now2
+                                      }))) |
+                                    ret2!((true, *auth))
+                                  }
+                                }
+                                existing => {
+                                  vaultState!(s2) |
+                                  match existing.get("auth") { a => { ret2!((true, a)) } }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                      existing => {
+                        match existing.get("auth") { a => { ret2!((true, a)) } }
+                      }
+                    }
+                  }
+                }
+                (true, false) => { ret2!((false, "not owner")) }
+                _ => { ret2!((false, "verify failed")) }
+              }
+            }
+          }
+        }
+      } |
+
+      contract VaultBook(@"deposit", @ownerId, @auth, payment, ret2) = {
+        for (@s <<- vaultState; @p <<- provisionedState) {
+          if (p.get("custody") != true) { ret2!((false, "no slot")) }
+          else {
+            match s.get("vaults").get(ownerId) {
+              Nil => { ret2!((false, "no vault")) }
+              v => {
+                if (v.get("auth") != auth) { ret2!((false, "bad vault auth")) }
+                else {
+                  new prCh, clockCh, nowCh2, accCh, cCh in {
+                    vaultParams!(*prCh) |
+                    vaultResolve!("component:clock", *clockCh) |
+                    for (@pr <- prCh; Clock <- clockCh) {
+                      match pr {
+                        (true, ps) => {
+                          Clock!("now", *nowCh2) |
+                          for (@now2 <- nowCh2) {
+                            vaultAccrue!(v.get("debt"), v.get("lastHeight"), now2,
+                                         ps.get("ratePerBlock"), *accCh) |
+                            for (@accrued <- accCh) {
+                              for (facet <<- custodySlot) {
+                                facet!("deposit", *payment, *cCh) |
+                                for (@c <- cCh) {
+                                  match c {
+                                    (true, amount) => {
+                                      new vcCh in {
+                                        vaultCommit!(s, ownerId, auth, {
+                                          "auth": v.get("auth"),
+                                          "collateral": v.get("collateral") + amount,
+                                          "debt": accrued,
+                                          "lastHeight": now2
+                                        }, s.get("totalDebt") + (accrued - v.get("debt")),
+                                        s.get("totalAccruedInterest") + (accrued - v.get("debt")),
+                                        s.get("totalCollateral") + amount,
+                                        s.get("badDebt"), *vcCh) |
+                                        for (@vc <- vcCh) {
+                                          match vc {
+                                            (true, _) => {
+                                              ret2!((true, {
+                                                "collateral": v.get("collateral") + amount,
+                                                "debt": accrued
+                                              }))
+                                            }
+                                            _ => { ret2!(1 / 0) }
+                                          }
+                                        }
+                                      }
+                                    }
+                                    _ => { ret2!(1 / 0) }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                        _ => { ret2!(1 / 0) }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      } |
+
+      contract VaultBook(@"mint", @ownerId, @auth, @amount, ret2) = {
+        if (amount <= 0) { ret2!((false, "amount")) }
+        else {
+          for (@s <<- vaultState; @p <<- provisionedState) {
+            if (p.get("mint") != true) { ret2!((false, "no slot")) }
+            else {
+              if (s.get("paused")) { ret2!((false, "paused")) }
+              else {
+                match s.get("vaults").get(ownerId) {
+                  Nil => { ret2!((false, "no vault")) }
+                  v => {
+                    if (v.get("auth") != auth) { ret2!((false, "bad vault auth")) }
+                    else {
+                      new prCh, clockCh, nowCh2, rrCh, accCh, hCh in {
+                        vaultParams!(*prCh) |
+                        vaultResolve!("component:clock", *clockCh) |
+                        for (@pr <- prCh; Clock <- clockCh) {
+                          match pr {
+                            (true, ps) => {
+                              Clock!("now", *nowCh2) |
+                              vaultRate!(currency, ps.get("maxOracleAge"), *rrCh) |
+                              for (@now2 <- nowCh2; @rr <- rrCh) {
+                                match rr {
+                                  (rate, fresh) => {
+                                    if (fresh == false) { ret2!((false, "stale feed")) }
+                                    else {
+                                      if (rate <= 0) { ret2!((false, "no rate")) }
+                                      else {
+                                        vaultAccrue!(v.get("debt"), v.get("lastHeight"),
+                                                     now2, ps.get("ratePerBlock"), *accCh) |
+                                        for (@accrued <- accCh) {
+                                          if (accrued + amount < ps.get("minDebt")) {
+                                            ret2!((false, "min debt"))
+                                          } else {
+                                            if (accrued + amount > ps.get("maxDebt")) {
+                                              ret2!((false, "max debt"))
+                                            } else {
+                                              if (s.get("totalDebt")
+                                                  + (accrued - v.get("debt")) + amount
+                                                  > ps.get("debtCeiling")) {
+                                                ret2!((false, "ceiling"))
+                                              } else {
+                                                vaultHealth!(v.get("collateral"),
+                                                             accrued + amount, rate,
+                                                             ps.get("mcrBps"), *hCh) |
+                                                for (@healthy <- hCh) {
+                                                  if (healthy) {
+                                                    for (facet <<- mintSlot) {
+                                                      vaultMintCommit!(s, v, ownerId,
+                                                        now2, accrued, amount,
+                                                        *facet, *ret2)
+                                                    }
+                                                  } else {
+                                                    ret2!((false, "below MCR"))
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                _ => { ret2!((false, "rate")) }
+                                  }
+                              }
+                            }
+                            _ => { ret2!(1 / 0) }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      } |
+
+      contract VaultBook(@"withdraw", @ownerId, @auth, @amount, ret2) = {
+        if (amount <= 0) { ret2!((false, "amount")) }
+        else {
+          for (@s <<- vaultState; @p <<- provisionedState) {
+            if (p.get("custody") != true) { ret2!((false, "no slot")) }
+            else {
+              match s.get("vaults").get(ownerId) {
+                Nil => { ret2!((false, "no vault")) }
+                v => {
+                  if (s.get("paused")) { ret2!((false, "paused")) }
+                  else {
+                    if (v.get("auth") != auth) { ret2!((false, "bad vault auth")) }
+                    else {
+                      if (v.get("collateral") < amount) { ret2!((false, "amount")) }
+                      else {
+                        new prCh, clockCh, nowCh2, rrCh, accCh, hCh, wdCh in {
+                          vaultParams!(*prCh) |
+                          vaultResolve!("component:clock", *clockCh) |
+                          for (@pr <- prCh; Clock <- clockCh) {
+                            match pr {
+                              (true, ps) => {
+                                Clock!("now", *nowCh2) |
+                                vaultRate!(currency, ps.get("maxOracleAge"), *rrCh) |
+                                for (@now2 <- nowCh2; @rr <- rrCh) {
+                                  match rr {
+                                    (rate, fresh) => {
+                                      if (fresh == false) { ret2!((false, "stale feed")) }
+                                      else {
+                                        if (rate <= 0) { ret2!((false, "no rate")) }
+                                        else {
+                                          vaultAccrue!(v.get("debt"), v.get("lastHeight"),
+                                                       now2, ps.get("ratePerBlock"), *accCh) |
+                                          for (@accrued <- accCh) {
+                                            vaultHealth!(v.get("collateral") - amount,
+                                                         accrued, rate,
+                                                         ps.get("mcrBps"), *hCh) |
+                                            for (@healthy <- hCh) {
+                                              if (healthy) {
+                                                for (facet <<- custodySlot) {
+                                                  facet!("withdraw", amount, *wdCh) |
+                                                  for (@w <- wdCh) {
+                                                    match w {
+                                                      (true, payment) => {
+                                                        new vcCh in {
+                                                          vaultCommit!(s, ownerId, auth, {
+                                                            "auth": v.get("auth"),
+                                                            "collateral":
+                                                              v.get("collateral") - amount,
+                                                            "debt": accrued,
+                                                            "lastHeight": now2
+                                                          }, s.get("totalDebt")
+                                                             + (accrued - v.get("debt")),
+                                                          s.get("totalAccruedInterest")
+                                                             + (accrued - v.get("debt")),
+                                                          s.get("totalCollateral") - amount,
+                                                          s.get("badDebt"), *vcCh) |
+                                                          for (@vc <- vcCh) {
+                                                            match vc {
+                                                              (true, _) => {
+                                                                ret2!((true, payment))
+                                                              }
+                                                              _ => { ret2!(1 / 0) }
+                                                            }
+                                                          }
+                                                        }
+                                                      }
+                                                      _ => { ret2!(1 / 0) }
+                                                    }
+                                                  }
+                                                }
+                                              } else { ret2!((false, "below MCR")) }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  _ => { ret2!((false, "rate")) }
+                                  }
+                                }
+                              }
+                              _ => { ret2!(1 / 0) }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      } |
+
+      contract VaultBook(@"repay", @ownerId, @auth, payment, ret2) = {
+        for (@s <<- vaultState; @p <<- provisionedState) {
+          if (p.get("settle") != true || p.get("buffer") != true) {
+            ret2!((false, "no slot"))
+          } else {
+            match s.get("vaults").get(ownerId) {
+              Nil => { ret2!((false, "no vault")) }
+              v => {
+                if (v.get("auth") != auth) { ret2!((false, "bad vault auth")) }
+                else {
+                  new prCh, scCh, amtCh, clockCh, nowCh2, accCh in {
+                    vaultParams!(*prCh) |
+                    rl!(`__SC_URI__`, *scCh) |
+                    vaultResolve!("component:clock", *clockCh) |
+                    for (@pr <- prCh; SC <- scCh; Clock <- clockCh) {
+                      match pr {
+                        (true, ps) => {
+                          SC!("amountOf", *payment, *amtCh) |
+                          for (@a <- amtCh) {
+                            match a {
+                              (true, amount) => {
+                                if (amount <= 0) { ret2!((false, "amount", *payment)) }
+                                else {
+                                  Clock!("now", *nowCh2) |
+                                  for (@now2 <- nowCh2) {
+                                    vaultAccrue!(v.get("debt"), v.get("lastHeight"),
+                                                 now2, ps.get("ratePerBlock"), *accCh) |
+                                    for (@accrued <- accCh) {
+                                      if (amount > accrued) {
+                                        ret2!((false, "amount", *payment))
+                                      } else {
+                                        if (accrued - amount > 0
+                                            && accrued - amount < ps.get("minDebt")) {
+                                          ret2!((false, "min debt", *payment))
+                                        } else {
+                                          match (accrued - v.get("debt")) {
+                                            interestDue => {
+                                              new sfCh, bfCh in {
+                                                for (sfacet <<- settleSlot;
+                                                     bfacet <<- bufferSlot) {
+                                                  if (amount <= interestDue) {
+                                                    repayCommit!(s, v, ownerId, now2,
+                                                      accrued, amount, amount, 0,
+                                                      *payment, *sfacet, *bfacet, *ret2)
+                                                  } else {
+                                                    repayCommit!(s, v, ownerId, now2,
+                                                      accrued, amount, interestDue,
+                                                      amount - interestDue,
+                                                      *payment, *sfacet, *bfacet, *ret2)
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                              _ => { ret2!((false, "asset", *payment)) }
+                            }
+                          }
+                        }
+                        _ => { ret2!(1 / 0) }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      } |
+
+      // Permissionless liquidation. The only authority is the liquidation cap
+      // held by this term and passed by LiquidationEngine.
+      contract VaultBook(@"liquidate", @ownerId, @auth, payment, @minCollateral, ret2) = {
+        for (@current <<- liquidationAuthState) {
+          if (auth != current) {
+            ret2!((false, "bad liquidation authority", *payment))
+          } else {
+          new amtCh, scCh in {
+            rl!(`__SC_URI__`, *scCh) |
+            for (SC <- scCh) {
+              SC!("amountOf", *payment, *amtCh) |
+              for (@a <- amtCh) {
+                match a {
+                  (true, amount) => {
+                    if (amount <= 0) { ret2!((false, "amount", *payment)) }
+                    else {
+                      for (@s <<- vaultState; @p <<- provisionedState) {
+                        if (p.get("burn") != true || p.get("custody") != true
+                            || p.get("buffer") != true) {
+                          ret2!((false, "no slot", *payment))
+                        } else {
+                          match s.get("vaults").get(ownerId) {
+                            Nil => { ret2!((false, "no vault", *payment)) }
+                            v => {
+                              new prCh, clockCh, nowCh2, rrCh, accCh in {
+                                vaultParams!(*prCh) |
+                                vaultResolve!("component:clock", *clockCh) |
+                                for (@pr <- prCh; Clock <- clockCh) {
+                                  match pr {
+                                    (true, ps) => {
+                                      Clock!("now", *nowCh2) |
+                                      vaultRate!(currency, ps.get("maxOracleAge"), *rrCh) |
+                                      for (@now2 <- nowCh2; @rr <- rrCh) {
+                                        match rr {
+                                          (rate, fresh) => {
+                                            if (fresh == false) {
+                                              ret2!((false, "stale feed", *payment))
+                                            } else {
+                                              if (rate <= 0) {
+                                                ret2!((false, "no rate", *payment))
+                                              } else {
+                                                vaultAccrue!(v.get("debt"),
+                                                  v.get("lastHeight"), now2,
+                                                  ps.get("ratePerBlock"), *accCh) |
+                                                for (@accrued <- accCh) {
+                                                  vaultLiquidateDecide!(s, v, ownerId,
+                                                    now2, accrued, amount, rate, ps,
+                                                    minCollateral, *payment, *ret2)
+                                                }
+                                              }
+                                            }
+                                          }
+                                        _ => { ret2!((false, "rate")) }
+                                  }
+                                      }
+                                    }
+                                    _ => { ret2!(1 / 0) }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                  _ => { ret2!((false, "not a stablecoin payment", *payment)) }
+                }
+              }
+            }
+          }
+        }
+        }
+      } |
+
+      contract VaultBook(@"vault", @ownerId, ret2) = {
+        for (@s <<- vaultState) {
+          match s.get("vaults").get(ownerId) {
+            Nil => { ret2!((false, "no vault")) }
+            v => {
+              new prCh, clockCh, nowCh2, rrCh, accCh, hCh in {
+                vaultParams!(*prCh) |
+                vaultResolve!("component:clock", *clockCh) |
+                for (@pr <- prCh; Clock <- clockCh) {
+                  match pr {
+                    (true, ps) => {
+                      Clock!("now", *nowCh2) |
+                      vaultRate!(currency, ps.get("maxOracleAge"), *rrCh) |
+                      for (@now2 <- nowCh2; @rr <- rrCh) {
+                        match rr {
+                          (rate, fresh) => {
+                            vaultAccrue!(v.get("debt"), v.get("lastHeight"), now2,
+                                         ps.get("ratePerBlock"), *accCh) |
+                            for (@accrued <- accCh) {
+                              vaultHealth!(v.get("collateral"), accrued, rate,
+                                           ps.get("mcrBps"), *hCh) |
+                              for (@healthy <- hCh) {
+                                ret2!((true, {
+                                  "ownerId": ownerId,
+                                  "collateral": v.get("collateral"),
+                                  "debt": accrued,
+                                  "storedDebt": v.get("debt"),
+                                  "accruedInterest": accrued - v.get("debt"),
+                                  "lastHeight": v.get("lastHeight"),
+                                  "health": healthy,
+                                  "fresh": fresh,
+                                  "rate": rate
+                                }))
+                              }
+                            }
+                          }
+                        _ => { ret2!((false, "rate")) }
+                                  }
+                      }
+                    }
+                    _ => { ret2!(1 / 0) }
+                  }
+                }
+              }
+            }
+          }
+        }
+      } |
+
+      contract VaultBook(@"vaults", ret2) = {
+        for (@s <<- vaultState) { ret2!((true, s.get("vaults").keys())) }
+      } |
+
+      contract VaultBook(@"totals", ret2) = {
+        for (@s <<- vaultState) {
+          new biCh, psmCh, debtCh in {
+            vaultBufferInfo!(*biCh) |
+            rl!(`__PSM_URI__`, *psmCh) |
+            for (Psm <- psmCh; @bi <- biCh) {
+              Psm!("debt", *debtCh) |
+              for (@d <- debtCh) {
+                match (bi, d) {
+                  ((true, b), (true, stableDebt)) => {
+                    ret2!((true, {
+                      "totalDebt": s.get("totalDebt"),
+                      "totalAccruedInterest": s.get("totalAccruedInterest"),
+                      "totalCollateral": s.get("totalCollateral"),
+                      "badDebt": s.get("badDebt"),
+                      "sin": b.get("sin"),
+                      "psmDebt": stableDebt,
+                      "paused": s.get("paused"),
+                      "rev": s.get("rev")
+                    }))
+                  }
+                  _ => { ret2!(1 / 0) }
+                }
+              }
+            }
+          }
+        }
+      } |
+
+      contract VaultBook(@"params", ret2) = {
+        vaultParams!(*ret2)
+      } |
+
+      contract VaultBook(@"pause", @paused, @nonce, @sigs, ret2) = {
+        for (@s <<- vaultState) {
+          new gCh, vCh in {
+            vaultResolve!("component:governor", *gCh) |
+            for (Governor <- gCh) {
+              Governor!("authorize", "stablecoin:" ++ currency, nonce, "setPaused",
+                        paused.toString(), sigs, *vCh) |
+              for (@v <- vCh) {
+                match v {
+                  (true, Nil) => {
+                    for (@s2 <- vaultState) {
+                      new revCh in {
+                        match s2.get("pausedRev") {
+                          Nil => { revCh!(1) }
+                          r => { revCh!(r + 1) }
+                        } |
+                        for (@pr <- revCh) {
+                          vaultState!(s2.set("paused", paused).set("pausedRev", pr)
+                                        .set("rev", s2.get("rev") + 1)) |
+                          ret2!((true, pr))
+                        }
+                      }
+                    }
+                  }
+                  _ => { ret2!(v) }
+                }
+              }
+            }
+          }
+        }
+      } |
+
+      contract VaultBook(@"attest", ret2) = {
+        ret2!((true, {
+          "currency": currency,
+          "paramsHash": paramsHash,
+          "sponsor": sponsorHex,
+          "kind": "vault",
+          "template": "rcash:stablecoin-vault:v1"
+        }))
+      } |
+
+      // The engine reads the auth cell per call; rotation replaces the cell value
+      // so an old leaked auth is refused while the engine stays live.
+      contract LiquidationEngine(@"liquidate", @ownerId, payment, @minCollateral, ret2) = {
+        for (@current <<- liquidationAuthState) {
+          VaultBook!("liquidate", ownerId, current, *payment, minCollateral, *ret2)
+        }
+      } |
+
+      contract LiquidationEngine(@"attest", ret2) = {
+        ret2!((true, {
+          "currency": currency,
+          "paramsHash": paramsHash,
+          "sponsor": sponsorHex,
+          "kind": "liquidation",
+          "template": "rcash:liquidation-engine:v1"
+        }))
+      } |
+
+      // Governor-authorized rotation of the liquidation auth. The signed preimage
+      // is rcash:admin:v1|auth:<currency>:liquidation|<nonce>|rotateLiquidationAuth|liquidation.
+      // The cell is consumed and reposted with a fresh internal name, so the old
+      // auth is refused and the engine keeps working.
+      contract LiquidationAuthLedger(@"rotate", @nonce, @sigs, ret2) = {
+        new gCh, vCh in {
+          vaultResolve!("component:governor", *gCh) |
+          for (Governor <- gCh) {
+            Governor!("authorize", "auth:" ++ currency ++ ":liquidation", nonce,
+                      "rotateLiquidationAuth", "liquidation", sigs, *vCh) |
+            for (@v <- vCh) {
+              match v {
+                (true, Nil) => {
+                  new auth in {
+                    for (@old <- liquidationAuthState) {
+                      liquidationAuthState!(*auth) |
+                      ret2!((true, Nil))
+                    }
+                  }
+                }
+                _ => { ret2!(v) }
+              }
+            }
+          }
+        }
+      } |
+
+      // Provisioning consumer: the shop resolves this URI from the sponsor-signed
+      // payload and delivers each facet here. Each kind is verified against the
+      // shop pinned for it: T1's issuer shop for mint/burn/settle/custody and
+      // T3's BufferFacetShop for the buffer operator. The write-once slot then
+      // accepts the facet; no facet is ever returned, published or logged.
+      contract VaultAccept(@"acceptFacet", @kind, facet, @nonce, @deadline, ret) = {
+        new shopUriCh, shopCh, okCh, ok2 in {
+          match kind {
+            "mint" => { shopUriCh!("__ISSUER_SHOP_URI__") }
+            "burn" => { shopUriCh!("__ISSUER_SHOP_URI__") }
+            "settle" => { shopUriCh!("__ISSUER_SHOP_URI__") }
+            "custody" => { shopUriCh!("__ISSUER_SHOP_URI__") }
+            "buffer" => { shopUriCh!("__BUFFER_SHOP_URI__") }
+            _ => { shopUriCh!("no-shop") }
+          } |
+          for (@shopUri <- shopUriCh) {
+            match shopUri {
+              "no-shop" => {
+              ret!((false, "unknown"))
+              }
+              _ => {
+              rl!(shopUri, *shopCh) |
+              for (Shop <- shopCh) {
+                Shop!("isFacet", kind, *facet, *okCh) |
+                for (@ok <- okCh) {
+                  match ok {
+                    true => { ok2!(true) }
+                    (true, _) => { ok2!(true) }
+                    _ => { ok2!(false) }
+                  } |
+                  for (@verified <- ok2) {
+                    if (verified == true) {
+                      match kind {
+                        "mint" => {
+                          vaultInstallSlot!(kind, *facet, nonce, deadline,
+                                             *mintSlot, *ret)
+                        }
+                        "burn" => {
+                          vaultInstallSlot!(kind, *facet, nonce, deadline,
+                                             *burnSlot, *ret)
+                        }
+                        "settle" => {
+                          vaultInstallSlot!(kind, *facet, nonce, deadline,
+                                             *settleSlot, *ret)
+                        }
+                        "custody" => {
+                          vaultInstallSlot!(kind, *facet, nonce, deadline,
+                                             *custodySlot, *ret)
+                        }
+                        "buffer" => {
+                          vaultInstallSlot!(kind, *facet, nonce, deadline,
+                                             *bufferSlot, *ret)
+                        }
+                        _ => { ret!((false, "unknown")) }
+                      }
+                    } else {
+                      ret!((false, "verify failed"))
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+          }
+      } |
+
+      rs!(bundle+{*VaultBook}, *uVault) |
+      rs!(bundle+{*LiquidationEngine}, *uLiq) |
+      rs!(bundle+{*VaultAccept}, *uAccept) |
+      rs!(bundle+{*LiquidationAuthLedger}, *uAuthLedger) |
+      for (@vaultUri <- uVault; @liqUri <- uLiq;
+           @acceptUri <- uAccept; @authLedgerUri <- uAuthLedger) {
+        deployId!([vaultUri, liqUri, acceptUri, authLedgerUri])
+      }
+  }
+}

@@ -26,6 +26,7 @@ sys.path.insert(0, str(ROOT / "harness"))
 import install_testnet as net  # noqa: E402
 import netconfig  # noqa: E402
 import sign_payload  # noqa: E402
+import stablecoin_support  # noqa: E402
 from unit_feed import blake2b256, canonical  # noqa: E402
 
 TESTNET_KEYS = netconfig.KEYS_PATH
@@ -171,44 +172,47 @@ def submit_prices(keys: dict, sponsor: dict, feed_uri: str, feed_id: str,
 
 
 def deploy_stablecoin(state: dict, sponsor: dict) -> list:
-    params = ('{"mcrBps": 20000, "bonusBps": 800, "closeFactorBps": 5000, '
-              '"ratePerBlock": 3171, "debtCeiling": 10000000000000, '
-              '"minDebt": 1000000, "maxDebt": 10000000000000, '
-              '"maxOracleAge": 50, "savingsShareBps": 5000, "psmFeeBps": 10}')
-    values = [CURRENCY, "20000", "800", "5000", "3171", "10000000000000",
-              "1000000", "10000000000000", "50", "5000", "10"]
-    params_hash = blake2b256(canonical("rcash:stablecoin-params:v2", values))
-    payload = f"rcash:stablecoin-create:v1|{CURRENCY}|{params_hash}|{sponsor['public']}"
-    sig = sign_payload.sign_payload(sponsor["secret"], payload.encode())["signature"]
-    term = net.render("31_stablecoin", {
-        "__ROOT_URI__": state["root_uri"],
-        "__CURRENCY__": CURRENCY,
-        "__PARAMS__": params,
-        "__PARAMS_HASH__": params_hash,
-        "__SPONSOR_PUB__": sponsor["public"],
-        "__SPONSOR_SIG__": sig,
-    })
-    doc = deploy_term(term)
-    found = net.uris(doc)
-    if len(found) < 8:
-        raise SystemExit(f"stablecoin deploy returned {found} (want eight URIs)")
-    sc, custody, params_uri, vault, liq, savings, buffer, psm = found[:8]
-    listing = (f"rcash:currency-register:v3|{CURRENCY}|{sc}|{custody}|{params_uri}|"
-               f"{vault}|{liq}|{savings}|{psm}|{buffer}|{params_hash}|{sponsor['public']}")
-    listing_sig = sign_payload.sign_payload(
-        sponsor["secret"], listing.encode())["signature"]
-    register = (
-        f"new rl(`rho:registry:lookup`), ch, r, "
-        f"deployId(`rho:rchain:deployId`) in {{\n"
-        f"  rl!(`{state['currency_registry_uri']}`, *ch) |\n"
-        f"  for (Registry <- ch) {{\n"
-        f'    Registry!("register", "{CURRENCY}", "{sc}", "{custody}", "{params_uri}", '
-        f'"{vault}", "{liq}", "{savings}", "{psm}", "{buffer}", "{params_hash}", '
-        f'"{sponsor["public"]}", "{listing_sig}".hexToBytes(), *r) |\n'
-        f"    for (@x <- r) {{ deployId!(x) }}\n"
-        f"  }}\n"
-        f"}}"
-    )
+    params, _values, params_hash = stablecoin_support.params_for(CURRENCY)
+    sponsor_pub = sponsor["public"]
+    root = state["root_uri"]
+
+    params_doc = deploy_term(stablecoin_support.render_params(
+        CURRENCY, params, params_hash, sponsor_pub, root))
+    params_uri = net.uris(params_doc)[0]
+
+    issuer_doc = deploy_term(stablecoin_support.render_issuer(
+        CURRENCY, params_hash, sponsor_pub, root))
+    issuer_uris = net.uris(issuer_doc)
+    if len(issuer_uris) < 4:
+        raise SystemExit(f"issuer deploy returned {issuer_uris} (want four URIs)")
+    sc, custody, _auth_ledger, issuer_shop = issuer_uris[:4]
+
+    legacy_doc = deploy_term(stablecoin_support.render_legacy(
+        CURRENCY, root, sc, params_uri, issuer_shop))
+    legacy_uris = net.uris(legacy_doc)
+    if len(legacy_uris) < 6:
+        raise SystemExit(f"monolith deploy returned {legacy_uris} (want six URIs)")
+    consumer, vault, liq, savings, buffer, psm = legacy_uris[:6]
+
+    nonce = height()
+    deadline = nonce + 40
+    provision_sig = stablecoin_support.provision_signature(
+        sponsor["secret"], issuer_shop, consumer, "vault",
+        stablecoin_support.ISSUER_KINDS, nonce, deadline, sponsor_pub)
+    provisioned = deploy_term(stablecoin_support.provision_term(
+        issuer_shop, consumer, "vault", stablecoin_support.ISSUER_KINDS,
+        nonce, deadline, sponsor_pub, provision_sig))
+    if "provisioned" not in json.dumps(provisioned.get("result")):
+        raise SystemExit(f"facet provisioning refused: {provisioned.get('result')}")
+
+    values = stablecoin_support.listing_values(
+        CURRENCY, sc, custody, params_uri, vault, liq, savings, psm, buffer,
+        params_hash, sponsor_pub)
+    listing_sig = stablecoin_support.listing_signature(sponsor["secret"], *values)
+    register = stablecoin_support.full_register_term(
+        state["currency_registry_uri"], CURRENCY, sc, custody, params_uri,
+        vault, liq, savings, psm, buffer, params_hash, sponsor_pub,
+        signature=listing_sig)
     listed = deploy_term(register)
     if "true" not in json.dumps(listed.get("result")).lower():
         raise SystemExit(f"currency listing refused: {listed.get('result')}")

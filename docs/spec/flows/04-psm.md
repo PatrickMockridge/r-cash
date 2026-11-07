@@ -3,13 +3,14 @@
 # Flow: psm
 
 Schema: `rcash.flows/v1`
-Source: `contracts/src/deploy/v3/31_stablecoin.rho`
+Source: `contracts/src/deploy/v3/31_psm.rho`
 
 ### PegStabilityModule
 
 ```mermaid
 stateDiagram-v2
   [*] --> Idle
+  Idle --> Idle: psm.PegStabilityModule.acceptFacet
   Idle --> Active: psm.PegStabilityModule.fundRev
   Idle --> Idle: psm.PegStabilityModule.sellStable
   Idle --> Active: psm.PegStabilityModule.buyStable
@@ -17,16 +18,33 @@ stateDiagram-v2
   Idle --> Idle: psm.PegStabilityModule.applyPolicy
   Idle --> Idle: psm.PegStabilityModule.info
   Idle --> Idle: psm.PegStabilityModule.debt
+  Idle --> Idle: psm.PegStabilityModule.attest
 ```
 
 #### PegStabilityModule arms
 
 | arm | transition | kind | guards | effects | access | refusals | invariants | status | source |
 |---|---|---|---|---|---|---|---|---|---|
-| `PegStabilityModule@"fundRev"` | `psm.PegStabilityModule.fundRev` | read | isRevPayment(payment) → asset | psmRev = psmRev + amount | — | asset (pre) | — | verified | contracts/src/deploy/v3/31_stablecoin.rho:1829 |
-| `PegStabilityModule@"sellStable"` | `psm.PegStabilityModule.sellStable` | mutate | isStablecoinPayment(payment) → asset<br>fresh and rate > 0 → stale feed<br>gross = floor(amount * 1e8 / rate) → asset<br>fee = ceil(gross * feeBps / 10000) → asset<br>gross - fee > 0 → min rev<br>gross - fee >= minRev → min rev<br>gross - fee <= psmRev → buffer<br>stableDebt - amount + maxSupply >= 0 → psm floor | supply = supply - amount<br>stableDebt = stableDebt - amount<br>psmRev = psmRev - (gross - fee)<br>caller = REV payment (gross - fee) | peek issuerState (arm)<br>peek paramsState (arm)<br>peek psmState (arm)<br>consume psmState (helper:psmSellCommit)<br>post psmState (helper:psmSellCommit) | asset (pre)<br>balance (pre)<br>buffer (pre)<br>min rev (pre)<br>stale feed (pre)<br>psm floor (pre) | S3<br>S11 | verified | contracts/src/deploy/v3/31_stablecoin.rho:1849 |
-| `PegStabilityModule@"buyStable"` | `psm.PegStabilityModule.buyStable` | mutate | isRevPayment(payment) → asset<br>not vault.paused → paused<br>fresh and rate > 0 → stale feed<br>gross = floor(amount * rate / 1e8) → asset<br>fee = ceil(gross * feeBps / 10000) → asset<br>gross - fee > 0 → min stable<br>gross - fee >= minStable → min stable<br>stableDebt + (gross - fee) <= ceiling → ceiling | psmRev = psmRev + amount<br>supply = totalPrincipal + (gross - fee)<br>stableDebt = stableDebt + (gross - fee)<br>caller = stablecoin payment (gross - fee) | peek paramsState (arm)<br>peek psmState (arm)<br>peek vaultState (arm)<br>consume psmState (helper:psmBuyCommit)<br>post psmState (helper:psmBuyCommit) | asset (pre)<br>ceiling (pre)<br>min stable (pre)<br>paused (pre)<br>stale feed (pre) | S3<br>S11 | verified | contracts/src/deploy/v3/31_stablecoin.rho:1905 |
-| `PegStabilityModule@"schedulePolicy"` | `psm.PegStabilityModule.schedulePolicy` | create | 0 <= feeBps <= 1000 → psm fee<br>ceiling >= 0 → ceiling | governor.pending = pending[stablecoin:currency, nonce] = {action: setPsmPolicy, argsHash: feeBps.toString() ++ '\|' ++ ceiling.toString()} | — | ceiling (pre)<br>psm fee (pre) | S12 | verified | contracts/src/deploy/v3/31_stablecoin.rho:1956 |
-| `PegStabilityModule@"applyPolicy"` | `psm.PegStabilityModule.applyPolicy` | mutate | action = "setPsmPolicy" → action<br>0 <= feeBps <= 1000 → psm fee<br>ceiling >= 0 → ceiling<br>argsHash = feeBps.toString() ++ '\|' ++ ceiling.toString() → params hash<br>ceiling >= stableDebt → ceiling | feeBps = feeBps<br>ceiling = ceiling<br>rev = rev + 1 | consume psmState (arm)<br>post psmState (arm) | action (pre)<br>ceiling (after_consume, repost)<br>params hash (pre)<br>psm fee (pre) | S12 | verified | contracts/src/deploy/v3/31_stablecoin.rho:1979 |
-| `PegStabilityModule@"info"` | `psm.PegStabilityModule.info` | read | — | reply = (true, {stableDebt, feeBps, ceiling, revBalance, rev}) | peek psmState (arm) | balance (pre) | S11 | verified | contracts/src/deploy/v3/31_stablecoin.rho:2028 |
-| `PegStabilityModule@"debt"` | `psm.PegStabilityModule.debt` | read | — | reply = (true, stableDebt) | peek psmState (arm) | — | S11 | verified | contracts/src/deploy/v3/31_stablecoin.rho:2046 |
+| `PegStabilityModule@"acceptFacet"` | `psm.PegStabilityModule.acceptFacet` | mutate | kind = "mint" or kind = "burn" → action<br>not psmFacetState[kind] → duplicate | psmFacetState[kind] = true<br>mintSlot = facet<br>burnSlot = facet | consume psmFacetState (arm)<br>post psmFacetState (arm) | action (pre)<br>duplicate (pre, repost)<br>verify failed (pre) | — | verified | contracts/src/deploy/v3/31_psm.rho:278 |
+| `PegStabilityModule@"fundRev"` | `psm.PegStabilityModule.fundRev` | read | isRevPayment(payment) → asset | psmRev = psmRev + amount | — | asset (pre) | — | verified | contracts/src/deploy/v3/31_psm.rho:307 |
+| `PegStabilityModule@"sellStable"` | `psm.PegStabilityModule.sellStable` | mutate | isStablecoinPayment(payment) → asset<br>fresh and rate > 0 → stale feed<br>gross = floor(amount * 1e8 / rate) → asset<br>fee = ceil(gross * feeBps / 10000) → asset<br>gross - fee > 0 → min rev<br>gross - fee >= minRev → min rev<br>gross - fee <= psmRev → buffer<br>stableDebt - amount + maxSupply >= 0 → psm floor | supply = supply - amount<br>stableDebt = stableDebt - amount<br>psmRev = psmRev - (gross - fee)<br>caller = REV payment (gross - fee) | peek psmState (arm)<br>consume psmState (helper:psmSellCommit)<br>post psmState (helper:psmSellCommit) | asset (pre)<br>balance (pre)<br>buffer (pre)<br>min rev (pre)<br>stale feed (pre)<br>psm floor (pre) | S3<br>S11 | verified | contracts/src/deploy/v3/31_psm.rho:327 |
+| `PegStabilityModule@"buyStable"` | `psm.PegStabilityModule.buyStable` | mutate | isRevPayment(payment) → asset<br>not vault.paused → paused<br>not (sin > surplus) → recapitalise<br>supply + (gross - fee) <= maxSupply → max supply<br>fresh and rate > 0 → stale feed<br>gross = floor(amount * rate / 1e8) → asset<br>fee = ceil(gross * feeBps / 10000) → asset<br>gross - fee > 0 → min stable<br>gross - fee >= minStable → min stable<br>stableDebt + (gross - fee) <= ceiling → ceiling | psmRev = psmRev + amount<br>supply = totalPrincipal + (gross - fee)<br>stableDebt = stableDebt + (gross - fee)<br>caller = stablecoin payment (gross - fee) | peek psmState (arm)<br>consume psmState (helper:psmBuyCommit)<br>post psmState (helper:psmBuyCommit) | asset (pre)<br>ceiling (pre)<br>max supply (pre)<br>min stable (pre)<br>paused (pre)<br>recapitalise (pre)<br>stale feed (pre) | S3<br>S11 | verified | contracts/src/deploy/v3/31_psm.rho:386 |
+| `PegStabilityModule@"schedulePolicy"` | `psm.PegStabilityModule.schedulePolicy` | create | 0 <= feeBps <= 1000 → psm fee<br>ceiling >= 0 → ceiling | governor.pending = pending[stablecoin:currency, nonce] = {action: setPsmPolicy, argsHash: rcash:psm-policy:v1\|len(feeBps):feeBps\|len(ceiling):ceiling} | — | ceiling (pre)<br>psm fee (pre) | S12 | verified | contracts/src/deploy/v3/31_psm.rho:455 |
+| `PegStabilityModule@"applyPolicy"` | `psm.PegStabilityModule.applyPolicy` | mutate | action = "setPsmPolicy" → action<br>0 <= feeBps <= 1000 → psm fee<br>ceiling >= 0 → ceiling<br>argsHash = canonical(rcash:psm-policy:v1, [feeBps, ceiling]) → params hash<br>ceiling >= stableDebt → ceiling | feeBps = feeBps<br>ceiling = ceiling<br>rev = rev + 1 | consume psmState (arm)<br>post psmState (arm) | action (pre)<br>ceiling (after_consume, repost)<br>params hash (pre)<br>psm fee (pre) | S12 | verified | contracts/src/deploy/v3/31_psm.rho:486 |
+| `PegStabilityModule@"info"` | `psm.PegStabilityModule.info` | read | — | reply = (true, {stableDebt, feeBps, ceiling, revBalance, rev}) | peek psmState (arm) | balance (pre) | S11 | verified | contracts/src/deploy/v3/31_psm.rho:544 |
+| `PegStabilityModule@"debt"` | `psm.PegStabilityModule.debt` | read | — | reply = (true, stableDebt) | peek psmState (arm) | — | S11 | verified | contracts/src/deploy/v3/31_psm.rho:562 |
+| `PegStabilityModule@"attest"` | `psm.PegStabilityModule.attest` | read | — | reply = (true, {currency, paramsHash, sponsor, kind: "psm"}) | — | — | — | verified | contracts/src/deploy/v3/31_psm.rho:566 |
+
+### PsmAuthLedger
+
+```mermaid
+stateDiagram-v2
+  [*] --> Live
+  Live --> Live: psm.PsmAuthLedger.rotate
+```
+
+#### PsmAuthLedger arms
+
+| arm | transition | kind | guards | effects | access | refusals | invariants | status | source |
+|---|---|---|---|---|---|---|---|---|---|
+| `PsmAuthLedger@"rotate"` | `psm.PsmAuthLedger.rotate` | create | Governor.authorize ok → replay<br>kind = "psmMint" or kind = "psmBurn" → action | auth = fresh new-bound auth | — | action (pre) | — | verified | contracts/src/deploy/v3/31_psm.rho:579 |

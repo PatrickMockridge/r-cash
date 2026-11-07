@@ -10,8 +10,8 @@ new
   MarketFactory, TradabilityGate, ListingViews,
   marketNow, marketVerifier, marketOracle, stageCheck, stageMarket, createMarketPool,
   activatePool, marketTransition, pauseAssetMarkets,
-  marketOwner, marketOwnerCheck,
-  marketAuth,
+  marketOwnerCheck,
+  marketAuth, marketAuthState, MarketAuthLedger,
   rl(`rho:registry:lookup`),
   revAddress(`rho:rev:address`),
   rs(`rho:registry:insertArbitrary`),
@@ -19,7 +19,7 @@ new
   deployerIdOps(`rho:rchain:deployerId:ops`),
   deployId(`rho:rchain:deployId`),
   ertpCh, rootCh, Root, uTerms, uIndex, uDirectory, uFactory,
-  uGate, uViews, ack
+  uGate, uViews, uAuthLedger, ack
 in {
 
   contract marketNow(ret) = {
@@ -85,10 +85,6 @@ in {
     }
   } |
 
-  contract marketOwner(@pubHex, ret) = {
-    revAddress!("fromPublicKey", pubHex.hexToBytes(), *ret)
-  } |
-
   // Sponsor identity checks: the submitter is the sponsor key, the sponsor
   // owns the named address and is the seed-lock beneficiary, and the lock
   // length meets the factory floor. Requiring the submitter removes
@@ -107,7 +103,7 @@ in {
               ret!((false, "lock too short"))
             } else {
               new oCh in {
-                marketOwner!(sponsorHex, *oCh) |
+                revAddress!("fromPublicKey", sponsorHex.hexToBytes(), *oCh) |
                 for (@ownerId <- oCh) {
                   if (ownerId != terms.get("sponsorOwnerId")) {
                     ret!((false, "sponsor owner"))
@@ -142,8 +138,8 @@ in {
         Root!("resolve", "component:bounds", 1, *bCh) |
         Root!("resolve", "component:codec", 1, *cCh) |
         marketVerifier!(*vCh) |
-        for (@(true, boundsUri, _) <- bCh; @(true, codecUri, _) <- cCh;
-             Verifier <- vCh) {
+        for (@boundsReply <- bCh; @codecReply <- cCh;
+             Verifier <- vCh) { match (boundsReply, codecReply) { ((true, boundsUri, _), (true, codecUri, _)) => {
           new bc, cc, checkCh in {
             rl!(boundsUri, *bc) | rl!(codecUri, *cc) |
             for (Bounds <- bc; Codec <- cc) {
@@ -154,8 +150,9 @@ in {
                     new hCh, payloadCh, digestCh, okCh in {
                       Codec!("canonical", "rcash:market-terms:v4", values, *hCh) |
                       for (@hash <- hCh) {
-                        payloadCh!("rcash:market-create:v1|" ++ terms.get("marketId")
-                                   ++ "|" ++ hash ++ "|" ++ sponsorHex) |
+                        // OCAP-09: length-prefixed canonical sponsor preimage.
+                        Codec!("canonical", "rcash:market-create:v1",
+                               [terms.get("marketId"), hash, sponsorHex], *payloadCh) |
                         for (@payload <- payloadCh) {
                           Verifier!("hash", payload.toUtf8Bytes(), *digestCh) |
                           for (@digest <- digestCh) {
@@ -187,7 +184,7 @@ in {
               }
             }
           }
-        }
+        } _ => { ret!(1 / 0) } }}
       }
     }
   } |
@@ -201,26 +198,30 @@ in {
     }
   } |
 
+  // The current market authority is read from the ledger cell per call, so a
+  // rotated value takes effect and the old value is refused.
   contract MarketDirectory(@"bind", @marketId, @slot, @auth, ret) = {
-    if (auth != *marketAuth) { ret!((false, "bad directory authority")) }
-    else {
-      for (@s <- directoryState) {
-        match s.get("slots").get(marketId) {
-          Nil => {
-            directoryState!(s.set("slots", s.get("slots").set(marketId, slot))
-                             .set("rev", s.get("rev") + 1)) |
-            ret!((true, Nil))
-          }
-          existing => {
-            // Create-only, with an exact retry idempotent. Never overwrite a
-            // different slot: a duplicate create must not replace a pool that
-            // the sponsor may already have seeded.
-            if (existing.get("termsHash") == slot.get("termsHash")
-                && existing.get("poolUri") == slot.get("poolUri")
-                && existing.get("lockUri") == slot.get("lockUri")) {
-              directoryState!(s) | ret!((true, Nil))
-            } else {
-              directoryState!(s) | ret!((false, "exists", existing))
+    for (current <<- marketAuthState) {
+      if (auth != *current) { ret!((false, "bad directory authority")) }
+      else {
+        for (@s <- directoryState) {
+          match s.get("slots").get(marketId) {
+            Nil => {
+              directoryState!(s.set("slots", s.get("slots").set(marketId, slot))
+                               .set("rev", s.get("rev") + 1)) |
+              ret!((true, Nil))
+            }
+            existing => {
+              // Create-only, with an exact retry idempotent. Never overwrite a
+              // different slot: a duplicate create must not replace a pool that
+              // the sponsor may already have seeded.
+              if (existing.get("termsHash") == slot.get("termsHash")
+                  && existing.get("poolUri") == slot.get("poolUri")
+                  && existing.get("lockUri") == slot.get("lockUri")) {
+                directoryState!(s) | ret!((true, Nil))
+              } else {
+                directoryState!(s) | ret!((false, "exists", existing))
+              }
             }
           }
         }
@@ -229,16 +230,18 @@ in {
   } |
 
   contract MarketDirectory(@"seal", @marketId, @auth, ret) = {
-    if (auth != *marketAuth) { ret!((false, "bad directory authority")) }
-    else {
-      for (@s <- directoryState) {
-        match s.get("slots").get(marketId) {
-          Nil => { directoryState!(s) | ret!((false, "no slot")) }
-          existing => {
-            directoryState!(s.set("slots",
-              s.get("slots").set(marketId, existing.set("sealed", true)))
-              .set("rev", s.get("rev") + 1)) |
-            ret!((true, Nil))
+    for (current <<- marketAuthState) {
+      if (auth != *current) { ret!((false, "bad directory authority")) }
+      else {
+        for (@s <- directoryState) {
+          match s.get("slots").get(marketId) {
+            Nil => { directoryState!(s) | ret!((false, "no slot")) }
+            existing => {
+              directoryState!(s.set("slots",
+                s.get("slots").set(marketId, existing.set("sealed", true)))
+                .set("rev", s.get("rev") + 1)) |
+              ret!((true, Nil))
+            }
           }
         }
       }
@@ -434,16 +437,58 @@ in {
     }
   } |
 
+  // Rotate the market authority through the published Governor choke point
+  // (domain `auth:market`, action `rotate`). On success the ledger creates the
+  // replacement authority internally and posts it: no caller-supplied auth is
+  // involved. The old value stays refused because every writer reads the cell
+  // per call, and the factory keeps working because it reads the same cell.
+  contract MarketAuthLedger(@"rotate", @nonce, @sigs, ret) = {
+    new rCh, gCh, gc, vCh in {
+      rl!(`__ROOT_URI__`, *rCh) |
+      for (Root <- rCh) {
+        Root!("resolve", "component:governor", 1, *gCh) |
+        for (@__replyAuth <- gCh) {
+  match __replyAuth {
+    (true, govUri, _) => {
+          rl!(govUri, *gc) |
+          for (Governor <- gc) {
+            Governor!("authorize", "auth:market", nonce, "rotate",
+                      "marketAuth", sigs, *vCh) |
+            for (@v <- vCh) {
+              match v {
+                (true, Nil) => {
+                  for (oldAuth <- marketAuthState) {
+                    new newAuth in {
+                      marketAuthState!(*newAuth) |
+                      ret!((true, Nil))
+                    }
+                  }
+                }
+                _ => { ret!(v) }
+              }
+            }
+          }
+        }
+    (false, __why) => { ret!(1 / 0) }
+    _ => { ret!(1 / 0) }
+  }
+}
+        }
+      }
+  } |
+
   contract MarketIndex(@"stage", @record, @auth, ret) = {
-    if (auth != *marketAuth) { ret!((false, "bad index authority")) }
-    else {
-      for (@s <- indexState) {
-        new gCh in {
-          stageCheck!(s, record, *gCh) |
-          for (@g <- gCh) {
-            match g {
-              (true, Nil) => { stageMarket!(s, record, *ret) }
-              _ => { indexState!(s) | ret!(g) }
+    for (current <<- marketAuthState) {
+      if (auth != *current) { ret!((false, "bad index authority")) }
+      else {
+        for (@s <- indexState) {
+          new gCh in {
+            stageCheck!(s, record, *gCh) |
+            for (@g <- gCh) {
+              match g {
+                (true, Nil) => { stageMarket!(s, record, *ret) }
+                _ => { indexState!(s) | ret!(g) }
+              }
             }
           }
         }
@@ -831,19 +876,20 @@ in {
             for (@pc <- pcCh) {
               match pc {
                 (true, poolUri, lockUri) => {
+                  for (current <<- marketAuthState) {
                   MarketDirectory!("bind", terms.get("marketId"),
                     {"poolUri": poolUri, "lockUri": lockUri,
                      "termsHash": termsHash, "sealed": false},
-                    *marketAuth, *bindCh) |
+                    *current, *bindCh) |
                   for (@bound <- bindCh) {
                     match bound {
                       (true, Nil) => {
                         MarketDirectory!("seal", terms.get("marketId"),
-                                         *marketAuth, *sealCh) |
+                                         *current, *sealCh) |
                         for (@sealed <- sealCh) {
                           match sealed {
                             (true, Nil) => {
-                              MarketIndex!("stage", record, *marketAuth, *stageCh) |
+                              MarketIndex!("stage", record, *current, *stageCh) |
                               for (@staged <- stageCh) {
                                 match staged {
                                   (true, _) => {
@@ -871,6 +917,7 @@ in {
                       _ => { ret!(bound) }
                     }
                   }
+                  }
                 }
                 _ => { ret!(pc) }
               }
@@ -886,17 +933,24 @@ in {
   } |
 
   contract MarketFactory(@"createMarket", @terms, @values, @sponsorHex, @sig, dId, ret) = {
-    new vCh, hCh, regCh, oCh, bpCh, qpCh, dataCh, spCh,
+    new vCh, kRC, kRCh, kC, hCh, regCh, oCh, bpCh, qpCh, dataCh, spCh,
         slotCh, idxCh, ckCh, stCh, recCh in {
       marketVerifier!(*vCh) |
-      for (Verifier <- vCh) {
+      rl!(`__ROOT_URI__`, *kRC) |
+      for (RootCodec <- kRC) {
+        RootCodec!("resolve", "component:codec", 1, *kRCh) |
+        for (@__replyCodec <- kRCh) {
+          match __replyCodec {
+            (true, codecUri, _) => {
+              rl!(codecUri, *kC) |
+              for (Codec <- kC; Verifier <- vCh) {
         MarketTerms!("put", terms, values, sponsorHex, sig, *hCh) |
         for (@put <- hCh) {
           match put {
             (true, termsHash) => {
-              Verifier!("hash",
-                ("rcash:market-create:v1|" ++ terms.get("marketId") ++ "|"
-                 ++ termsHash ++ "|" ++ sponsorHex).toUtf8Bytes(), *dataCh) |
+              // OCAP-09: length-prefixed canonical sponsor preimage.
+              Codec!("hash", "rcash:market-create:v1",
+                     [terms.get("marketId"), termsHash, sponsorHex], *dataCh) |
               for (@digest <- dataCh) {
                 Verifier!("sigOk", digest, sig, sponsorHex.hexToBytes(), *oCh) |
                 for (@ok <- oCh) {
@@ -959,7 +1013,8 @@ in {
                                                                     for (@ck <- ckCh) {
                                                                       match ck {
                                                                         (true, Nil) => {
-                                                                          MarketIndex!("stage", record, *marketAuth, *stCh) |
+                                                                          for (current <<- marketAuthState) {
+                                                                          MarketIndex!("stage", record, *current, *stCh) |
                                                                           for (@st <- stCh) {
                                                                             match st {
                                                                               (true, _) => {
@@ -970,6 +1025,7 @@ in {
                                                                               }
                                                                               _ => { ret!(st) }
                                                                             }
+                                                                          }
                                                                           }
                                                                         }
                                                                         _ => { ret!(ck) }
@@ -1019,6 +1075,12 @@ in {
             _ => { ret!(put) }
           }
         }
+              }
+            }
+            (false, __why) => { ret!(1 / 0) }
+            _ => { ret!(1 / 0) }
+          }
+        }
       }
     }
   } |
@@ -1026,6 +1088,9 @@ in {
   termsState!({"terms": {}, "rev": 0}) |
   directoryState!({"slots": {}, "rev": 0}) |
   indexState!({"markets": {}, "byPair": {}, "bySlug": {}, "rev": 0}) |
+  // The market authority lives in a cell, not in a state map: writers read the
+  // current value per call and MarketAuthLedger rotates it in place.
+  marketAuthState!(*marketAuth) |
 
   rl!(`rho:rchain:ertp`, *ertpCh) |
   for (@(_, ERTP) <- ertpCh) {
@@ -1035,9 +1100,11 @@ in {
     rs!(bundle+{*MarketFactory}, *uFactory) |
     rs!(bundle+{*TradabilityGate}, *uGate) |
     rs!(bundle+{*ListingViews}, *uViews) |
+    rs!(bundle+{*MarketAuthLedger}, *uAuthLedger) |
     for (@termsUri <- uTerms; @dirUri <- uDirectory;
          @indexUri <- uIndex; @factoryUri <- uFactory;
-         @gateUri <- uGate; @viewsUri <- uViews) {
+         @gateUri <- uGate; @viewsUri <- uViews;
+         @authLedgerUri <- uAuthLedger) {
       rl!(`__ROOT_URI__`, *rootCh) |
       for (Root <- rootCh) {
         Root!("register", "component:market-terms", termsUri, 1, "registry", *deployerId, *ack) |
@@ -1052,7 +1119,11 @@ in {
                 for (@r5 <- ack) {
                   Root!("register", "component:listing-views", viewsUri, 1, "view", *deployerId, *ack) |
                   for (@r6 <- ack) {
-                    deployId!([termsUri, dirUri, indexUri, factoryUri, gateUri, viewsUri])
+                    Root!("register", "component:market-auth-ledger", authLedgerUri, 1, "authority", *deployerId, *ack) |
+                    for (@r7 <- ack) {
+                      deployId!([termsUri, dirUri, indexUri, factoryUri,
+                                 gateUri, viewsUri, authLedgerUri])
+                    }
                   }
                 }
               }

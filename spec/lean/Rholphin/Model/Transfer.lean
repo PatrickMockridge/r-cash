@@ -28,6 +28,21 @@ structure Transfer where
 def transferBook_send (memo opId stipend : Nat) : Transfer :=
   { status := Status.open, memo := memo, opId := opId, stipend := stipend }
 
+/-- OCAP-19: the claim commitment is over the caller-supplied opId as well as
+the transfer fields and secret.  A secret leaked from one transfer therefore
+commits, on another transfer, to a different preimage.  opId is used because
+the account allocates the numeric `id` inside `sendTransfer`, after the sender
+must already have chosen the claim commitment. -/
+def claimPreimage (opId asset amount secret : Nat) : List Nat :=
+  [opId, asset, amount, secret]
+
+theorem claimPreimage_opid_bound {opId asset amount secret opId' asset' amount' secret' : Nat}
+    (h : claimPreimage opId asset amount secret = claimPreimage opId' asset' amount' secret') :
+    opId = opId' := by
+  have h' : opId = opId' ∧ asset = asset' ∧ amount = amount' ∧ secret = secret' := by
+    simpa [claimPreimage] using h
+  exact h'.1
+
 def transferContract_claim (t : Transfer) (expired secretOk : Bool) : Option Transfer :=
   if t.status = Status.open ∧ expired = false ∧ secretOk = true then
     some { t with status := Status.claimed }

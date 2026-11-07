@@ -140,6 +140,29 @@ SPEC-MOD-05:
     checks:
     - model:refusals
     - static:flows
+  - id: AC-SPEC-MOD-05.3
+    given: a sponsor-signed provisioning payload for a per-term shop and a fresh consumer slot
+    when: the shop is called with a valid, replayed, forged or unauthorised payload
+    then: the nonce is consumed once; a forged or wrong-shop facet, a nonce replay and a non-sponsor signature are refused; the caller receives no capability; T2's VaultAccept owns its slot. RT-14/RT-15 are written and pending the integration devnet run
+    checks:
+    - static:lean
+    - static:traceability
+    - campaign:install
+  - id: AC-SPEC-MOD-05.4
+    given: a Governor-authorized rotation for an auth domain
+    when: the ledger rotates and the facet and old auth are exercised
+    then: the old auth is refused, the new auth is accepted, and the facet remains live. RT-17 is written and pending the integration devnet run
+    checks:
+    - static:lean
+    - campaign:install
+    - platform:atomicity
+  - id: AC-SPEC-MOD-05.5
+    given: a mint consumer with sin greater than surplus, and a settlement reply with an interest payment
+    when: VaultBook.mint/PSM.buyStable and the settlement path run
+    then: the mint consumer refuses before the facet effect; interestPay is deposited via BufferOperatorFacet and a clean settlement deposits nothing
+    checks:
+    - static:lean
+    - campaign:install
 SPEC-MOD-06:
   level: MUST
   owner: Account, TransferContract, FxPool, PSM
@@ -3368,7 +3391,7 @@ SPEC-INV-02:
   - id: AC-SPEC-INV-02.1
     given: the initial state and preconditions of SPEC-INV-02
     when: the Lean or model check is run
-    then: "S1\u2013S12 and I1\u2013I22 hold; S3 uses the revised identity."
+    then: "S1\u2013S12 and I1\u2013I15/I19\u2013I26 hold; S3 uses the revised identity."
     checks: *id019
 SPEC-INV-03:
   level: MUST

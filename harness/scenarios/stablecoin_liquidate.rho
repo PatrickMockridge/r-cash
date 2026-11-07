@@ -28,6 +28,15 @@ in {
                   }
                 }
               }
+              (true, summary) => {
+                VaultBook!("vault", "__OWNER_ID__", *vv) |
+                for (@view <- vv) {
+                  VaultBook!("totals", *tt) |
+                  for (@totals <- tt) {
+                    deployId!([summary, view, totals])
+                  }
+                }
+              }
               _ => { deployId!(res) }
             }
           }

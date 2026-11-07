@@ -6,6 +6,12 @@ redemption is refused, a par buy mints the stablecoin and increases the signed
 debt, and a redemption of vault-issued stablecoin drives the signed debt
 negative — the peg mechanism.
 
+In the multi-term split `psmUri` names T4 (`31_psm.rho`). Buy and sell call the
+T1 `MintFacet`/`BurnFacet` from bare-name slots, delivered by the sponsor-signed
+provisioning protocol (MULTI-TERM.md §4). `unit_stablecoin` owns those deploys
+through `stablecoin_support.py`; this suite checks the term attestation and calls
+`ensure_provisioned` when the support module exposes it.
+
 Usage:
     python3 harness/unit_psm.py
 """
@@ -26,6 +32,7 @@ sys.path.insert(0, str(ROOT / "harness"))
 import netconfig  # noqa: E402
 
 import deploy as node  # noqa: E402
+import sign_payload  # noqa: E402
 from feed_refresh import feed_uri, set_price  # noqa: E402
 from minify_rho import minify  # noqa: E402
 from unit_v3 import call, check, faucet_top_up, one  # noqa: E402
@@ -39,6 +46,28 @@ RATE = REV_PRICE * 100_000_000 // V4T_PRICE
 REV_IN = 1_000_000
 MINT = 100_000_000
 FEE_BPS = 10
+
+# OCAP-09: the PSM policy preimage is the length-prefixed canonical form built
+# by `Codec@"canonical"` in `PegStabilityModule@"schedulePolicy"`. Keep this
+# byte-identical to the contract and to `tools/sign_payload.canonical`.
+PSM_POLICY_SCHEMA = "rcash:psm-policy:v1"
+
+
+def psm_policy_hash(fee_bps: int, ceiling: int) -> str:
+    return sign_payload.canonical(PSM_POLICY_SCHEMA, [fee_bps, ceiling])
+
+
+def psm_policy_sigs(keys: dict, fee_bps: int, ceiling: int, nonce: int,
+                    domain: str) -> str:
+    """Sign the canonical admin preimage that binds the policy argsHash."""
+    args_hash = psm_policy_hash(fee_bps, ceiling)
+    payload = sign_payload.admin_canonical_payload(
+        domain, nonce, "setPsmPolicy", args_hash)
+    sigs = []
+    for name in ("admin1", "admin2"):
+        sig = sign_payload.sign_payload(keys[name]["secret"], payload)["signature"]
+        sigs.append(f'"{sig}".hexToBytes()')
+    return "[" + ", ".join(sigs) + "]"
 
 
 def render(name: str, values: dict[str, str]) -> str:
@@ -58,6 +87,35 @@ def supply(sc_uri: str, secret: str) -> int:
     return one(call(sc_uri, "Stablecoin",
                     'Stablecoin!("supply", *r) | for (@x <- r) { deployId!(x) }'),
                secret)[1]
+
+
+def attest(uri: str, binding: str, secret: str) -> dict:
+    return one(call(uri, binding,
+                    f'{binding}!("attest", *r) | for (@x <- r) {{ deployId!(x) }}'),
+               secret)[1]
+
+
+def ensure_provisioned() -> None:
+    """Ensure the T1 mint/burn facets were delivered to T4.
+
+    `unit_stablecoin` performs the three provisioning deploys (T2 five kinds,
+    T4 two, T3 one) through `stablecoin_support.py`. If the support helper
+    exists, use it so a standalone run cannot hang on an unfilled bare-name
+    slot. Missing helper: report, do not reimplement the sponsor-signed
+    preimage here.
+    """
+    try:
+        import stablecoin_support
+    except ImportError:
+        print("note: stablecoin_support.py missing; assuming unit_stablecoin "
+              "provisioned the T4 mint and burn facets")
+        return
+    ensure = getattr(stablecoin_support, "ensure_provisioned", None)
+    if ensure is None:
+        print("note: stablecoin_support.ensure_provisioned missing; assuming "
+              "unit_stablecoin provisioned the T4 mint and burn facets")
+        return
+    ensure(KEYS, "V4T")
 
 
 def fee_ceil(amount: int) -> int:
@@ -81,6 +139,10 @@ def main() -> int:
     check("V4T listed", entry[0], True)
     entry = entry[1]
     vault, psm, stablecoin = entry["vaultUri"], entry["psmUri"], entry["stablecoinUri"]
+    ensure_provisioned()
+    psm_att = attest(psm, "PegStabilityModule", deployer)
+    check("psm term kind", psm_att.get("kind"), "psm")
+    check("psm term currency", psm_att.get("currency"), "V4T")
 
     actor = keys["key14"]
     funder = keys["key15"]

@@ -25,6 +25,9 @@ Read in order:
 Supporting material:
 
 - [`EXTERNAL-ASSETS.md`](EXTERNAL-ASSETS.md) — the adapter interface for bridged assets.
+- [`MULTI-TERM.md`](MULTI-TERM.md) — the five-term split, facet provisioning and Phase 0 go.
+- [`OCAP-AUDIT.md`](OCAP-AUDIT.md) — the object-capability audit and finding status.
+- [`OCAP-REDTEAM.md`](OCAP-REDTEAM.md) — the executed adversarial scenarios.
 - [`MATCH-REVIEW.md`](MATCH-REVIEW.md) — the `match`/receive pattern-effectiveness review.
 - [`flows/README.md`](flows/README.md) — the behavioural transition specification.
 - [`acceptance.yaml`](acceptance.yaml) — requirement → acceptance criteria.

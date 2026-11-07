@@ -1,0 +1,200 @@
+// v0.4 risk parameters: the per-currency parameter cell, extracted from the
+// stablecoin monolith (T5). It captures no authority and no ERTP capability:
+// the term owns paramsState and resolves Bounds, Codec and Governor through
+// Root per arm, never at bundle creation.
+// Placeholders: __ROOT_URI__, __CURRENCY__, __PARAMS__, __PARAMS_HASH__,
+//               __SPONSOR_PUB__.
+new
+  RiskParameters, paramsState, paramsValues,
+  paramsComponent,
+  rl(`rho:registry:lookup`),
+  rs(`rho:registry:insertArbitrary`),
+  deployerId(`rho:rchain:deployerId`),
+  deployId(`rho:rchain:deployId`),
+  currencyCh, paramsCh, paramsHashCh, sponsorCh, checkCh,
+  uParams, attCh, bzCh, pvCh, hCh
+in {
+
+  // One Root resolver for every registry-resolved component this term uses.
+  contract paramsComponent(@key, ret2) = {
+    new rCh, uCh in {
+      rl!(`__ROOT_URI__`, *rCh) |
+      for (Root <- rCh) {
+        Root!("resolve", key, 1, *uCh) |
+        for (@(true, compUri, v) <- uCh) {
+          new cc in {
+            rl!(compUri, *cc) |
+            for (Component <- cc) { ret2!(*Component) }
+          }
+        }
+      }
+    }
+  } |
+
+  // Canonical params values in the v2 order, from a params map.
+  contract paramsValues(@cur, @p, ret2) = {
+    ret2!([cur,
+           p.get("mcrBps").toString(),
+           p.get("bonusBps").toString(),
+           p.get("closeFactorBps").toString(),
+           p.get("ratePerBlock").toString(),
+           p.get("debtCeiling").toString(),
+           p.get("minDebt").toString(),
+           p.get("maxDebt").toString(),
+           p.get("maxOracleAge").toString(),
+           p.get("savingsShareBps").toString(),
+           p.get("psmFeeBps").toString()])
+  } |
+
+  currencyCh!("__CURRENCY__") |
+  paramsCh!(__PARAMS__) |
+  paramsHashCh!("__PARAMS_HASH__") |
+  sponsorCh!("__SPONSOR_PUB__") |
+  for (@currency <- currencyCh; @params <- paramsCh;
+       @paramsHash <- paramsHashCh; @sponsorHex <- sponsorCh) {
+
+  contract RiskParameters(@"params", ret2) = {
+    for (@s <<- paramsState) { ret2!((true, s.get("params"))) }
+  } |
+
+  contract RiskParameters(@"info", ret2) = {
+    for (@s <<- paramsState) {
+      ret2!((true, {"params": s.get("params"), "paramsHash": paramsHash,
+                    "currentHash": s.get("hash"), "genesis": params,
+                    "rev": s.get("rev")}))
+    }
+  } |
+
+  contract RiskParameters(@"scheduleParams", @newParams, @nonce, @sigs, ret2) = {
+    new boundsCapCh, bzCh2, pvCh2, codecCh, argsCh, govCh, sCh in {
+      paramsComponent!("component:bounds", *boundsCapCh) |
+      for (Bounds <- boundsCapCh) {
+        Bounds!("checkIssuer", newParams, *bzCh2) |
+        for (@bz <- bzCh2) {
+          match bz {
+            (true, Nil) => {
+              paramsValues!(currency, newParams, *pvCh2) |
+              for (@values <- pvCh2) {
+                paramsComponent!("component:codec", *codecCh) |
+                for (Codec <- codecCh) {
+                  Codec!("canonical", "rcash:stablecoin-params:v2", values, *argsCh) |
+                  for (@argsHash <- argsCh) {
+                    paramsComponent!("component:governor", *govCh) |
+                    for (Governor <- govCh) {
+                      Governor!("schedule", "stablecoin:" ++ currency, nonce,
+                                "setRiskParams", argsHash, newParams, sigs, *sCh) |
+                      for (@gv <- sCh) {
+                        match gv {
+                          (true, readyAt) => { ret2!((true, readyAt, argsHash)) }
+                          _ => { ret2!(gv) }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            _ => { ret2!(bz) }
+          }
+        }
+      }
+    }
+  } |
+
+  contract RiskParameters(@"applyParams", @nonce, ret2) = {
+    new govCh, eCh, pvCh2, codecCh, canCh, hashCh, boundsCh, bzCh2 in {
+      paramsComponent!("component:governor", *govCh) |
+      for (Governor <- govCh) {
+        Governor!("execute", "stablecoin:" ++ currency, nonce, *eCh) |
+        for (@ex <- eCh) {
+          match ex {
+            (true, action, argsHash, args) => {
+              match action {
+              "setRiskParams" => {
+                paramsValues!(currency, args, *pvCh2) |
+                for (@values <- pvCh2) {
+                  paramsComponent!("component:codec", *codecCh) |
+                  for (Codec <- codecCh) {
+                    Codec!("canonical", "rcash:stablecoin-params:v2", values, *canCh) |
+                    for (@canonical <- canCh) {
+                      if (canonical != argsHash) { ret2!((false, "params hash")) }
+                      else {
+                        paramsComponent!("component:bounds", *boundsCh) |
+                        for (Bounds <- boundsCh) {
+                          Bounds!("checkIssuer", args, *bzCh2) |
+                          for (@bz <- bzCh2) {
+                            match bz {
+                              (true, Nil) => {
+                                Codec!("hash", "rcash:stablecoin-params:v2", values, *hashCh) |
+                                for (@h <- hashCh) {
+                                  for (@s <- paramsState) {
+                                    paramsState!(s.set("params", args).set("hash", h)
+                                      .set("rev", s.get("rev") + 1)) |
+                                    ret2!((true, {"params": args, "currentHash": h}))
+                                  }
+                                }
+                              }
+                              _ => { ret2!(bz) }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+              _ => { ret2!((false, "action")) }
+            }
+            }
+            _ => { ret2!(ex) }
+          }
+        }
+      }
+    }
+  } |
+
+  contract RiskParameters(@"attest", ret2) = {
+    ret2!((true, {
+      "currency": currency,
+      "paramsHash": paramsHash,
+      "sponsor": sponsorHex,
+      "kind": "params"
+    }))
+  } |
+
+  paramsComponent!("component:bounds", *checkCh) |
+  for (Bounds <- checkCh) {
+    Bounds!("checkIssuer", params, *bzCh) |
+    for (@bz <- bzCh) {
+      match bz {
+        (true, Nil) => {
+          paramsValues!(currency, params, *pvCh) |
+          for (@values <- pvCh) {
+            paramsComponent!("component:codec", *hCh) |
+            for (Codec <- hCh) {
+              new hsCh in {
+                Codec!("hash", "rcash:stablecoin-params:v2", values, *hsCh) |
+                for (@h <- hsCh) {
+                  if (h != paramsHash.hexToBytes()) {
+                    deployId!((false, "params hash"))
+                  } else {
+                    paramsState!({"params": params, "hash": paramsHash, "rev": 0}) |
+                    rs!(bundle+{*RiskParameters}, *uParams) |
+                    for (@paramsUri <- uParams) {
+                      RiskParameters!("attest", *attCh) |
+                      for (@att <- attCh) {
+                        deployId!([paramsUri, att])
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        _ => { deployId!(bz) }
+      }
+    }
+  }
+  }
+}

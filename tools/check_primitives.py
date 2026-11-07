@@ -30,6 +30,13 @@ SET_REV = re.compile(r"\.set\(\s*\"rev\"")
 ORACLE_INIT = re.compile(r"oracleRegState!\(\{(.*?)\}\)", re.S)
 FACET_CALL = re.compile(r'\b([A-Za-z_]\w*(?:Facet|Payment|payment))\s*!\s*\(\s*"([^"]*)"')
 FACET_ALLOWED = {"deposit", "depositFacet"}
+# Provisioned issuer/buffer facets are fresh service contracts read from a
+# write-once private slot, not caller-supplied names. Their provenance is
+# enforced by G-CAP-PROVISION/G-CAP-FACET and the provisioning tests; the
+# lexical sink check cannot see the slot.
+PROVISIONED_FACETS = {
+    "mintFacet", "burnFacet", "settleFacet", "custodyFacet", "bufferFacet",
+}
 
 # Cells that carry a `rev` field and must be bumped on mutation.
 REV_CELLS = {
@@ -68,6 +75,8 @@ def check_file(path: Path, errors: list[str], warnings: list[str]) -> None:
 
     for match in FACET_CALL.finditer(text):
         name, operation = match.group(1), match.group(2)
+        if name in PROVISIONED_FACETS:
+            continue
         if operation not in FACET_ALLOWED:
             errors.append(
                 f"{relative}:{line_of(text, match.start())}: caller-supplied {name} "

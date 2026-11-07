@@ -83,7 +83,7 @@ components:
     source: {file: contracts/src/deploy/v3/12_oracle_registry.rho, line: 172}
     guards:
     - {id: sponsor_key, expr: caller pubkey = sponsorHex, refusal: {reason: bad sponsor, phase: pre}}
-    - {id: sponsor_sig, expr: 'Verifier.sigOk(H(feed-bind), sig, sponsor)', refusal: {reason: bad sponsor signature, phase: pre}}
+    - {id: sponsor_sig, expr: 'Verifier.sigOk(H(Codec.canonical(rcash:feed-bind:v3, [code, feedId, feedUri, policyHash, sponsor])), sig, sponsor)', refusal: {reason: bad sponsor signature, phase: pre}}
     - {id: attestation, expr: 'feed attestation matches code, feedId, sponsor, policy', refusal: {reason: feed attestation, phase: pre}}
     - {id: reporters, expr: 3 distinct reporter keys, refusal: {reason: reporters, phase: pre}}
     - {id: allowlist, expr: all reporters allowlisted, refusal: {reason: reporter not allowlisted, phase: pre}}
@@ -119,7 +119,7 @@ components:
     transition: oracle.OracleRegistry.feedEntry
     lean: Rholphin.Model.Oracle.oracleRegistry_feedEntry
     kind: read
-    source: {file: contracts/src/deploy/v3/12_oracle_registry.rho, line: 224}
+    source: {file: contracts/src/deploy/v3/12_oracle_registry.rho, line: 239}
     guards:
     - {id: exists, expr: 'feeds[code] != Nil', refusal: {reason: no feed, phase: pre}}
     effects:
@@ -138,7 +138,7 @@ components:
     transition: oracle.OracleRegistry.info
     lean: Rholphin.Model.Oracle.oracleRegistry_info
     kind: read
-    source: {file: contracts/src/deploy/v3/12_oracle_registry.rho, line: 233}
+    source: {file: contracts/src/deploy/v3/12_oracle_registry.rho, line: 248}
     guards: []
     effects:
     - {target: reply, formula: '(true, {feeds, allowlist})'}
@@ -155,7 +155,7 @@ components:
     transition: oracle.OracleRegistry.admin
     lean: Rholphin.Model.Oracle.oracleRegistry_admin
     kind: mutate
-    source: {file: contracts/src/deploy/v3/12_oracle_registry.rho, line: 239}
+    source: {file: contracts/src/deploy/v3/12_oracle_registry.rho, line: 254}
     guards:
     - {id: authorize, expr: 'Governor.authorize(oracle-registry, nonce, action, args)', refusal: {reason: below threshold, phase: pre}}
     - {id: duplicate, expr: reporter not already allowlisted, refusal: {reason: duplicate, phase: pre}}
@@ -267,14 +267,14 @@ components:
     transition: oracle.OracleFeed.submit
     lean: Rholphin.Model.Oracle.oracleFeed_submit
     kind: mutate
-    source: {file: contracts/src/deploy/v3/31_feed.rho, line: 181}
+    source: {file: contracts/src/deploy/v3/31_feed.rho, line: 190}
     guards:
     - {id: unpaused, expr: not paused, refusal: {reason: paused, phase: pre}}
     - {id: index, expr: 0 <= index <= 2, refusal: {reason: bad index, phase: pre}}
     - {id: reporter, expr: 'pubKey = reporters[index]', refusal: {reason: not reporter, phase: pre}}
     - {id: not_future, expr: height <= now, refusal: {reason: future price, phase: pre}}
     - {id: fresh_submit, expr: now - height <= 1000, refusal: {reason: stale submit, phase: pre}}
-    - {id: signature, expr: Verifier.sigOk(submit payload), refusal: {reason: bad signature, phase: pre}}
+    - {id: signature, expr: 'Verifier.sigOk(H(Codec.canonical(rcash:oracle-submit:v3, [feedId, currency, index, price, height])), sig, reporter)', refusal: {reason: bad signature, phase: pre}}
     - {id: recheck, expr: not paused and rev unchanged, refusal: {reason: changed, phase: pre}}
     - {id: monotonic, expr: height > priorHeight, refusal: {reason: height not monotonic, phase: pre}}
     effects:
@@ -309,7 +309,7 @@ components:
     transition: oracle.OracleFeed.get
     lean: Rholphin.Model.Oracle.oracleFeed_get
     kind: read
-    source: {file: contracts/src/deploy/v3/31_feed.rho, line: 250}
+    source: {file: contracts/src/deploy/v3/31_feed.rho, line: 259}
     guards: []
     effects:
     - {target: reply, formula: '(true, {fresh, price, age, reason})'}
@@ -328,7 +328,7 @@ components:
     transition: oracle.OracleFeed.activate
     lean: Rholphin.Model.Oracle.oracleFeed_activate
     kind: mutate
-    source: {file: contracts/src/deploy/v3/31_feed.rho, line: 271}
+    source: {file: contracts/src/deploy/v3/31_feed.rho, line: 280}
     guards:
     - {id: inactive, expr: not active, refusal: {reason: already active, phase: pre}}
     - {id: unpaused, expr: not paused, refusal: {reason: paused, phase: pre}}
@@ -367,7 +367,7 @@ components:
     transition: oracle.OracleFeed.info
     lean: Rholphin.Model.Oracle.oracleFeed_info
     kind: read
-    source: {file: contracts/src/deploy/v3/31_feed.rho, line: 322}
+    source: {file: contracts/src/deploy/v3/31_feed.rho, line: 331}
     guards: []
     effects:
     - {target: reply, formula: '(true, {feedId, currency, reporters, sponsor, quorum, policyHash, active, paused, rev})'}
@@ -384,7 +384,7 @@ components:
     transition: oracle.OracleFeed.admin
     lean: Rholphin.Model.Oracle.oracleFeed_admin
     kind: mutate
-    source: {file: contracts/src/deploy/v3/31_feed.rho, line: 346}
+    source: {file: contracts/src/deploy/v3/31_feed.rho, line: 355}
     guards:
     - {id: authorize, expr: 'Governor.authorize(oracle:currency, nonce, action, arg)', refusal: {reason: below threshold, phase: pre}}
     effects:

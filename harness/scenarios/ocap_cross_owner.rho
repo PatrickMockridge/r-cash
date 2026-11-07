@@ -1,0 +1,26 @@
+// RT-05: use a foreign deployerId with a victim's account. The owner gate must
+// refuse before any currency or vault lookup, so the attacker never reaches the
+// victim's proof or vault.
+// Placeholders: __ROOT_URI__, __VICTIM_PUB__, __CURRENCY__.
+// Expected reply: (false, "not owner").
+new
+  rl(`rho:registry:lookup`),
+  rootCh, afCh, ac, oCh, r,
+  deployId(`rho:rchain:deployId`),
+  deployerId(`rho:rchain:deployerId`)
+in {
+  rl!(`__ROOT_URI__`, *rootCh) |
+  for (Root <- rootCh) {
+    Root!("resolve", "component:account-factory", 1, *afCh) |
+    for (@(true, afUri, _) <- afCh) {
+      rl!(afUri, *ac) |
+      for (AccountFactory <- ac) {
+        AccountFactory!("getOrCreate", "__VICTIM_PUB__".hexToBytes(), *oCh) |
+        for (@(true, victim, _ownerId) <- oCh) {
+          @victim!("vaultOpen", *deployerId, "__CURRENCY__", *r) |
+          for (@x <- r) { deployId!(x) }
+        }
+      }
+    }
+  }
+}

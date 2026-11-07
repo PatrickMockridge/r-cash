@@ -12,13 +12,20 @@ use crate::CoreError;
 pub const TERMS_SCHEMA: &str = "rcash:market-terms:v4";
 
 /// The one canonical encoding shared with Rholang's `Codec` and Python:
-/// `schema|len(v):v|…`, where `len` is the UTF-8 byte length.
+/// `schema|len(v):v|…`, where `len` is the number of Unicode scalar values
+/// (Rholang `String.length()`), not the UTF-8 byte length.
+///
+/// Mirrors `Codec@"canonical"` in `contracts/src/deploy/v3/01_kernel.rho`:
+/// an empty value list encodes as the bare schema.
 pub fn encode(schema: &str, values: &[String]) -> String {
-    let encoded: Vec<String> = values
-        .iter()
-        .map(|v| format!("{}:{}", v.len(), v))
-        .collect();
-    format!("{schema}|{}", encoded.join("|"))
+    let mut out = String::from(schema);
+    for value in values {
+        out.push('|');
+        out.push_str(&value.chars().count().to_string());
+        out.push(':');
+        out.push_str(value);
+    }
+    out
 }
 /// The zone-params schema string.
 /// The oracle-policy schema string.
@@ -328,10 +335,18 @@ impl MarketTerms {
     }
 
     /// The sponsor consent payload for this market and terms hash.
+    ///
+    /// Canonical `rcash:market-create:v1` preimage over
+    /// `[marketId, termsHash, sponsorHex]`, matching `MarketTerms@"put"` and
+    /// `MarketFactory@"createMarket"` in `contracts/src/deploy/v3/50_market.rho`.
     pub fn sponsor_payload(&self, terms_hash: &str) -> String {
-        format!(
-            "{SPONSOR_SCHEMA}|{}|{}|{}",
-            self.market_id, terms_hash, self.sponsor_pub_key
+        encode(
+            SPONSOR_SCHEMA,
+            &[
+                self.market_id.clone(),
+                terms_hash.to_string(),
+                self.sponsor_pub_key.clone(),
+            ],
         )
     }
 
@@ -433,8 +448,33 @@ mod tests {
     fn sponsor_payload_binds_the_terms_hash() {
         assert_eq!(
             terms().sponsor_payload("abc"),
-            "rcash:market-create:v1|KES/NGN:v1|abc|04aa"
+            "rcash:market-create:v1|10:KES/NGN:v1|3:abc|4:04aa"
         );
+        // Fixed vector shared with the Python self-check and Rholang Codec.
+        assert_eq!(
+            terms().sponsor_payload(
+                "8474f26230f7eb24c64a25cf9d1d6f53c76dce1605de1e14a939eacb756ad6e2"
+            ),
+            "rcash:market-create:v1|10:KES/NGN:v1|\
+             64:8474f26230f7eb24c64a25cf9d1d6f53c76dce1605de1e14a939eacb756ad6e2|4:04aa"
+        );
+    }
+
+    #[test]
+    fn canonical_length_counts_characters_not_utf8_bytes() {
+        // "NGN-é" is 5 Unicode scalar values but 6 UTF-8 bytes. Rholang's
+        // `String.length()` counts scalars, so the prefix must be 5.
+        assert_eq!(
+            encode("rcash:test:v1", &["NGN-é".to_string()]),
+            "rcash:test:v1|5:NGN-é"
+        );
+        // An embedded separator cannot shift the field boundary.
+        assert_eq!(
+            encode("rcash:test:v1", &["a|b".to_string()]),
+            "rcash:test:v1|3:a|b"
+        );
+        // An empty value list is the bare schema, like `codecJoin`.
+        assert_eq!(encode("rcash:test:v1", &[]), "rcash:test:v1");
     }
 
     #[test]

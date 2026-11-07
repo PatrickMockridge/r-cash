@@ -1,0 +1,669 @@
+// v0.4 issuer core (T1): the ERTP issuer kit, the public read/attest bundles,
+// the per-auth cells owned by AuthLedger, the sponsor-signed FacetShop and the
+// four service facets.
+//
+// No published bundle closes over a raw auth: Stablecoin and CollateralCustody
+// expose read/attest arms only. Privileged operations are reached through the
+// facets, which are fresh names created here, delivered once by
+// FacetShop.provision and never published, returned or written to a data map.
+// Placeholders: __ROOT_URI__, __CURRENCY__, __PARAMS_HASH__, __SPONSOR_PUB__.
+new
+  Stablecoin, issuerState,
+  CollateralCustody,
+  AuthLedger, mintAuth, burnAuth, settlementAuth, custodyAuth,
+  mintAuthState, burnAuthState, settlementAuthState, custodyAuthState,
+  MintFacet, BurnFacet, SettlementFacet, CustodyFacet,
+  FacetShop, shopState, shopCfg,
+  mintCore, burnCore, settleCore,
+  custodyDepositCore, custodyWithdrawCore,
+  joinKinds, kindsValid, deliverKinds, deliverOne,
+  componentOf,
+  rl(`rho:registry:lookup`),
+  rs(`rho:registry:insertArbitrary`),
+  bd(`rho:block:data`),
+  deployerId(`rho:rchain:deployerId`),
+  deployId(`rho:rchain:deployId`),
+  ertpCh, kitCh, revIssuerCh, burnPurseCh, revPurseCh,
+  uSC, uCustody, uAuth, uShop,
+  attCh, cfgCh, canCh, digestCh, okCh, kvCh, bdCh, nCh, ksCh,
+  rCh, gCh, gc
+in {
+
+  // One Root resolver for every registry-resolved component this term uses.
+  contract componentOf(@key, ret2) = {
+    new rCh2, uCh in {
+      rl!(`__ROOT_URI__`, *rCh2) |
+      for (Root <- rCh2) {
+        Root!("resolve", key, 1, *uCh) |
+        for (@(true, compUri, v) <- uCh) {
+          new cc in {
+            rl!(compUri, *cc) |
+            for (Component <- cc) { ret2!(*Component) }
+          }
+        }
+      }
+    }
+  } |
+
+  // Comma-joined kind list, matching the Python canonical payload.
+  contract joinKinds(@kinds, @i, @acc, ret2) = {
+    if (i >= kinds.length()) { ret2!(acc) }
+    else {
+      match kinds.nth(i) {
+        k => {
+          match acc {
+            "" => { joinKinds!(kinds, i + 1, k, *ret2) }
+            _ => { joinKinds!(kinds, i + 1, acc ++ "," ++ k, *ret2) }
+          }
+        }
+      }
+    }
+  } |
+
+  contract kindsValid(@kinds, @i, ret2) = {
+    if (i >= kinds.length()) { ret2!(true) }
+    else {
+      match kinds.nth(i) {
+        "mint" => { kindsValid!(kinds, i + 1, *ret2) }
+        "burn" => { kindsValid!(kinds, i + 1, *ret2) }
+        "settle" => { kindsValid!(kinds, i + 1, *ret2) }
+        "custody" => { kindsValid!(kinds, i + 1, *ret2) }
+        _ => { ret2!(false) }
+      }
+    }
+  } |
+
+  rl!(`rho:rchain:ertp`, *ertpCh) |
+  for (@(_, ERTP) <- ertpCh) {
+    @ERTP!("makeIssuerKit", *kitCh) |
+    @ERTP!("getRevIssuer", *revIssuerCh) |
+    for (@(brand, mint, issuer) <- kitCh; @(revBrand, revIssuer) <- revIssuerCh) {
+      @issuer!("makeEmptyPurse", *burnPurseCh) |
+      @revIssuer!("makeEmptyPurse", *revPurseCh) |
+      for (@(true, burnPurse) <- burnPurseCh; @(true, revPurse) <- revPurseCh) {
+
+        issuerState!({"totalPrincipal": 0, "maxSupply": 2000000000000000}) |
+        shopState!({"nonces": {}, "rev": 0}) |
+        mintAuthState!(*mintAuth) |
+        burnAuthState!(*burnAuth) |
+        settlementAuthState!(*settlementAuth) |
+        custodyAuthState!(*custodyAuth) |
+
+        contract Stablecoin(@"brand", ret2) = {
+          ret2!((true, brand))
+        } |
+
+        contract Stablecoin(@"issuer", ret2) = {
+          ret2!((true, issuer))
+        } |
+
+        contract Stablecoin(@"supply", ret2) = {
+          for (@s <<- issuerState) { ret2!((true, s.get("totalPrincipal"))) }
+        } |
+
+        contract Stablecoin(@"amountOf", payment, ret2) = {
+          @issuer!("getAmountOf", *payment, *ret2)
+        } |
+
+        contract Stablecoin(@"info", ret2) = {
+          for (@s <<- issuerState) {
+            ret2!((true, {
+              "currency": "__CURRENCY__",
+              "paramsHash": "__PARAMS_HASH__",
+              "sponsor": "__SPONSOR_PUB__",
+              "maxSupply": s.get("maxSupply"),
+              "totalPrincipal": s.get("totalPrincipal")
+            }))
+          }
+        } |
+
+        contract Stablecoin(@"attest", ret2) = {
+          ret2!((true, {
+            "currency": "__CURRENCY__",
+            "paramsHash": "__PARAMS_HASH__",
+            "sponsor": "__SPONSOR_PUB__",
+            "kind": "stablecoin"
+          }))
+        } |
+
+        contract CollateralCustody(@"balance", ret2) = {
+          @revPurse!("getCurrentAmount", *ret2)
+        } |
+
+        contract CollateralCustody(@"attest", ret2) = {
+          ret2!((true, {
+            "currency": "__CURRENCY__",
+            "paramsHash": "__PARAMS_HASH__",
+            "sponsor": "__SPONSOR_PUB__",
+            "kind": "custody"
+          }))
+        } |
+
+        // A presented auth is accepted only if it is the value in the live
+        // cell. Rotation replaces the cell, so the old value is refused.
+        contract AuthLedger(@"check", @kind, @auth, ret2) = {
+          match kind {
+            "mint" => {
+              for (cur <<- mintAuthState) {
+                if (auth == *cur) { ret2!((true, Nil)) }
+                else { ret2!((false, "bad auth")) }
+              }
+            }
+            "burn" => {
+              for (cur <<- burnAuthState) {
+                if (auth == *cur) { ret2!((true, Nil)) }
+                else { ret2!((false, "bad auth")) }
+              }
+            }
+            "settle" => {
+              for (cur <<- settlementAuthState) {
+                if (auth == *cur) { ret2!((true, Nil)) }
+                else { ret2!((false, "bad auth")) }
+              }
+            }
+            "custody" => {
+              for (cur <<- custodyAuthState) {
+                if (auth == *cur) { ret2!((true, Nil)) }
+                else { ret2!((false, "bad auth")) }
+              }
+            }
+            _ => { ret2!((false, "kind")) }
+          }
+        } |
+
+        // Root-authorized rotation: the admin threshold gate is the published
+        // Governor authorize arm (the cross-term admin guard); the arm takes
+        // and posts the cell so the old value is refused.
+        // Governor-authorized rotation: the published authorize choke point
+        // verifies the admin threshold over auth:<currency>:<kind>. The ledger
+        // creates the next auth internally, so no caller-supplied name can
+        // leak, then takes and posts the cell.
+        contract AuthLedger(@"rotate", @kind, @nonce, @sigs, ret2) = {
+          new gCh2, vCh in {
+            match kind {
+              "mint" => {
+                componentOf!("component:governor", *gCh2) |
+                for (Governor <- gCh2) {
+                  Governor!("authorize", "auth:" ++ "__CURRENCY__" ++ ":mint",
+                            nonce, "rotate", kind, sigs, *vCh) |
+                  for (@v <- vCh) {
+                    match v {
+                      (true, Nil) => {
+                        new nextAuth in {
+                          for (@old <- mintAuthState) {
+                            mintAuthState!(*nextAuth) | ret2!((true, Nil))
+                          }
+                        }
+                      }
+                      _ => { ret2!(v) }
+                    }
+                  }
+                }
+              }
+              "burn" => {
+                componentOf!("component:governor", *gCh2) |
+                for (Governor <- gCh2) {
+                  Governor!("authorize", "auth:" ++ "__CURRENCY__" ++ ":burn",
+                            nonce, "rotate", kind, sigs, *vCh) |
+                  for (@v <- vCh) {
+                    match v {
+                      (true, Nil) => {
+                        new nextAuth in {
+                          for (@old <- burnAuthState) {
+                            burnAuthState!(*nextAuth) | ret2!((true, Nil))
+                          }
+                        }
+                      }
+                      _ => { ret2!(v) }
+                    }
+                  }
+                }
+              }
+              "settle" => {
+                componentOf!("component:governor", *gCh2) |
+                for (Governor <- gCh2) {
+                  Governor!("authorize", "auth:" ++ "__CURRENCY__" ++ ":settle",
+                            nonce, "rotate", kind, sigs, *vCh) |
+                  for (@v <- vCh) {
+                    match v {
+                      (true, Nil) => {
+                        new nextAuth in {
+                          for (@old <- settlementAuthState) {
+                            settlementAuthState!(*nextAuth) | ret2!((true, Nil))
+                          }
+                        }
+                      }
+                      _ => { ret2!(v) }
+                    }
+                  }
+                }
+              }
+              "custody" => {
+                componentOf!("component:governor", *gCh2) |
+                for (Governor <- gCh2) {
+                  Governor!("authorize", "auth:" ++ "__CURRENCY__" ++ ":custody",
+                            nonce, "rotate", kind, sigs, *vCh) |
+                  for (@v <- vCh) {
+                    match v {
+                      (true, Nil) => {
+                        new nextAuth in {
+                          for (@old <- custodyAuthState) {
+                            custodyAuthState!(*nextAuth) | ret2!((true, Nil))
+                          }
+                        }
+                      }
+                      _ => { ret2!(v) }
+                    }
+                  }
+                }
+              }
+              _ => { ret2!((false, "kind")) }
+            }
+          }
+        } |
+
+        contract mintCore(@auth, @amount, ret2) = {
+          for (cur <<- mintAuthState) {
+            if (auth != *cur) { ret2!((false, "bad auth")) }
+            else {
+              if (amount <= 0) { ret2!((false, "amount")) }
+              else {
+                for (@s <- issuerState) {
+                  if (s.get("totalPrincipal") + amount > s.get("maxSupply")) {
+                    issuerState!(s) | ret2!((false, "max supply"))
+                  } else {
+                    new payCh in {
+                      @mint!("mintPayment", (brand, amount), *payCh) |
+                      for (@p <- payCh) {
+                        match p {
+                          (true, payment) => {
+                            issuerState!(s.set("totalPrincipal",
+                              s.get("totalPrincipal") + amount)) |
+                            ret2!((true, payment, s.get("totalPrincipal") + amount))
+                          }
+                          _ => { ret2!(1 / 0) }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        } |
+
+        contract burnCore(@auth, payment, @maxAmount, ret2) = {
+          for (cur <<- burnAuthState) {
+            if (auth != *cur) { ret2!((false, "bad auth")) }
+            else {
+              new amtCh in {
+                @issuer!("getAmountOf", *payment, *amtCh) |
+                for (@a <- amtCh) {
+                  match a {
+                    (true, amount) => {
+                      if (amount <= 0 || amount > maxAmount) {
+                        ret2!((false, "amount"))
+                      } else {
+                        for (@s <- issuerState) {
+                          if (s.get("totalPrincipal") < amount) {
+                            issuerState!(s) | ret2!((false, "supply"))
+                          } else {
+                            new depCh in {
+                              @burnPurse!("deposit", *payment, *depCh) |
+                              for (@d <- depCh) {
+                                match d {
+                                  (true, _) => {
+                                    issuerState!(s.set("totalPrincipal",
+                                      s.get("totalPrincipal") - amount)) |
+                                    ret2!((true, amount, s.get("totalPrincipal") - amount))
+                                  }
+                                  _ => { ret2!(1 / 0) }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                    _ => { ret2!((false, "not a stablecoin payment")) }
+                  }
+                }
+              }
+            }
+          }
+        } |
+
+        contract settleCore(@auth, payment, @principal, @interest, ret2) = {
+          for (cur <<- settlementAuthState) {
+            if (auth != *cur) { ret2!((false, "bad auth", *payment)) }
+            else {
+              if (principal < 0 || interest < 0) {
+                ret2!((false, "amount", *payment))
+              } else {
+                new amtCh in {
+                  @issuer!("getAmountOf", *payment, *amtCh) |
+                  for (@a <- amtCh) {
+                    match a {
+                      (true, total) => {
+                        if (total != principal + interest) {
+                          ret2!((false, "amount", *payment))
+                        } else {
+                          if (principal == 0) {
+                            // The caller deposits the interest; this term owns
+                            // no buffer and holds no buffer authority.
+                            ret2!((true, 0, *payment))
+                          } else {
+                            if (interest == 0) {
+                              new bCh0 in {
+                                for (burnCur <<- burnAuthState) {
+                                  burnCore!(*burnCur, *payment, principal, *bCh0)
+                                } |
+                                for (@b <- bCh0) {
+                                  match b {
+                                    (true, _, _) => {
+                                      ret2!((true, principal, Nil))
+                                    }
+                                    (false, why) => {
+                                      ret2!((false, why, *payment))
+                                    }
+                                    _ => { ret2!(1 / 0) }
+                                  }
+                                }
+                              }
+                            } else {
+                              new pCh, dCh, wpCh, wiCh in {
+                                @issuer!("makeEmptyPurse", *pCh) |
+                                for (@(true, purse) <- pCh) {
+                                  @purse!("deposit", *payment, *dCh) |
+                                  for (@(true, _) <- dCh) {
+                                    @purse!("withdraw", (brand, principal), *wpCh) |
+                                    for (@(true, principalPay) <- wpCh) {
+                                      @purse!("withdraw", (brand, interest), *wiCh) |
+                                      for (@(true, interestPay) <- wiCh) {
+                                        new bCh in {
+                                          for (burnCur <<- burnAuthState) {
+                                            burnCore!(*burnCur, principalPay,
+                                                      principal, *bCh)
+                                          } |
+                                          for (@b <- bCh) {
+                                            match b {
+                                              (true, _, _) => {
+                                                ret2!((true, principal,
+                                                       interestPay))
+                                              }
+                                              (false, why) => {
+                                                ret2!((false, why,
+                                                       principalPay))
+                                              }
+                                              _ => { ret2!(1 / 0) }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                      _ => { ret2!((false, "asset", *payment)) }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        } |
+
+        contract custodyDepositCore(@auth, payment, ret2) = {
+          for (cur <<- custodyAuthState) {
+            if (auth != *cur) { ret2!((false, "bad auth")) }
+            else {
+              new amtCh, depCh in {
+                @revIssuer!("getAmountOf", *payment, *amtCh) |
+                for (@a <- amtCh) {
+                  match a {
+                    (true, amount) => {
+                      @revPurse!("deposit", *payment, *depCh) |
+                      for (@d <- depCh) {
+                        match d {
+                          (true, _) => { ret2!((true, amount)) }
+                          _ => { ret2!(1 / 0) }
+                        }
+                      }
+                    }
+                    _ => { ret2!((false, "not a REV payment")) }
+                  }
+                }
+              }
+            }
+          }
+        } |
+
+        contract custodyWithdrawCore(@auth, @amount, ret2) = {
+          for (cur <<- custodyAuthState) {
+            if (auth != *cur) { ret2!((false, "bad auth")) }
+            else {
+              if (amount <= 0) { ret2!((false, "amount")) }
+              else { @revPurse!("withdraw", (revBrand, amount), *ret2) }
+            }
+          }
+        } |
+
+        contract MintFacet(@"mint", @amount, ret2) = {
+          for (auth <<- mintAuthState) { mintCore!(*auth, amount, *ret2) }
+        } |
+
+        contract BurnFacet(@"burn", payment, @maxAmount, ret2) = {
+          for (auth <<- burnAuthState) {
+            burnCore!(*auth, *payment, maxAmount, *ret2)
+          }
+        } |
+
+        contract SettlementFacet(@"settle", payment, @principal, @interest, ret2) = {
+          for (auth <<- settlementAuthState) {
+            settleCore!(*auth, *payment, principal, interest, *ret2)
+          }
+        } |
+
+        contract CustodyFacet(@"deposit", payment, ret2) = {
+          for (auth <<- custodyAuthState) {
+            custodyDepositCore!(*auth, *payment, *ret2)
+          }
+        } |
+
+        contract CustodyFacet(@"withdraw", @amount, ret2) = {
+          for (auth <<- custodyAuthState) {
+            custodyWithdrawCore!(*auth, amount, *ret2)
+          }
+        } |
+
+        contract FacetShop(@"isFacet", @kind, facet, ret2) = {
+          match kind {
+            "mint" => {
+              if (*facet == *MintFacet) { ret2!(true) }
+              else { ret2!(false) }
+            }
+            "burn" => {
+              if (*facet == *BurnFacet) { ret2!(true) }
+              else { ret2!(false) }
+            }
+            "settle" => {
+              if (*facet == *SettlementFacet) { ret2!(true) }
+              else { ret2!(false) }
+            }
+            "custody" => {
+              if (*facet == *CustodyFacet) { ret2!(true) }
+              else { ret2!(false) }
+            }
+            _ => { ret2!(false) }
+          }
+        } |
+
+        contract deliverOne(@consumerUri, @kind, facet, @nonce, @deadline, ret2) = {
+          new cCh, rCh2 in {
+            rl!(consumerUri, *cCh) |
+            for (Consumer <- cCh) {
+              Consumer!("acceptFacet", kind, *facet, nonce, deadline, *rCh2) |
+              for (@r <- rCh2) {
+                match r {
+                  (true, _) => { ret2!((true, Nil)) }
+                  _ => { ret2!(1 / 0) }
+                }
+              }
+            }
+          }
+        } |
+
+        contract deliverKinds(@kinds, @i, @consumerUri, @nonce, @deadline, ret2) = {
+          if (i >= kinds.length()) { ret2!((true, Nil)) }
+          else {
+            match kinds.nth(i) {
+              "mint" => {
+                new rCh2 in {
+                  deliverOne!(consumerUri, "mint", *MintFacet, nonce, deadline, *rCh2) |
+                  for (@r <- rCh2) {
+                    match r {
+                      (true, Nil) => {
+                        deliverKinds!(kinds, i + 1, consumerUri, nonce, deadline, *ret2)
+                      }
+                      _ => { ret2!(1 / 0) }
+                    }
+                  }
+                }
+              }
+              "burn" => {
+                new rCh2 in {
+                  deliverOne!(consumerUri, "burn", *BurnFacet, nonce, deadline, *rCh2) |
+                  for (@r <- rCh2) {
+                    match r {
+                      (true, Nil) => {
+                        deliverKinds!(kinds, i + 1, consumerUri, nonce, deadline, *ret2)
+                      }
+                      _ => { ret2!(1 / 0) }
+                    }
+                  }
+                }
+              }
+              "settle" => {
+                new rCh2 in {
+                  deliverOne!(consumerUri, "settle", *SettlementFacet, nonce,
+                              deadline, *rCh2) |
+                  for (@r <- rCh2) {
+                    match r {
+                      (true, Nil) => {
+                        deliverKinds!(kinds, i + 1, consumerUri, nonce, deadline, *ret2)
+                      }
+                      _ => { ret2!(1 / 0) }
+                    }
+                  }
+                }
+              }
+              "custody" => {
+                new rCh2 in {
+                  deliverOne!(consumerUri, "custody", *CustodyFacet, nonce,
+                              deadline, *rCh2) |
+                  for (@r <- rCh2) {
+                    match r {
+                      (true, Nil) => {
+                        deliverKinds!(kinds, i + 1, consumerUri, nonce, deadline, *ret2)
+                      }
+                      _ => { ret2!(1 / 0) }
+                    }
+                  }
+                }
+              }
+              _ => { ret2!(1 / 0) }
+            }
+          }
+        } |
+
+        // P5 reserve/confirm inside one deploy (P7 intra-deploy grant). The
+        // sponsor signature and the kind set are checked before any state
+        // change; the nonce is consumed before the consumer call; a later
+        // refusal calls fail() so the nonce and every slot roll back.
+        contract FacetShop(@"provision", @consumerUri, @consumerTag, @kinds,
+                            @nonce, @deadline, @sponsorHex, @sig, ret2) = {
+          new cfgCh2, kbCh, canCh2, dgCh, okCh2, bdCh2, bCh2, rCh2 in {
+            for (@cfg <<- shopCfg) {
+              if (sponsorHex != cfg.get("sponsor")) { ret2!((false, "sponsor")) }
+              else {
+                joinKinds!(kinds, 0, "", *ksCh) |
+                for (@kindsText <- ksCh) {
+                  componentOf!("component:codec", *canCh2) |
+                  for (Codec <- canCh2) {
+                    Codec!("hash", "rcash:provision:v1",
+                           [cfg.get("uri"), consumerUri, consumerTag, kindsText,
+                            nonce.toString(), deadline.toString(), sponsorHex],
+                           *dgCh) |
+                    for (@digest <- dgCh) {
+                      componentOf!("component:verifier", *okCh2) |
+                      for (Verifier <- okCh2) {
+                        Verifier!("sigOk", digest, sig, sponsorHex.hexToBytes(), *kbCh) |
+                        for (@ok <- kbCh) {
+                          if (ok == false) { ret2!((false, "bad sponsor signature")) }
+                          else {
+                            kindsValid!(kinds, 0, *canCh2) |
+                            for (@kv <- canCh2) {
+                              if (kv == false) { ret2!((false, "kind")) }
+                              else {
+                                bd!(*bdCh2) |
+                                for (@h, @s, @t <- bdCh2) {
+                                  if (h > deadline) { ret2!((false, "expired")) }
+                                  else {
+                                    for (@st <- shopState) {
+                                      match st.get("nonces").get(nonce.toString()) {
+                                        Nil => {
+                                          shopState!(st.set("nonces",
+                                            st.get("nonces").set(nonce.toString(), true))
+                                            .set("rev", st.get("rev") + 1)) |
+                                          deliverKinds!(kinds, 0, consumerUri, nonce,
+                                                        deadline, *bCh2) |
+                                          for (@b <- bCh2) {
+                                            match b {
+                                              (true, Nil) => {
+                                                ret2!((true, "provisioned"))
+                                              }
+                                              _ => { ret2!(1 / 0) }
+                                            }
+                                          }
+                                        }
+                                        _ => {
+                                          shopState!(st) |
+                                          ret2!((false, "replay"))
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        } |
+
+        rs!(bundle+{*Stablecoin}, *uSC) |
+        rs!(bundle+{*CollateralCustody}, *uCustody) |
+        rs!(bundle+{*AuthLedger}, *uAuth) |
+        rs!(bundle+{*FacetShop}, *uShop) |
+        for (@scUri <- uSC; @custodyUri <- uCustody;
+             @authUri <- uAuth; @shopUri <- uShop) {
+          shopCfg!({"uri": shopUri.toString(), "sponsor": "__SPONSOR_PUB__"}) |
+          Stablecoin!("attest", *attCh) |
+          for (@att <- attCh) {
+            deployId!([scUri, custodyUri, authUri, shopUri, att])
+          }
+        }
+      }
+    }
+  }
+}

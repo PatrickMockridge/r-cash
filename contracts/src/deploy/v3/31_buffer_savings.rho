@@ -1,0 +1,649 @@
+// v0.4 surplus buffer and savings pool (T3 of the multi-term split).
+// The buffer and savings purses are created here; the buffer operator facet is
+// the only privileged mutation path and is delivered by provisioning, never
+// published. T3 consumes T1's BurnFacet through a private bare-name slot for
+// `cover`; a name read out of a map cannot be called, so the slot is a name.
+// T3 owns the buffer facet, so it publishes its own BufferFacetShop; T1 cannot
+// issue a facet that lives in this closure.
+// Placeholders: __ROOT_URI__, __STABLECOIN_URI__, __FACET_SHOP_URI__,
+//               __CURRENCY__, __PARAMS_HASH__, __SPONSOR_PUB__,
+//               __SAVINGS_SHARE_BPS__.
+new
+  SavingsPool, savingsState, savingsPurse,
+  SurplusBuffer, bufferState, bufferPurse,
+  BufferOperatorFacet, BufferAuthLedger, BufferFacetShop,
+  bufferNonceState, bufferShopUriState,
+  bufferCancelled, callerOwner, savingsNotifyCheck, vaultGovernor,
+  savingsNotifyAuthCell, bufferDepositAuthCell, bufferPayAuthCell, bufferCoverAuthCell,
+  burnSlot, bufferFacetState,
+  rl(`rho:registry:lookup`),
+  rs(`rho:registry:insertArbitrary`),
+  bd(`rho:block:data`),
+  deployerId(`rho:rchain:deployerId`),
+  deployerIdOps(`rho:rchain:deployerId:ops`),
+  revAddress(`rho:rev:address`),
+  deployId(`rho:rchain:deployId`),
+  scCh, brandCh, issuerCh, savingsPurseCh, bufferPurseCh,
+  uriSavingsCh, uriBufferCh, uriShopCh, attSavingsCh, attBufferCh
+in {
+
+  // Pinned T1 stablecoin. The issuer is a pinned callee resolved once at term
+  // creation, not a dynamic registry capability captured at arm entry.
+  rl!(`__STABLECOIN_URI__`, *scCh) |
+  for (Stablecoin <- scCh) {
+    Stablecoin!("brand", *brandCh) |
+    Stablecoin!("issuer", *issuerCh)
+  } |
+  for (@(true, brand) <- brandCh; @(true, issuer) <- issuerCh) {
+    @issuer!("makeEmptyPurse", *savingsPurseCh) |
+    @issuer!("makeEmptyPurse", *bufferPurseCh) |
+    for (@(true, savingsPurse) <- savingsPurseCh;
+         @(true, bufferPurse) <- bufferPurseCh) {
+
+  // Check the local savings-notify auth cell. The cell holds the current auth
+  // name; the caller-supplied auth is compared against it per call. A rotate
+  // that replaces the cell is picked up by the next call.
+  contract savingsNotifyCheck(@auth, ret) = {
+    for (current <- savingsNotifyAuthCell) {
+      savingsNotifyAuthCell!(*current) |
+      if (auth != *current) { ret!(false) } else { ret!(true) }
+    }
+  } |
+
+  contract callerOwner(dId, ret) = {
+    new pkCh, aCh in {
+      deployerIdOps!("pubKeyBytes", *dId, *pkCh) |
+      for (@pk <- pkCh) {
+        revAddress!("fromPublicKey", pk, *aCh) |
+        for (@addr <- aCh) { ret!(addr) }
+      }
+    }
+  } |
+
+  contract bufferCancelled(@surplus, @sin, ret) = {
+    if (surplus < sin) { ret!(surplus) } else { ret!(sin) }
+  } |
+
+  contract vaultGovernor(ret2) = {
+    new rCh, gCh in {
+      rl!(`__ROOT_URI__`, *rCh) |
+      for (Root <- rCh) {
+        Root!("resolve", "component:governor", 1, *gCh) |
+        for (@(true, govUri, v) <- gCh) {
+          new gc in {
+            rl!(govUri, *gc) |
+            for (Governor <- gc) { ret2!(*Governor) }
+          }
+        }
+      }
+    }
+  } |
+
+  contract SavingsPool(@"deposit", dId, payment, ret2) = {
+    new oCh, amtCh, dCh, shCh in {
+      callerOwner!(*dId, *oCh) |
+      for (@ownerId <- oCh) {
+        @issuer!("getAmountOf", *payment, *amtCh) |
+        for (@a <- amtCh) {
+          match a {
+            (true, amount) => {
+              if (amount <= 0) { ret2!((false, "amount", *payment)) }
+              else {
+                for (@s <- savingsState) {
+                  if (s.get("totalShares") == 0) { shCh!(amount) }
+                  else {
+                    if (s.get("totalAssets") <= 0) { shCh!(0) }
+                    else { shCh!((amount * s.get("totalShares")) / s.get("totalAssets")) }
+                  } |
+                  for (@shares <- shCh) {
+                    if (shares <= 0) {
+                      savingsState!(s) | ret2!((false, "shares", *payment))
+                    } else {
+                      @savingsPurse!("deposit", *payment, *dCh) |
+                      for (@d <- dCh) {
+                        match d {
+                          (true, _) => {
+                            new hCh in {
+                              match s.get("shares").get(ownerId) {
+                                Nil => { hCh!(0) }
+                                held => { hCh!(held) }
+                              } |
+                              for (@held <- hCh) {
+                                savingsState!(s.set("totalShares", s.get("totalShares") + shares)
+                                  .set("totalAssets", s.get("totalAssets") + amount)
+                                  .set("shares", s.get("shares").set(ownerId, held + shares))
+                                  .set("rev", s.get("rev") + 1)) |
+                                ret2!((true, shares))
+                              }
+                            }
+                          }
+                          _ => { ret2!(1 / 0) }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            _ => { ret2!((false, "asset", *payment)) }
+          }
+        }
+      }
+    }
+  } |
+
+  contract SavingsPool(@"withdraw", dId, @shares, ret2) = {
+    new oCh, amtCh, wCh in {
+      callerOwner!(*dId, *oCh) |
+      for (@ownerId <- oCh) {
+        for (@s <- savingsState) {
+          match s.get("shares").get(ownerId) {
+            Nil => { savingsState!(s) | ret2!((false, "shares")) }
+            held => {
+              if (shares <= 0 || shares > held || s.get("totalShares") <= 0
+                  || s.get("totalAssets") <= 0) {
+                savingsState!(s) | ret2!((false, "shares"))
+              } else {
+                amtCh!(((s.get("totalAssets") * shares) / s.get("totalShares")).toInt()) |
+                for (@amount <- amtCh) {
+                  @savingsPurse!("withdraw", (brand, amount), *wCh) |
+                  for (@w <- wCh) {
+                    match w {
+                      (true, payment) => {
+                        savingsState!(s.set("totalShares", s.get("totalShares") - shares)
+                          .set("totalAssets", s.get("totalAssets") - amount)
+                          .set("shares", s.get("shares").set(ownerId, held - shares))
+                          .set("rev", s.get("rev") + 1)) |
+                        ret2!((true, payment, amount))
+                      }
+                      _ => { savingsState!(s) | ret2!((false, "payment")) }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  } |
+
+  contract SavingsPool(@"notify", payment, @auth, ret2) = {
+    new okCh in {
+      savingsNotifyCheck!(auth, *okCh) |
+      for (@ok <- okCh) {
+        if (ok == false) { ret2!((false, "bad savings authority", *payment)) }
+        else {
+          new amtCh, dCh in {
+            @issuer!("getAmountOf", *payment, *amtCh) |
+            for (@a <- amtCh) {
+              match a {
+                (true, amount) => {
+                  // Refuse a zero-share pool before touching the purse: the
+                  // caller must keep the interest in the buffer.
+                  for (@s <- savingsState) {
+                    if (s.get("totalShares") <= 0) {
+                      savingsState!(s) | ret2!((false, "no shares", *payment))
+                    } else {
+                      @savingsPurse!("deposit", *payment, *dCh) |
+                      for (@d <- dCh) {
+                        match d {
+                          (true, _) => {
+                            savingsState!(s.set("totalAssets", s.get("totalAssets") + amount)
+                                           .set("rev", s.get("rev") + 1)) |
+                            ret2!((true, amount))
+                          }
+                          _ => { ret2!(1 / 0) }
+                        }
+                      }
+                    }
+                  }
+                }
+                _ => { ret2!((false, "asset", *payment)) }
+              }
+            }
+          }
+        }
+      }
+    }
+  } |
+
+  contract SavingsPool(@"info", ret2) = {
+    for (@s <<- savingsState) {
+      match s.get("totalShares") {
+        0 => {
+          ret2!((true, {"totalShares": 0, "totalAssets": s.get("totalAssets"),
+                        "shareValueE8": 0, "rev": s.get("rev")}))
+        }
+        ts => {
+          ret2!((true, {"totalShares": ts, "totalAssets": s.get("totalAssets"),
+                        "shareValueE8":
+                          (s.get("totalAssets") * 100000000 / ts).toInt(),
+                        "rev": s.get("rev")}))
+        }
+      }
+    }
+  } |
+
+  contract SavingsPool(@"position", @ownerId, ret2) = {
+    for (@s <<- savingsState) {
+      match s.get("shares").get(ownerId) {
+        Nil => { ret2!((true, 0)) }
+        held => { ret2!((true, held)) }
+      }
+    }
+  } |
+
+  contract SavingsPool(@"attest", ret2) = {
+    ret2!((true, {
+      "currency": "__CURRENCY__",
+      "paramsHash": "__PARAMS_HASH__",
+      "sponsor": "__SPONSOR_PUB__",
+      "kind": "savings"
+    }))
+  } |
+
+  // Consume the T1 burn facet delivered by the sponsor-signed provisioning
+  // protocol. The slot is written once and never returned.
+  contract SurplusBuffer(@"acceptFacet", @kind, facet, @nonce, @deadline, ret2) = {
+    if (kind != "burn") { ret2!((false, "action")) }
+    else {
+      new rlCh, shopCh, okCh in {
+        rl!(`__FACET_SHOP_URI__`, *rlCh) |
+        for (Shop <- rlCh) {
+          Shop!("isFacet", kind, *facet, *okCh) |
+          for (@ok <- okCh) {
+            if (ok == false) { ret2!((false, "verify failed")) }
+            else {
+              for (@fs <- bufferFacetState) {
+                if (fs.get("burn") == true) {
+                  bufferFacetState!(fs) | ret2!((false, "duplicate"))
+                } else {
+                  bufferFacetState!(fs.set("burn", true)) |
+                  burnSlot!(*facet) |
+                  ret2!((true, "provisioned"))
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  } |
+
+  contract SurplusBuffer(@"info", ret2) = {
+    for (@s <<- bufferState) {
+      ret2!((true, {"surplus": s.get("surplus"), "sin": s.get("sin"),
+                    "savingsShareBps": s.get("savingsShareBps"),
+                    "rev": s.get("rev")}))
+    }
+  } |
+
+  contract SurplusBuffer(@"scheduleShare", @bps, @nonce, @sigs, ret2) = {
+    if (bps < 0 || bps > 10000) { ret2!((false, "bps")) }
+    else {
+      new gCh, vCh in {
+        vaultGovernor!(*gCh) |
+        for (Governor <- gCh) {
+          Governor!("schedule", "stablecoin:" ++ "__CURRENCY__", nonce,
+                    "setSavingsShare", bps.toString(), bps, sigs, *vCh) |
+          for (@v <- vCh) {
+            match v {
+              (true, readyAt) => { ret2!((true, readyAt)) }
+              _ => { ret2!(v) }
+            }
+          }
+        }
+      }
+    }
+  } |
+
+  contract SurplusBuffer(@"applyShare", @nonce, ret2) = {
+    new gCh, eCh in {
+      vaultGovernor!(*gCh) |
+      for (Governor <- gCh) {
+        Governor!("execute", "stablecoin:" ++ "__CURRENCY__", nonce, *eCh) |
+        for (@ex <- eCh) {
+          match ex {
+            (true, action, argsHash, args) => {
+              match action {
+              "setSavingsShare" => {
+                if (args < 0 || args > 10000) { ret2!((false, "bps")) }
+                else {
+                  if (argsHash != args.toString()) { ret2!((false, "params hash")) }
+                  else {
+                    for (@s <- bufferState) {
+                      bufferState!(s.set("savingsShareBps", args)
+                        .set("rev", s.get("rev") + 1)) |
+                      ret2!((true, args))
+                    }
+                  }
+                }
+              }
+              _ => { ret2!((false, "action")) }
+            }
+            }
+            _ => { ret2!(ex) }
+          }
+        }
+      }
+    }
+  } |
+
+  contract SurplusBuffer(@"attest", ret2) = {
+    ret2!((true, {
+      "currency": "__CURRENCY__",
+      "paramsHash": "__PARAMS_HASH__",
+      "sponsor": "__SPONSOR_PUB__",
+      "kind": "buffer"
+    }))
+  } |
+
+  // The only privileged buffer mutation path. It is delivered by provisioning
+  // and never published; each arm reads the current local auth cell per call.
+  contract BufferOperatorFacet(@"deposit", payment, ret2) = {
+    for (depositAuth <- bufferDepositAuthCell) {
+      bufferDepositAuthCell!(*depositAuth) |
+      new amtCh, dCh in {
+        @issuer!("getAmountOf", *payment, *amtCh) |
+        for (@a <- amtCh) {
+          match a {
+            (true, amount) => {
+              @bufferPurse!("deposit", *payment, *dCh) |
+              for (@d <- dCh) {
+                match d {
+                  (true, _) => {
+                    for (@s <- bufferState) {
+                      bufferState!(s.set("surplus", s.get("surplus") + amount)
+                                    .set("rev", s.get("rev") + 1)) |
+                      ret2!((true, amount))
+                    }
+                  }
+                  _ => { ret2!(1 / 0) }
+                }
+              }
+            }
+            _ => { ret2!((false, "asset", *payment)) }
+          }
+        }
+      }
+    }
+  } |
+
+  contract BufferOperatorFacet(@"paySavings", @amount, ret2) = {
+    for (payAuth <- bufferPayAuthCell) {
+      bufferPayAuthCell!(*payAuth) |
+      for (@s <<- bufferState) {
+        match ((s.get("surplus") * s.get("savingsShareBps")) / 10000).toInt() {
+          move => {
+            if (move <= 0) { ret2!((true, 0, s.get("surplus"))) }
+            else {
+              new wCh, nCh, backCh in {
+                @bufferPurse!("withdraw", (brand, move), *wCh) |
+                for (@w <- wCh) {
+                  match w {
+                    (true, payment) => {
+                      for (notifyAuth <- savingsNotifyAuthCell) {
+                        savingsNotifyAuthCell!(*notifyAuth) |
+                        SavingsPool!("notify", payment, *notifyAuth, *nCh)
+                      } |
+                      for (@n <- nCh) {
+                        match n {
+                          (true, _) => {
+                            for (@s2 <- bufferState) {
+                              if (s2.get("rev") != s.get("rev")) { ret2!(1 / 0) }
+                              else {
+                                bufferState!(s2.set("surplus", s2.get("surplus") - move)
+                                              .set("rev", s2.get("rev") + 1)) |
+                                ret2!((true, move, s2.get("surplus") - move))
+                              }
+                            }
+                          }
+                          (false, "no shares", returned) => {
+                            // The pool gained no shares; put the interest
+                            // back in the buffer purse and leave surplus.
+                            @bufferPurse!("deposit", returned, *backCh) |
+                            for (@_ <- backCh) {
+                              ret2!((true, 0, s.get("surplus")))
+                            }
+                          }
+                          _ => { ret2!(1 / 0) }
+                        }
+                      }
+                    }
+                    _ => { ret2!((false, "payment")) }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  } |
+
+  contract BufferOperatorFacet(@"cover", @badDebt, ret2) = {
+    for (coverAuth <- bufferCoverAuthCell) {
+      bufferCoverAuthCell!(*coverAuth) |
+      if (badDebt < 0) { ret2!((false, "amount")) }
+      else {
+        for (@s <<- bufferState) {
+          match (s.get("sin") + badDebt) {
+            newSin => {
+              new cCh in {
+              bufferCancelled!(s.get("surplus"), newSin, *cCh) |
+              for (@cancelled <- cCh) {
+                  if (cancelled <= 0) {
+                    for (@s2 <- bufferState) {
+                      if (s2.get("rev") != s.get("rev")) { ret2!(1 / 0) }
+                      else {
+                        bufferState!(s2.set("sin", newSin).set("rev", s2.get("rev") + 1)) |
+                        ret2!((true, 0, newSin))
+                      }
+                    }
+                  } else {
+                    new wCh, bCh in {
+                      @bufferPurse!("withdraw", (brand, cancelled), *wCh) |
+                      for (@w <- wCh) {
+                        match w {
+                          (true, payment) => {
+                            {
+                              for (facet <<- burnSlot) {
+                                burnSlot!(*facet) |
+                                facet!("burn", payment, cancelled, *bCh)
+                              }
+                            } |
+                            for (@b <- bCh) {
+                              match b {
+                                (true, _, _) => {
+                                  for (@s2 <- bufferState) {
+                                    if (s2.get("rev") != s.get("rev")) { ret2!(1 / 0) }
+                                    else {
+                                      bufferState!(s2.set("surplus", s2.get("surplus") - cancelled)
+                                        .set("sin", newSin - cancelled).set("rev", s2.get("rev") + 1)) |
+                                      ret2!((true, cancelled, newSin - cancelled))
+                                    }
+                                  }
+                                }
+                                _ => { ret2!(1 / 0) }
+                              }
+                            }
+                          }
+                          _ => { ret2!((false, "payment")) }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  } |
+
+  // Local per-auth ledger. `rotate` is authorized by the published Governor
+  // choke point at domain auth:<currency>:<kind> with action "rotate" and
+  // argsHash equal to the kind. On approval it takes the cell and posts a
+  // fresh internally created auth; no new auth is supplied by the caller, so
+  // none can leak. The old value is refused and every facet that reads the
+  // cell keeps working.
+  contract BufferAuthLedger(@"rotate", @kind, @nonce, @sigs, ret) = {
+    new gCh, vCh in {
+      vaultGovernor!(*gCh) |
+      for (Governor <- gCh) {
+        Governor!("authorize", "auth:" ++ "__CURRENCY__" ++ ":" ++ kind,
+                  nonce, "rotate", kind, sigs, *vCh) |
+        for (@v <- vCh) {
+          match v {
+            (true, Nil) => {
+              match kind {
+                "bufferDeposit" => {
+                  for (old <- bufferDepositAuthCell) {
+                    new freshAuth in {
+                      bufferDepositAuthCell!(*freshAuth) | ret!((true, Nil))
+                    }
+                  }
+                }
+                "bufferPay" => {
+                  for (old <- bufferPayAuthCell) {
+                    new freshAuth in {
+                      bufferPayAuthCell!(*freshAuth) | ret!((true, Nil))
+                    }
+                  }
+                }
+                "bufferCover" => {
+                  for (old <- bufferCoverAuthCell) {
+                    new freshAuth in {
+                      bufferCoverAuthCell!(*freshAuth) | ret!((true, Nil))
+                    }
+                  }
+                }
+                "savingsNotify" => {
+                  for (old <- savingsNotifyAuthCell) {
+                    new freshAuth in {
+                      savingsNotifyAuthCell!(*freshAuth) | ret!((true, Nil))
+                    }
+                  }
+                }
+                _ => { ret!((false, "action")) }
+              }
+            }
+            _ => { ret!(v) }
+          }
+        }
+      }
+    }
+  } |
+
+  // T3 owns BufferOperatorFacet, so T1's shop cannot issue it. This shop runs
+  // the same sponsor-signed one-shot protocol as MULTI-TERM.md section 4 and
+  // publishes only the local facet. The canonical preimage is
+  // rcash:provision:v1 over [issuerUri, consumerUri, consumerTag, kinds,
+  // nonce, deadline, sponsor]; `kinds` is a comma-separated string and this
+  // shop accepts only "buffer".
+  contract BufferFacetShop(@"provision", @consumerUri, @consumerTag, @kinds, @nonce, @deadline, @sponsorHex, @sig, ret) = {
+    new rCh, codecCh, verCh, cc, vc, digestCh, okCh, nowCh, sCh, consumerCh in {
+      rl!(`__ROOT_URI__`, *rCh) |
+      for (Root <- rCh) {
+        Root!("resolve", "component:codec", 1, *codecCh) |
+        Root!("resolve", "component:verifier", 1, *verCh) |
+        for (@(true, codecUri, _) <- codecCh; @(true, verUri, _) <- verCh) {
+          rl!(codecUri, *cc) | rl!(verUri, *vc) |
+          for (Codec <- cc; Verifier <- vc) {
+            for (@issuerUri <- bufferShopUriState) {
+              bufferShopUriState!(issuerUri.toString()) |
+              if (sponsorHex != "__SPONSOR_PUB__") { ret!((false, "bad sponsor")) }
+              else {
+                if (kinds != "buffer") { ret!((false, "action")) }
+                else {
+                  Codec!("hash", "rcash:provision:v1",
+                         [issuerUri, consumerUri, consumerTag, kinds,
+                          nonce.toString(), deadline.toString(), sponsorHex], *digestCh) |
+                  for (@digest <- digestCh) {
+                    Verifier!("sigOk", digest, sig, sponsorHex.hexToBytes(), *okCh) |
+                    for (@ok <- okCh) {
+                      if (ok == false) { ret!((false, "bad sponsor signature")) }
+                      else {
+                        bd!(*nowCh) |
+                        for (@height, @sender, @ts <- nowCh) {
+                          if (deadline < height) { ret!((false, "expired")) }
+                          else {
+                            for (@s <- bufferNonceState) {
+                              match s.get("nonces").get(nonce) {
+                                Nil => {
+                                  bufferNonceState!(s.set("nonces",
+                                    s.get("nonces").set(nonce, true))) |
+                                  rl!(consumerUri, *consumerCh) |
+                                  for (Consumer <- consumerCh) {
+                                    Consumer!("acceptFacet", "buffer",
+                                              *BufferOperatorFacet, nonce, deadline, *sCh) |
+                                    for (@c <- sCh) {
+                                      match c {
+                                        (true, _) => { ret!((true, "provisioned")) }
+                                        _ => { ret!(1 / 0) }
+                                      }
+                                    }
+                                  }
+                                }
+                                _ => {
+                                  bufferNonceState!(s) | ret!((false, "replay"))
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  } |
+
+  contract BufferFacetShop(@"isFacet", @kind, @facet, ret) = {
+    if (kind != "buffer") { ret!(false) }
+    else {
+      if (facet != *BufferOperatorFacet) { ret!(false) }
+      else { ret!(true) }
+    }
+  } |
+
+  // Fresh auth names live only in the local cells; no raw auth is published,
+  // returned or written into a data map.
+  new savingsNotifyAuth, bufferDepositAuth, bufferPayAuth, bufferCoverAuth in {
+    savingsNotifyAuthCell!(*savingsNotifyAuth) |
+    bufferDepositAuthCell!(*bufferDepositAuth) |
+    bufferPayAuthCell!(*bufferPayAuth) |
+    bufferCoverAuthCell!(*bufferCoverAuth)
+  } |
+
+  savingsState!({"totalShares": 0, "totalAssets": 0,
+                 "shares": {}, "rev": 0}) |
+  bufferState!({"surplus": 0, "sin": 0,
+                "savingsShareBps": __SAVINGS_SHARE_BPS__,
+                "rev": 0}) |
+  bufferFacetState!({"burn": false}) |
+  bufferNonceState!({"nonces": {}}) |
+
+  rs!(bundle+{*SavingsPool}, *uriSavingsCh) |
+  rs!(bundle+{*SurplusBuffer}, *uriBufferCh) |
+  rs!(bundle+{*BufferFacetShop}, *uriShopCh) |
+  for (@savingsUri <- uriSavingsCh; @bufferUri <- uriBufferCh;
+       @issuerUri <- uriShopCh) {
+    bufferShopUriState!(issuerUri.toString()) |
+    SavingsPool!("attest", *attSavingsCh) |
+    SurplusBuffer!("attest", *attBufferCh) |
+    for (@attS <- attSavingsCh; @attB <- attBufferCh) {
+      deployId!([savingsUri, bufferUri, issuerUri, attS, attB])
+    }
+  }
+
+    }
+  }
+}

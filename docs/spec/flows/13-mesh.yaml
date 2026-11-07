@@ -14,7 +14,7 @@ transitions:
   - id: mesh.currency.stablecoin
     from: FeedActive
     to: SystemListed
-    trigger: "31_stablecoin deployed and CurrencyRegistry.register accepts the attestation"
+    trigger: "the five currency terms deployed, facets provisioned, and CurrencyRegistry.register accepts the eight attestations"
     requirement: SPEC-REG-01
   - id: mesh.currency.external
     from: FeedActive

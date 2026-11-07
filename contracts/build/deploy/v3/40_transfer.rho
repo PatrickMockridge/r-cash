@@ -121,15 +121,23 @@ in {
                             if (now >= expiry) {
                               ret2!((false, "expired"))
                             } else {
+                            // OCAP-19: the stored secretHash is the canonical
+                            // hash over the caller-supplied opId and the
+                            // transfer fields, not the bare secret, so a leaked
+                            // secret cannot claim another transfer that reuses
+                            // it. The account allocates `id` inside
+                            // sendTransfer, so opId is the pre-send binding.
                             new rCh, ccCh, hCh in {
                               rl!(`__ROOT_URI__`, *rCh) |
                               for (Root <- rCh) {
-                                Root!("resolve", "component:claim-code", 1, *ccCh) |
-                                for (@(true, claimUri, _) <- ccCh) {
+                                Root!("resolve", "component:codec", 1, *ccCh) |
+                                for (@codecReply <- ccCh) { match codecReply { (true, codecUri, _) => {
                                   new cCh in {
-                                    rl!(claimUri, *cCh) |
-                                    for (ClaimCode <- cCh) {
-                                      ClaimCode!("hash", secret, *hCh) |
+                                    rl!(codecUri, *cCh) |
+                                    for (Codec <- cCh) {
+                                      Codec!("hash", "rcash:claim:v1",
+                                             [opId, assetId,
+                                              amount.toString(), secret.bytesToHex()], *hCh) |
                                       for (@h <- hCh) {
                                         if (h != secretHash) {
                                           ret2!((false, "bad secret"))
@@ -162,7 +170,7 @@ in {
                                       }
                                     }
                                   }
-                                }
+                                } _ => { ret2!(1 / 0) } }}
                               }
                             }
                           }
@@ -181,7 +189,7 @@ in {
                               rl!(`__ROOT_URI__`, *rCh) |
                               for (Root <- rCh) {
                                 Root!("resolve", "component:clock", 1, *cCh) |
-                                for (@(true, clockUri, _) <- cCh) {
+                                for (@clockReply <- cCh) { match clockReply { (true, clockUri, _) => {
                                   new cc in {
                                     rl!(clockUri, *cc) |
                                     for (Clock <- cc) {
@@ -228,7 +236,7 @@ in {
                                       }
                                     }
                                   }
-                                }
+                                } _ => { ret2!(1 / 0) } }}
                               }
                             }
                           }

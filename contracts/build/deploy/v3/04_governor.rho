@@ -12,6 +12,9 @@ new
   uGovernor, ack
 in {
 
+  // Pending entries are keyed by an opaque `domain#nonce` map key. It is a
+  // local lookup key, not a signed preimage: the signed preimage is the
+  // canonical `rcash:admin:v1` payload verified by AdminGuard.
   contract governorLast(@nonces, @domain, ret) = {
     match nonces.get(domain) {
       Nil => { ret!(0) }
@@ -88,7 +91,7 @@ in {
         for (@last <- lastCh; @height, @sender, @ts <- nowCh) {
           if (nonce <= last) { ret!((false, "replay")) }
           else {
-            match s.get("pending").get(domain ++ "|" ++ nonce.toString()) {
+            match s.get("pending").get(domain ++ "#" ++ nonce.toString()) {
               Nil => {
                 new vCh in {
                   governorAdminGuard!(*agCh) |
@@ -104,7 +107,7 @@ in {
                             } else {
                               governorState!(s2.set("pending",
                                 s2.get("pending").set(
-                                  domain ++ "|" ++ nonce.toString(),
+                                  domain ++ "#" ++ nonce.toString(),
                                   {"action": action, "argsHash": argsHash,
                                    "args": args, "readyAt": height + s2.get("timelock")}))) |
                               ret!((true, height + s2.get("timelock")))
@@ -130,7 +133,7 @@ in {
       new nowCh in {
         bd!(*nowCh) |
         for (@height, @sender, @ts <- nowCh) {
-          match s.get("pending").get(domain ++ "|" ++ nonce.toString()) {
+          match s.get("pending").get(domain ++ "#" ++ nonce.toString()) {
             Nil => { ret!((false, "unknown")) }
             entry => {
               if (height < entry.get("readyAt")) { ret!((false, "early")) }
@@ -142,7 +145,7 @@ in {
                     governorState!(s2.set("nonces",
                       s2.get("nonces").set(domain, nonce)).set("pending",
                       s2.get("pending").set(
-                        domain ++ "|" ++ nonce.toString(), Nil))) |
+                        domain ++ "#" ++ nonce.toString(), Nil))) |
                     ret!((true, entry.get("action"), entry.get("argsHash"),
                           entry.get("args")))
                   }
@@ -157,7 +160,7 @@ in {
 
   contract Governor(@"pending", @domain, @nonce, ret) = {
     for (@s <<- governorState) {
-      match s.get("pending").get(domain ++ "|" ++ nonce.toString()) {
+      match s.get("pending").get(domain ++ "#" ++ nonce.toString()) {
         Nil => { ret!((false, "unknown")) }
         entry => {
           ret!((true, entry.get("action"), entry.get("argsHash"),

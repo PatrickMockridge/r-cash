@@ -1207,7 +1207,9 @@ async fn run(cli: Cli) -> Result<ExitCode> {
                     .ok_or_else(|| CliError::Usage("a signing key is required".into()))?
                     .public_hex();
                 let secret = rcash_chain::claim::generate_secret_hex()?;
-                let hash = rcash_chain::claim::claim_hash(&secret)?;
+                // The demo passes an empty opId to `v4_send_transfer`; the
+                // canonical preimage binds that same value.
+                let hash = rcash_chain::claim::claim_hash("", "REV", amount, &secret)?;
                 let tip = client.height().await?;
                 let sent = client
                     .v4_send_transfer(
@@ -1534,7 +1536,9 @@ async fn run(cli: Cli) -> Result<ExitCode> {
                         Some(secret) => secret.clone(),
                         None => rcash_chain::claim::generate_secret_hex()?,
                     };
-                    let claim_hash = rcash_chain::claim::claim_hash(&secret_hex)?;
+                    // Legacy v0.4 `AccountBody`/`TransferBook` path, which
+                    // still verifies the raw secret digest.
+                    let claim_hash = rcash_chain::claim::legacy_secret_digest(&secret_hex)?;
                     let tip = client.node().latest_block_number().await?;
                     let expiry = tip + expiry_blocks;
                     let transfer_id = client

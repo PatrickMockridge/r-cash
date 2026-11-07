@@ -1,0 +1,634 @@
+// v0.4 peg stability module (T4 of the multi-term split).
+// The PSM owns its REV purse and its local mint/burn auth ledger. The T1 mint
+// and burn facets are delivered by sponsor-signed provisioning and stored in
+// bare-name slots; a name read out of a map cannot be called. `vaultUri` is
+// resolved through CurrencyRegistry at arm entry for the pause read and is
+// never captured in a bundle; every effect callee is a pinned placeholder.
+// Placeholders: __ROOT_URI__, __STABLECOIN_URI__, __FACET_SHOP_URI__,
+//               __CURRENCY__, __PARAMS_HASH__, __SPONSOR_PUB__,
+//               __PSM_FEE_BPS__, __PSM_CEILING__, __MAX_SUPPLY__
+//               (init/fallback only), __MAX_ORACLE_AGE__.
+new
+  PegStabilityModule, psmState, psmRevPurse, PsmAuthLedger,
+  psmSellCommit, psmBuyCommit, feeCeil, vaultPrice, vaultGovernor, vaultCodec, psmRisk,
+  psmIssuerInfo,
+  psmMintAuthCell, psmBurnAuthCell, mintSlot, burnSlot, psmFacetState,
+  rl(`rho:registry:lookup`),
+  rs(`rho:registry:insertArbitrary`),
+  deployerId(`rho:rchain:deployerId`),
+  deployId(`rho:rchain:deployId`),
+  scCh, issuerCh, ertpCh, revIssuerCh, psmRevPurseCh,
+  uriCh, attCh
+in {
+
+  // Pinned T1 stablecoin issuer. It is a pinned callee resolved at creation,
+  // not a dynamic registry capability read per arm.
+  rl!(`__STABLECOIN_URI__`, *scCh) |
+  for (Stablecoin <- scCh) {
+    Stablecoin!("issuer", *issuerCh)
+  } |
+  for (@issuerReply <- issuerCh) { match issuerReply { (true, issuer) => {
+    rl!(`rho:rchain:ertp`, *ertpCh) |
+    for (@(_, ERTP) <- ertpCh) {
+      @ERTP!("getRevIssuer", *revIssuerCh) |
+      for (@(revBrand, revIssuer) <- revIssuerCh) {
+        @revIssuer!("makeEmptyPurse", *psmRevPurseCh) |
+        for (@purseReply <- psmRevPurseCh) { match purseReply { (true, psmRevPurse) => {
+
+  // Fee ceiling in basis points, rounded up so the protocol never undercharges.
+  contract feeCeil(@amount, @bps, ret2) = {
+    ret2!(((amount * bps + 9999) / 10000).toInt())
+  } |
+
+  // Resolve the oracle pair at arm entry; the hub is a dynamic registry read
+  // and is never captured in a bundle.
+  contract vaultPrice(@currency, @maxAge, ret2) = {
+    new rCh, hCh in {
+      rl!(`__ROOT_URI__`, *rCh) |
+      for (Root <- rCh) {
+        Root!("resolve", "component:oracle-hub", 1, *hCh) |
+        for (@hubReply <- hCh) { match hubReply { (true, hubUri, v) => {
+          new hc, rrCh in {
+            rl!(hubUri, *hc) |
+            for (OracleHub <- hc) {
+              OracleHub!("getPair", "REV", currency, maxAge, *rrCh) |
+              for (@rr <- rrCh) {
+                match rr {
+                  (true, m) => { ret2!((m.get("rate"), m.get("fresh"))) }
+                  _ => { ret2!((0, false)) }
+                }
+              }
+            }
+          }
+        } _ => { ret2!((0, false)) } }}
+      }
+    }
+  } |
+
+  contract vaultGovernor(ret2) = {
+    new rCh, gCh in {
+      rl!(`__ROOT_URI__`, *rCh) |
+      for (Root <- rCh) {
+        Root!("resolve", "component:governor", 1, *gCh) |
+        for (@govReply <- gCh) { match govReply { (true, govUri, v) => {
+          new gc in {
+            rl!(govUri, *gc) |
+            for (Governor <- gc) { ret2!(*Governor) }
+          }
+        } _ => { ret2!(1 / 0) } }}
+      }
+    }
+  } |
+
+  contract vaultCodec(ret2) = {
+    new rCh, cCh in {
+      rl!(`__ROOT_URI__`, *rCh) |
+      for (Root <- rCh) {
+        Root!("resolve", "component:codec", 1, *cCh) |
+        for (@codecReply <- cCh) { match codecReply { (true, codecUri, v) => {
+          new cc in {
+            rl!(codecUri, *cc) |
+            for (Codec <- cc) { ret2!(*Codec) }
+          }
+        } _ => { ret2!(1 / 0) } }}
+      }
+    }
+  } |
+
+  // Pause and the recapitalisation bound belong to T2. Resolve vaultUri and
+  // bufferUri through CurrencyRegistry at arm entry; the live VaultBook and
+  // SurplusBuffer capabilities are used immediately and never stored. Returns
+  // (paused, sin, surplus).
+  contract psmRisk(ret) = {
+    new rCh, regCh, rc, eCh, vc, bc, tCh, bCh in {
+      rl!(`__ROOT_URI__`, *rCh) |
+      for (Root <- rCh) {
+        Root!("resolve", "component:currency-registry", 1, *regCh) |
+        for (@regReply <- regCh) { match regReply { (true, regUri, _) => {
+          rl!(regUri, *rc) |
+          for (CurrencyRegistry <- rc) {
+            CurrencyRegistry!("currency", "__CURRENCY__", *eCh) |
+            for (@e <- eCh) {
+              match e {
+                (true, entry) => {
+                  rl!(entry.get("vaultUri"), *vc) |
+                  rl!(entry.get("bufferUri"), *bc) |
+                  for (VaultBook <- vc; SurplusBuffer <- bc) {
+                    VaultBook!("totals", *tCh) |
+                    SurplusBuffer!("info", *bCh) |
+                    for (@t <- tCh; @b <- bCh) {
+                      match t {
+                        (true, totals) => {
+                          match b {
+                            (true, buffer) => {
+                              ret!((totals.get("paused"),
+                                    buffer.get("sin"),
+                                    buffer.get("surplus")))
+                            }
+                            _ => { ret!(1 / 0) }
+                          }
+                        }
+                        _ => { ret!(1 / 0) }
+                      }
+                    }
+                  }
+                }
+                _ => { ret!(1 / 0) }
+              }
+            }
+          }
+        } _ => { ret!(1 / 0) } }}
+      }
+    }
+  } |
+
+  // T1 issuer info is the authority for maxSupply and current supply. Resolve
+  // the pinned stablecoin at arm entry; __MAX_SUPPLY__ is only the fallback
+  // when the info arm is unavailable or omits the field. Returns
+  // (maxSupply, supply).
+  contract psmIssuerInfo(ret) = {
+    new rlCh, iCh, sCh in {
+      rl!(`__STABLECOIN_URI__`, *rlCh) |
+      for (Stablecoin <- rlCh) {
+        Stablecoin!("info", *iCh) |
+        Stablecoin!("supply", *sCh) |
+        for (@info <- iCh; @sup <- sCh) {
+          match info {
+            (true, fields) => {
+              match sup {
+                (true, supply) => {
+                  match fields.get("maxSupply") {
+                    Nil => { ret!((__MAX_SUPPLY__, supply)) }
+                    maxSupply => { ret!((maxSupply, supply)) }
+                  }
+                }
+                _ => { ret!(1 / 0) }
+              }
+            }
+            _ => {
+              match sup {
+                (true, supply) => { ret!((__MAX_SUPPLY__, supply)) }
+                _ => { ret!(1 / 0) }
+              }
+            }
+          }
+        }
+      }
+    }
+  } |
+
+  // PSM sell commit: burn the stablecoin through the provisioned T1 BurnFacet,
+  // pay the net REV, then update the signed debt. The fee stays in the REV
+  // purse because only revOut leaves.
+  contract psmSellCommit(@amount, @revOut, @feeRev, @st, @maxSupply, @psmRevPurse, @revBrand, payment, revFacet, ret2) = {
+    if (st.get("stableDebt") - amount + maxSupply < 0) {
+      ret2!((false, "psm floor", *payment))
+    } else {
+      new bCh, wCh, depCh in {
+        {
+          for (facet <<- burnSlot) {
+            burnSlot!(*facet) |
+            facet!("burn", *payment, amount, *bCh)
+          }
+        } |
+        for (@b <- bCh) {
+          match b {
+            (true, _, _) => {
+              @psmRevPurse!("withdraw", (revBrand, revOut), *wCh) |
+              for (@w <- wCh) {
+                match w {
+                  (true, revPayment) => {
+                    revFacet!("deposit", revPayment, *depCh) |
+                    for (@dep <- depCh) {
+                      match dep {
+                        (true, _) => {
+                          for (@s2 <- psmState) {
+                            if (s2.get("rev") != st.get("rev")) { ret2!(1 / 0) }
+                            else {
+                              psmState!(s2.set("stableDebt",
+                                s2.get("stableDebt") - amount)
+                                .set("rev", s2.get("rev") + 1)) |
+                              ret2!((true, revOut, feeRev))
+                            }
+                          }
+                        }
+                        _ => { ret2!(1 / 0) }
+                      }
+                    }
+                  }
+                  _ => { ret2!(1 / 0) }
+                }
+              }
+            }
+            _ => { ret2!(1 / 0) }
+          }
+        }
+      }
+    }
+  } |
+
+  // PSM buy commit: deposit the full REV, mint only the net stablecoin through
+  // the provisioned T1 MintFacet, then update the signed debt. The fee is
+  // retained as extra REV backing.
+  contract psmBuyCommit(@stableOut, @fee, @st, @psmRevPurse, payment, stableFacet, ret2) = {
+    new dCh, mCh, depCh in {
+      @psmRevPurse!("deposit", *payment, *dCh) |
+      for (@d <- dCh) {
+        match d {
+          (true, _) => {
+            {
+              for (facet <<- mintSlot) {
+                mintSlot!(*facet) |
+                facet!("mint", stableOut, *mCh)
+              }
+            } |
+            for (@m <- mCh) {
+              match m {
+                (true, stablePayment, _) => {
+                  stableFacet!("deposit", stablePayment, *depCh) |
+                  for (@dep <- depCh) {
+                    match dep {
+                      (true, _) => {
+                        for (@s2 <- psmState) {
+                          if (s2.get("rev") != st.get("rev")) { ret2!(1 / 0) }
+                          else {
+                            psmState!(s2.set("stableDebt",
+                              s2.get("stableDebt") + stableOut)
+                              .set("rev", s2.get("rev") + 1)) |
+                            ret2!((true, stableOut, fee))
+                          }
+                        }
+                      }
+                      _ => { ret2!(1 / 0) }
+                    }
+                  }
+                }
+                _ => { ret2!(1 / 0) }
+              }
+            }
+          }
+          _ => { ret2!(1 / 0) }
+        }
+      }
+    }
+  } |
+
+  // Consume the T1 mint/burn facets delivered by the sponsor-signed protocol.
+  // Each slot is written once and never returned.
+  contract PegStabilityModule(@"acceptFacet", @kind, facet, @nonce, @deadline, ret2) = {
+    if (kind != "mint" && kind != "burn") { ret2!((false, "action")) }
+    else {
+      new rlCh, shopCh, okCh in {
+        rl!(`__FACET_SHOP_URI__`, *rlCh) |
+        for (Shop <- rlCh) {
+          Shop!("isFacet", kind, *facet, *okCh) |
+          for (@ok <- okCh) {
+            if (ok == false) { ret2!((false, "verify failed")) }
+            else {
+              for (@fs <- psmFacetState) {
+                if (fs.get(kind) == true) {
+                  psmFacetState!(fs) | ret2!((false, "duplicate"))
+                } else {
+                  psmFacetState!(fs.set(kind, true)) |
+                  match kind {
+                    "mint" => { mintSlot!(*facet) }
+                    "burn" => { burnSlot!(*facet) }
+                  } |
+                  ret2!((true, "provisioned"))
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  } |
+
+  contract PegStabilityModule(@"fundRev", payment, ret2) = {
+    new amtCh, dCh in {
+      @revIssuer!("getAmountOf", *payment, *amtCh) |
+      for (@a <- amtCh) {
+        match a {
+          (true, amount) => {
+            @psmRevPurse!("deposit", *payment, *dCh) |
+            for (@d <- dCh) {
+              match d {
+                (true, _) => { ret2!((true, amount)) }
+                _ => { ret2!(1 / 0) }
+              }
+            }
+          }
+          _ => { ret2!((false, "asset", *payment)) }
+        }
+      }
+    }
+  } |
+
+  contract PegStabilityModule(@"sellStable", payment, revFacet, @minRev, ret2) = {
+    new infoCh, amtCh, rateCh, balCh, grossCh, feeCh in {
+      psmIssuerInfo!(*infoCh) |
+      for (@(maxSupply, _supply) <- infoCh) {
+        @issuer!("getAmountOf", *payment, *amtCh) |
+        for (@a <- amtCh) {
+          match a {
+            (true, amount) => {
+              for (@st <<- psmState) {
+                vaultPrice!("__CURRENCY__", __MAX_ORACLE_AGE__, *rateCh) |
+                for (@rr <- rateCh) {
+                  match rr {
+                    (rate, fresh) => {
+                      if (fresh == false || rate <= 0) {
+                        ret2!((false, "stale feed", *payment))
+                      } else {
+                        grossCh!(((amount * 100000000) / rate).toInt()) |
+                        for (@grossRev <- grossCh) {
+                          feeCeil!(grossRev, st.get("feeBps"), *feeCh) |
+                          for (@feeRev <- feeCh) {
+                            match (grossRev - feeRev) {
+                              revOut => {
+                                @psmRevPurse!("getCurrentAmount", *balCh) |
+                                for (@bal <- balCh) {
+                                  match bal {
+                                    (true, available) => {
+                                      if (revOut <= 0 || revOut < minRev) {
+                                        ret2!((false, "min rev", *payment))
+                                      } else {
+                                        if (revOut > available) {
+                                          ret2!((false, "buffer", *payment))
+                                        } else {
+                                          psmSellCommit!(amount, revOut, feeRev, st,
+                                                         maxSupply, psmRevPurse, revBrand,
+                                                         *payment, *revFacet, *ret2)
+                                        }
+                                      }
+                                    }
+                                    _ => { ret2!((false, "balance", *payment)) }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                    _ => { ret2!(1 / 0) }
+                  }
+                }
+              }
+            }
+            _ => { ret2!((false, "asset", *payment)) }
+          }
+        }
+      }
+    }
+  } |
+
+  contract PegStabilityModule(@"buyStable", payment, stableFacet, @minStable, ret2) = {
+    new amtCh, riskCh, infoCh, rateCh, grossCh, feeCh in {
+      @revIssuer!("getAmountOf", *payment, *amtCh) |
+        for (@a <- amtCh) {
+          match a {
+            (true, amount) => {
+              psmRisk!(*riskCh) |
+              for (@risk <- riskCh) {
+                match risk {
+                  (paused, sin, surplus) => {
+                    if (paused) {
+                      ret2!((false, "paused", *payment))
+                    } else {
+                      if (sin > surplus) {
+                        ret2!((false, "recapitalise", *payment))
+                      } else {
+                        psmIssuerInfo!(*infoCh) |
+                        for (@(maxSupply, supply) <- infoCh) {
+                          for (@st <<- psmState) {
+                            vaultPrice!("__CURRENCY__", __MAX_ORACLE_AGE__, *rateCh) |
+                            for (@rr <- rateCh) {
+                              match rr {
+                                (rate, fresh) => {
+                                  if (fresh == false || rate <= 0) {
+                                    ret2!((false, "stale feed", *payment))
+                                  } else {
+                                    grossCh!(((amount * rate) / 100000000).toInt()) |
+                                    for (@gross <- grossCh) {
+                                      feeCeil!(gross, st.get("feeBps"), *feeCh) |
+                                      for (@fee <- feeCh) {
+                                        match (gross - fee) {
+                                          stableOut => {
+                                            if (stableOut <= 0 || stableOut < minStable) {
+                                              ret2!((false, "min stable", *payment))
+                                            } else {
+                                              if (st.get("stableDebt") + stableOut > st.get("ceiling")) {
+                                                ret2!((false, "ceiling", *payment))
+                                              } else {
+                                                if (supply + stableOut > maxSupply) {
+                                                  ret2!((false, "max supply", *payment))
+                                                } else {
+                                                  psmBuyCommit!(stableOut, fee, st, psmRevPurse, *payment,
+                                                                *stableFacet, *ret2)
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                                _ => { ret2!(1 / 0) }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            _ => { ret2!((false, "asset", *payment)) }
+          }
+        }
+      }
+  } |
+
+  contract PegStabilityModule(@"schedulePolicy", @feeBps, @ceiling, @nonce, @sigs, ret2) = {
+    if (feeBps < 0 || feeBps > 1000) { ret2!((false, "psm fee")) }
+    else {
+      if (ceiling < 0) { ret2!((false, "ceiling")) }
+      else {
+        new gCh, sCh, cc, cCh in {
+          vaultGovernor!(*gCh) |
+          vaultCodec!(*cc) |
+          for (Codec <- cc) {
+            // OCAP-09: length-prefixed canonical policy payload; the
+            // Governor binds this argsHash into the admin preimage.
+            Codec!("canonical", "rcash:psm-policy:v1",
+                   [feeBps.toString(), ceiling.toString()], *cCh) |
+            for (@argsHash <- cCh) {
+              for (Governor <- gCh) {
+                Governor!("schedule", "stablecoin:" ++ "__CURRENCY__", nonce, "setPsmPolicy",
+                          argsHash, {"feeBps": feeBps, "ceiling": ceiling}, sigs, *sCh) |
+                for (@gv <- sCh) {
+                  match gv {
+                    (true, readyAt) => { ret2!((true, readyAt)) }
+                    _ => { ret2!(gv) }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  } |
+
+  contract PegStabilityModule(@"applyPolicy", @nonce, ret2) = {
+    new gCh, eCh, cc in {
+      vaultGovernor!(*gCh) |
+      vaultCodec!(*cc) |
+      for (Codec <- cc) {
+            for (Governor <- gCh) {
+              Governor!("execute", "stablecoin:" ++ "__CURRENCY__", nonce, *eCh) |
+              for (@ex <- eCh) {
+                match ex {
+                  (true, action, argsHash, args) => {
+                    match action {
+                    "setPsmPolicy" => {
+                      match (args.get("feeBps")) {
+                        feeBps => {
+                          match (args.get("ceiling")) {
+                            ceiling => {
+                              if (feeBps < 0 || feeBps > 1000) { ret2!((false, "psm fee")) }
+                              else {
+                                if (ceiling < 0) { ret2!((false, "ceiling")) }
+                                else {
+                                  new hCh in {
+                                    Codec!("canonical", "rcash:psm-policy:v1",
+                                           [feeBps.toString(), ceiling.toString()], *hCh) |
+                                    for (@expected <- hCh) {
+                                      if (argsHash != expected) {
+                                        ret2!((false, "params hash"))
+                                      } else {
+                                        for (@s <- psmState) {
+                                          if (ceiling < s.get("stableDebt")) {
+                                            psmState!(s) | ret2!((false, "ceiling"))
+                                          } else {
+                                            psmState!(s.set("feeBps", feeBps)
+                                              .set("ceiling", ceiling)
+                                              .set("rev", s.get("rev") + 1)) |
+                                            ret2!((true, {"feeBps": feeBps, "ceiling": ceiling}))
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                    _ => { ret2!((false, "action")) }
+                  }
+                  }
+                  _ => { ret2!(ex) }
+                }
+              }
+            }
+        }
+    }
+  } |
+
+  contract PegStabilityModule(@"info", ret2) = {
+    new balCh in {
+      @psmRevPurse!("getCurrentAmount", *balCh) |
+      for (@s <<- psmState; @b <- balCh) {
+        match b {
+          (true, revBalance) => {
+            ret2!((true, {"stableDebt": s.get("stableDebt"),
+                          "feeBps": s.get("feeBps"),
+                          "ceiling": s.get("ceiling"),
+                          "revBalance": revBalance,
+                          "rev": s.get("rev")}))
+          }
+          _ => { ret2!((false, "balance")) }
+        }
+      }
+    }
+  } |
+
+  contract PegStabilityModule(@"debt", ret2) = {
+    for (@s <<- psmState) { ret2!((true, s.get("stableDebt"))) }
+  } |
+
+  contract PegStabilityModule(@"attest", ret2) = {
+    ret2!((true, {
+      "currency": "__CURRENCY__",
+      "paramsHash": "__PARAMS_HASH__",
+      "sponsor": "__SPONSOR_PUB__",
+      "kind": "psm"
+    }))
+  } |
+
+  // Local per-auth ledger. `rotate` is authorized by the published Governor
+  // choke point at domain auth:<currency>:<kind> with action "rotate" and
+  // argsHash equal to the kind. On approval it takes the cell and posts a
+  // fresh internally created auth; no new auth is supplied by the caller.
+  contract PsmAuthLedger(@"rotate", @kind, @nonce, @sigs, ret) = {
+    new gCh, vCh in {
+      vaultGovernor!(*gCh) |
+      for (Governor <- gCh) {
+        Governor!("authorize", "auth:" ++ "__CURRENCY__" ++ ":" ++ kind,
+                  nonce, "rotate", kind, sigs, *vCh) |
+        for (@v <- vCh) {
+          match v {
+            (true, Nil) => {
+              match kind {
+                "psmMint" => {
+                  for (old <- psmMintAuthCell) {
+                    new freshAuth in {
+                      psmMintAuthCell!(*freshAuth) | ret!((true, Nil))
+                    }
+                  }
+                }
+                "psmBurn" => {
+                  for (old <- psmBurnAuthCell) {
+                    new freshAuth in {
+                      psmBurnAuthCell!(*freshAuth) | ret!((true, Nil))
+                    }
+                  }
+                }
+                _ => { ret!((false, "action")) }
+              }
+            }
+            _ => { ret!(v) }
+          }
+        }
+      }
+    }
+  } |
+
+  // Fresh auth names live only in the local cells; no raw auth is published,
+  // returned or written into a data map.
+  new psmMintAuth, psmBurnAuth in {
+    psmMintAuthCell!(*psmMintAuth) |
+    psmBurnAuthCell!(*psmBurnAuth)
+  } |
+
+  psmState!({"stableDebt": 0, "feeBps": __PSM_FEE_BPS__,
+             "ceiling": __PSM_CEILING__, "rev": 0}) |
+  psmFacetState!({"mint": false, "burn": false}) |
+
+  rs!(bundle+{*PegStabilityModule}, *uriCh) |
+  for (@uri <- uriCh) {
+    PegStabilityModule!("attest", *attCh) |
+    for (@att <- attCh) { deployId!([uri, att]) }
+  }
+
+        } _ => { 1 / 0 } }}
+      }
+    }
+  } _ => { 1 / 0 } }}
+}

@@ -79,10 +79,11 @@ npm run test:e2e   # Playwright journey against the running devnet
 
 - `Account` — non-custodial, per-key; owner-gated purses, vault access, transfer ops and the
   opId ledger.
-- Per-currency issuer cluster (`31_stablecoin`) — `Stablecoin`, `CollateralCustody`,
-  `RiskParameters`, `VaultBook`, `LiquidationEngine`, `SurplusBuffer`, `SavingsPool`,
-  `PegStabilityModule`; one signed deploy, because mint/burn/settlement capabilities cannot
-  cross a deploy boundary.
+- Per-currency issuer cluster (`31_issuer`, `31_params`, `31_vault`, `31_buffer_savings`,
+  `31_psm`) — `Stablecoin`, `CollateralCustody`, `RiskParameters`, `VaultBook`,
+  `LiquidationEngine`, `SurplusBuffer`, `SavingsPool`, `PegStabilityModule`; five signed
+  deploys with sponsor-signed facet provisioning, so each published bundle closes over only
+  the authority its term needs.
 - `FxPool` + `LiquidityLock` (per market) — oracle-anchored pool, LP tokens, spread and skew,
   one-shot seed lock.
 - `OracleHub` — three allowlisted reporters, median, freshness, spread, signed policy.

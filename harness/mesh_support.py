@@ -23,7 +23,7 @@ import sign_payload  # noqa: E402
 from install_v3 import render  # noqa: E402
 from minify_rho import minify  # noqa: E402
 from unit_feed import blake2b256, canonical, deploy_feed  # noqa: E402
-from unit_stablecoin import deploy_system  # noqa: E402
+import stablecoin_support  # noqa: E402
 from unit_v3 import call, check, faucet_top_up, one  # noqa: E402
 
 STATE = netconfig.STATE_PATH
@@ -74,8 +74,9 @@ def _submit_price(keys: dict, feed: str, feed_id: str, code: str, price: int) ->
     height = node.height()
     for index in range(3):
         reporter = keys[config_reporter(index)]
-        payload = f"rcash:oracle-submit:v3|{feed_id}|{code}|{index}|{price}|{height}"
-        sig = sign_payload.sign_payload(reporter["secret"], payload.encode())["signature"]
+        payload = sign_payload.oracle_submit_payload(
+            feed_id, code, index, price, height)
+        sig = sign_payload.sign_payload(reporter["secret"], payload)["signature"]
         body = (
             f'OracleFeed!("submit", {index}, {price}, {height}, "{reporter["public"]}", '
             f'"{sig}".hexToBytes(), *r) |\n'
@@ -173,9 +174,9 @@ def ensure_feed(keys: dict, state: dict, config: dict, code: str, price: int) ->
                         "  }"), keys["deployer"]["secret"])
     if activate != "ok":
         raise RuntimeError(f"{code} feed activate failed: {activate}")
-    bind_payload = (f"rcash:feed-bind:v3|{code}|{feed_id}|{feed}|{policy_hash}|"
-                    f"{sponsor['public']}")
-    bind_sig = sign_payload.sign_payload(sponsor["secret"], bind_payload.encode())["signature"]
+    bind_payload = sign_payload.feed_bind_payload(
+        code, feed_id, feed, policy_hash, sponsor["public"])
+    bind_sig = sign_payload.sign_payload(sponsor["secret"], bind_payload)["signature"]
     bind_term = (
         "new rl(`rho:registry:lookup`), ch, r, "
         "deployerId(`rho:rchain:deployerId`), deployId(`rho:rchain:deployId`) in {\n"
@@ -204,47 +205,15 @@ def deploy_and_register_issuer(keys: dict, state: dict, config: dict, currency: 
     existing = existing_currency(keys, state, currency)
     if existing is not None:
         return existing
-    sponsor = keys[config["sponsorKey"]]["public"]
-    params, _values, params_hash = issuer_values(config, currency)
-    payload = f"rcash:stablecoin-create:v1|{currency}|{params_hash}|{sponsor}"
-    sig = sign_payload.sign_payload(keys[config["sponsorKey"]]["secret"],
-                                    payload.encode())["signature"]
-    term = render("31_stablecoin", {
-        "__ROOT_URI__": state["root_uri"],
-        "__CURRENCY__": currency,
-        "__PARAMS__": json.dumps(params),
-        "__PARAMS_HASH__": params_hash,
-        "__SPONSOR_PUB__": sponsor,
-        "__SPONSOR_SIG__": sig,
-    })
-    system = deploy_system(term, keys["deployer"]["secret"])
-    (sc_uri, custody_uri, params_uri, vault_uri, liq_uri, savings_uri,
-     psm_uri, buffer_uri, _attest) = system
-
-    listing = (f"rcash:currency-register:v3|{currency}|{sc_uri}|{custody_uri}|"
-               f"{params_uri}|{vault_uri}|{liq_uri}|{savings_uri}|{psm_uri}|"
-               f"{buffer_uri}|{params_hash}|{sponsor}")
-    listing_sig = sign_payload.sign_payload(keys[config["sponsorKey"]]["secret"],
-                                            listing.encode())["signature"]
-    body = (
-        f'CurrencyRegistry!("register", "{currency}", "{sc_uri}", "{custody_uri}", '
-        f'"{params_uri}", "{vault_uri}", "{liq_uri}", "{savings_uri}", "{psm_uri}", '
-        f'"{buffer_uri}", "{params_hash}", "{sponsor}", '
-        f'"{listing_sig}".hexToBytes(), *r) |\n'
-        "  for (@x <- r) {\n"
-        "    match x {\n"
-        '      (true, entry) => deployId!([true, entry])\n'
-        "      (false, why) => deployId!([false, why])\n"
-        "      _ => deployId!(x)\n"
-        "    }\n"
-        "  }"
-    )
-    listed = one(call(state["currency_registry_uri"], "CurrencyRegistry", body),
-                 keys["deployer"]["secret"])
-    if not listed or listed[0] is not True:
-        raise RuntimeError(f"{currency} listing failed: {listed}")
-    check(f"{currency} listed", listed[1].get("stablecoinUri"), sc_uri)
-    return listed[1]
+    system = stablecoin_support.deploy_system(
+        keys, state, currency, config=config,
+        sponsor_key=config["sponsorKey"])
+    if system.get("entry") is not None:
+        return system["entry"]
+    existing = existing_currency(keys, state, currency)
+    if existing is not None:
+        return existing
+    raise RuntimeError(f"{currency} listing failed: {system.get('listed')}")
 
 
 def register_external(keys: dict, state: dict, config: dict, code: str,
@@ -387,9 +356,10 @@ def create_market(keys: dict, state: dict, config: dict, base: str, quote: str,
     values = [str(value) for _, value in fields]
     terms = "{" + ", ".join(f'"{key}": {rholang_value(value)}' for key, value in fields) + "}"
     values_literal = "[" + ", ".join(json.dumps(value) for value in values) + "]"
-    terms_hash = canonical("rcash:market-terms:v4", values)
-    payload = f"rcash:market-create:v1|{market_id}|{terms_hash}|{sponsor['public']}"
-    sig = sign_payload.sign_payload(sponsor["secret"], payload.encode())["signature"]
+    terms_hash = sign_payload.canonical("rcash:market-terms:v4", values)
+    payload = sign_payload.market_create_payload(
+        market_id, terms_hash, sponsor["public"])
+    sig = sign_payload.sign_payload(sponsor["secret"], payload)["signature"]
     term = (
         "new rl(`rho:registry:lookup`), ch, r, deployId(`rho:rchain:deployId`), "
         "deployerId(`rho:rchain:deployerId`) in {\n"

@@ -1,0 +1,21 @@
+// RT-01a: call the published T1 issuer arms with a fresh name where the raw
+// auth is required. Both arms must refuse before any state change.
+// Placeholders: __STABLECOIN_URI__, __CUSTODY_URI__, __AMOUNT__.
+// Expected reply: [refusal, refusal]; never (true, ...).
+new
+  rl(`rho:registry:lookup`),
+  scCh, ccCh, r1, r2,
+  deployId(`rho:rchain:deployId`)
+in {
+  rl!(`__STABLECOIN_URI__`, *scCh) |
+  rl!(`__CUSTODY_URI__`, *ccCh) |
+  new attacker in {
+    for (Stablecoin <- scCh; Custody <- ccCh) {
+      Stablecoin!("mint", __AMOUNT__, *attacker, *r1) |
+      Custody!("withdraw", __AMOUNT__, *attacker, *r2) |
+      for (@a <- r1; @b <- r2) {
+        deployId!([a, b])
+      }
+    }
+  }
+}

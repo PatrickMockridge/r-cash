@@ -35,16 +35,22 @@ structure Lock where
   funder : Nat
   shares : Nat
   minBlocks : Nat
+  /-- The buyer-signed lock height (`terms.lockUntilHeight`). -/
+  untilLimit : Nat
+  /-- The sponsor address derived from `terms.lockBeneficiaryPubKey`. -/
+  beneficiaryKey : Nat
 
 def poolTemplate_create (base quote : Nat) : Pool × Lock :=
   ({ rb := 0, rq := 0, totalShares := 0, seeded := false },
    { funded := false, released := false, cancelled := false, untilH := 0,
-     beneficiary := 0, funder := 0, shares := 0, minBlocks := base + quote })
+     beneficiary := 0, funder := 0, shares := 0, minBlocks := base + quote,
+     untilLimit := 0, beneficiaryKey := 0 })
 
 /-- Factory creation: a fresh, empty lock for a pool's LP purse. -/
-def liquidityLockFactory_create (minBlocks : Nat) : Lock :=
+def liquidityLockFactory_create (minBlocks untilLimit beneficiaryKey : Nat) : Lock :=
   { funded := false, released := false, cancelled := false, untilH := 0,
-    beneficiary := 0, funder := 0, shares := 0, minBlocks := minBlocks }
+    beneficiary := 0, funder := 0, shares := 0, minBlocks := minBlocks,
+    untilLimit := untilLimit, beneficiaryKey := beneficiaryKey }
 
 def fxPool_pair (base quote : Nat) : Nat × Nat := (base, quote)
 def fxPool_reserves (p : Pool) : Nat × Nat × Nat × Bool :=
@@ -126,15 +132,46 @@ theorem burnShares_preserves_ledger (s : ShareBook) (n : Nat)
 
 /-! ## Liquidity lock -/
 
-def liquidityLock_fund (l : Lock) (now untilH shares : Nat) : Option Lock :=
+/-- OCAP-12: the funder must be the sponsor-derived beneficiary and the lock
+height must equal the term's `lockUntilHeight`. -/
+def liquidityLock_fund (l : Lock) (now untilH funder beneficiary shares : Nat) : Option Lock :=
   if l.funded then none
+  else if untilH ≠ l.untilLimit then none
+  else if funder ≠ l.beneficiaryKey then none
   else if untilH < now + l.minBlocks then none
-  else some { l with funded := true, untilH := untilH, shares := shares }
+  else some { l with funded := true, untilH := untilH, funder := funder,
+                     beneficiary := beneficiary, shares := shares }
 
 /-- L1: a lock shorter than the market's minimum is refused. -/
-theorem fund_refuses_short (l : Lock) {now untilH shares : Nat}
+theorem fund_refuses_short (l : Lock) {now untilH funder beneficiary shares : Nat}
     (h : untilH < now + l.minBlocks) :
-    liquidityLock_fund l now untilH shares = none := by
+    liquidityLock_fund l now untilH funder beneficiary shares = none := by
+  unfold liquidityLock_fund
+  by_cases hf : l.funded
+  · simp [hf]
+  · by_cases hh : untilH = l.untilLimit
+    · by_cases hb : funder = l.beneficiaryKey
+      · subst hh
+        subst hb
+        simp [hf, h]
+      · simp [hf, hh, hb]
+    · simp [hf, hh]
+
+/-- OCAP-12: a funder that is not the sponsor-derived beneficiary is refused. -/
+theorem fund_refuses_wrong_funder (l : Lock) {now untilH funder beneficiary shares : Nat}
+    (h : funder ≠ l.beneficiaryKey) :
+    liquidityLock_fund l now untilH funder beneficiary shares = none := by
+  unfold liquidityLock_fund
+  by_cases hf : l.funded
+  · simp [hf]
+  · by_cases hh : untilH = l.untilLimit
+    · simp [hf, hh, h]
+    · simp [hf, hh]
+
+/-- OCAP-12: a lock height other than the signed `lockUntilHeight` is refused. -/
+theorem fund_refuses_height (l : Lock) {now untilH funder beneficiary shares : Nat}
+    (h : untilH ≠ l.untilLimit) :
+    liquidityLock_fund l now untilH funder beneficiary shares = none := by
   unfold liquidityLock_fund
   by_cases hf : l.funded
   · simp [hf]
@@ -152,19 +189,25 @@ def liquidityLock_cancel (l : Lock) (governorOk partyOk : Bool) : Option Lock :=
     some { l with cancelled := true }
   else none
 
-theorem fund_sets_funded {l l' : Lock} {now untilH shares : Nat}
-    (h : liquidityLock_fund l now untilH shares = some l') : l'.funded = true := by
+theorem fund_sets_funded {l l' : Lock} {now untilH funder beneficiary shares : Nat}
+    (h : liquidityLock_fund l now untilH funder beneficiary shares = some l') :
+    l'.funded = true := by
   unfold liquidityLock_fund at h
   split at h
   · contradiction
   · split at h
     · contradiction
-    · injection h with heq
-      subst heq
-      rfl
+    · split at h
+      · contradiction
+      · split at h
+        · contradiction
+        · injection h with heq
+          subst heq
+          rfl
 
-theorem fund_refuses_funded {l : Lock} {now untilH shares : Nat} (h : l.funded = true) :
-    liquidityLock_fund l now untilH shares = none := by
+theorem fund_refuses_funded {l : Lock} {now untilH funder beneficiary shares : Nat}
+    (h : l.funded = true) :
+    liquidityLock_fund l now untilH funder beneficiary shares = none := by
   simp [liquidityLock_fund, h]
 
 theorem release_then_cancel_refused {l l' : Lock} {now : Nat} {beneficiaryOk : Nat → Bool}

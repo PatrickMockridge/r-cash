@@ -28,6 +28,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 
 import deploy as node  # noqa: E402
 import keygen  # noqa: E402
+import sign_payload  # noqa: E402
 from coincurve import PrivateKey  # noqa: E402
 
 SPIKES = ROOT / "spikes"
@@ -323,10 +324,17 @@ def probe_cost_and_finality() -> Check:
 
 
 def probe_claimhash() -> Check:
-    c = Check("claim secret blake2b256 matches off-chain")
+    c = Check("canonical claim preimage blake2b256 matches off-chain")
+    op_id, asset, amount = "probe-op-1", "REV", 5_000_000
     secret_bytes = os.urandom(32)
-    digest = hashlib.blake2b(secret_bytes, digest_size=32).digest()
-    _, result = run(term("probe_claimhash.rho", SECRET_HEX=secret_bytes.hex()))
+    preimage = sign_payload.canonical(
+        "rcash:claim:v1", [op_id, asset, amount, secret_bytes.hex()])
+    digest = hashlib.blake2b(preimage.encode(), digest_size=32).digest()
+    probe = (
+        'new hash(`rho:crypto:blake2b256Hash`), deployId(`rho:rchain:deployId`) in {'
+        f' hash!("{preimage}".toUtf8Bytes(), *deployId) }}'
+    )
+    _, result = run(probe)
     got = byte_strings(result)
     if got and got[-1].lower() == digest.hex():
         return c.pass_(f"hash {got[-1]}")

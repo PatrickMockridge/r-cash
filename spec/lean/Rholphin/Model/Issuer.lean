@@ -211,8 +211,10 @@ def stablecoin_settle (l : Ledger) (principal : Int) : Ledger :=
   { l with totalPrincipal := l.totalPrincipal - principal, supply := l.supply - principal }
 
 def stablecoin_amountOf (amount : Nat) : Nat := amount
-def stablecoin_attest (currency paramsHash template : Nat) : Nat × Nat × Nat :=
-  (currency, paramsHash, template)
+def stablecoin_info (maxSupply totalPrincipal : Nat) : Nat × Nat :=
+  (maxSupply, totalPrincipal)
+def stablecoin_attest (currency paramsHash kind : Nat) : Nat × Nat × Nat :=
+  (currency, paramsHash, kind)
 
 def collateralCustody_deposit (c : Custody) (amount : Nat) : Custody :=
   { c with rev := c.rev + amount }
@@ -228,5 +230,25 @@ def riskParameters_scheduleParams (pending : List (Nat × RiskParams)) (nonce : 
     (p : RiskParams) : List (Nat × RiskParams) := (nonce, p) :: pending
 def riskParameters_applyParams (_old : RiskParams) (args : RiskParams) : RiskParams := args
 def riskParameters_attest (currency paramsHash : Nat) : Nat × Nat := (currency, paramsHash)
+
+/-! ## Facet and provisioning surface
+
+The facet arms are the same ledger deltas as the issuer arms they replace; the
+per-auth cells make the presented value observable and rotatable. `check`
+accepts only the live value, and `rotate` posts the next value. The shop's
+nonce set is one-shot; `isFacet` is an identity test on the registered name.
+-/
+
+def authLedger_check (current presented : Nat) : Bool := current == presented
+def authLedger_rotate (_current next : Nat) : Nat := next
+def facetShop_isFacet (registered presented : Nat) : Bool := registered == presented
+def facetShop_provision (nonces : List Nat) (nonce : Nat) : List Nat := nonce :: nonces
+def facetConsumer_acceptFacet (slots : List Nat) (kind : Nat) : List Nat := kind :: slots
+
+def mintFacet_mint := stablecoin_mint
+def burnFacet_burn := burn
+def settlementFacet_settle := stablecoin_settle
+def custodyFacet_deposit := collateralCustody_deposit
+def custodyFacet_withdraw := collateralCustody_withdraw
 
 end Rholphin.Model.Issuer

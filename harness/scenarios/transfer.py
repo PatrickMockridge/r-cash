@@ -7,9 +7,17 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT / "tools")); sys.path.insert(0, str(ROOT / "harness" / "scenarios"))
 import deploy as node  # noqa: E402
 import oracle  # noqa: E402
+import sign_payload  # noqa: E402
 import vault as v  # noqa: E402
 
 MANIFEST = ROOT / "deployments" / "devnet.json"; KEYS = ROOT / ".devnet" / "keys.json"
+
+
+def claim_digest(op_id: str, secret: bytes) -> bytes:
+    """Canonical `rcash:claim:v1` commitment over opId, asset, amount and secret."""
+    preimage = sign_payload.canonical(
+        "rcash:claim:v1", [op_id, "NGN", 100_000_000, secret.hex()])
+    return hashlib.blake2b(preimage.encode(), digest_size=32).digest()
 
 def run_as(term, key="deployer", phlo=30_000_000):
     keys = json.loads(KEYS.read_text())
@@ -39,7 +47,7 @@ def main() -> int:
     r = run_as(v.render("account_balance_asset.rho", FACTORY_URI=factory, ASSET="KES"))
     kes_before = v.ints(r)[-1] if v.ints(r) else 0
 
-    secret = os.urandom(32); claim_hash = hashlib.blake2b(secret, digest_size=32).digest()
+    secret = os.urandom(32); claim_hash = claim_digest("phase4b-transfer-1", secret)
     expiry = node.height() + 100
     r = run_as(v.render("account_send_transfer.rho", FACTORY_URI=factory, SOURCE="NGN", DEST="KES",
                         AMOUNT=100_000_000, MIN_DEST=1, HASH=claim_hash.hex(), EXPIRY=expiry),
@@ -57,7 +65,7 @@ def main() -> int:
     check("recipient received KES", recv > 0, f"kes={recv}")
 
     # Refund: send with expiry at the current height, then refund after it passes.
-    secret2 = os.urandom(32); hash2 = hashlib.blake2b(secret2, digest_size=32).digest()
+    secret2 = os.urandom(32); hash2 = claim_digest("phase4b-transfer-2", secret2)
     expiry2 = node.height()
     r = run_as(v.render("account_send_transfer.rho", FACTORY_URI=factory, SOURCE="NGN", DEST="KES",
                         AMOUNT=100_000_000, MIN_DEST=1, HASH=hash2.hex(), EXPIRY=expiry2),

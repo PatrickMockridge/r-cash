@@ -176,42 +176,57 @@ in {
       for (@pk <- pkCh) {
         if (pk != sponsorHex.hexToBytes()) { ret!((false, "bad sponsor")) }
         else {
-          new payloadCh in {
-            payloadCh!(
-              "rcash:feed-bind:v3|" ++ code ++ "|" ++ feedId ++ "|" ++ feedUri
-              ++ "|" ++ policyHash ++ "|" ++ sponsorHex) |
-            for (@payload <- payloadCh) {
-              new okCh in {
-                regVerify!(payload, sig, sponsorHex, *okCh) |
-                for (@ok <- okCh) {
-                  if (ok == false) { ret!((false, "bad sponsor signature")) }
-                  else {
-                    new fCh in {
-                      regCheckFeed!(feedUri, code, feedId, sponsorHex, policyHash, *fCh) |
-                      for (@f <- fCh) {
-                        match f {
-                          (true, reporters) => {
-                            for (@s <<- oracleRegState) {
-                              new rcCh in {
-                                regCheckReporters!(reporters, sponsorHex,
-                                                   s.get("allowlist"), *rcCh) |
-                                for (@rc <- rcCh) {
-                                  match rc {
-                                    (true, Nil) => {
-                                      regBind!(code, feedUri, feedId, policyHash,
-                                               sponsorHex, *ret)
+          new payloadCh, codecCh, codecC, codecRCh in {
+            rl!(`__ROOT_URI__`, *codecCh) |
+            for (Root <- codecCh) {
+              Root!("resolve", "component:codec", 1, *codecRCh) |
+              for (@__replyCodec <- codecRCh) {
+                match __replyCodec {
+                  (true, codecUri, _) => {
+                    rl!(codecUri, *codecC) |
+                    for (Codec <- codecC) {
+                      // OCAP-09: length-prefixed canonical preimage.
+                      Codec!("canonical", "rcash:feed-bind:v3",
+                             [code, feedId, feedUri, policyHash, sponsorHex], *payloadCh) |
+                      for (@payload <- payloadCh) {
+                        new okCh in {
+                          regVerify!(payload, sig, sponsorHex, *okCh) |
+                          for (@ok <- okCh) {
+                            if (ok == false) { ret!((false, "bad sponsor signature")) }
+                            else {
+                              new fCh in {
+                                regCheckFeed!(feedUri, code, feedId, sponsorHex, policyHash, *fCh) |
+                                for (@f <- fCh) {
+                                  match f {
+                                    (true, reporters) => {
+                                      for (@s <<- oracleRegState) {
+                                        new rcCh in {
+                                          regCheckReporters!(reporters, sponsorHex,
+                                                             s.get("allowlist"), *rcCh) |
+                                          for (@rc <- rcCh) {
+                                            match rc {
+                                              (true, Nil) => {
+                                                regBind!(code, feedUri, feedId, policyHash,
+                                                         sponsorHex, *ret)
+                                              }
+                                              _ => { ret!(rc) }
+                                            }
+                                          }
+                                        }
+                                      }
                                     }
-                                    _ => { ret!(rc) }
+                                    _ => { ret!(f) }
                                   }
                                 }
                               }
                             }
                           }
-                          _ => { ret!(f) }
                         }
                       }
                     }
                   }
+                  (false, __why) => { ret!(1 / 0) }
+                  _ => { ret!(1 / 0) }
                 }
               }
             }

@@ -289,7 +289,7 @@ invariants:
     statement: Capability provenance and bundleability.
     predicate: Rholphin.Linear.Prov
     status: covered
-    note: Provenance model; caller names are never stored and bundles exclude registry-resolved capabilities. Source adherence is checked by check_capabilities.py and unit_ocap.py.
+    note: Provenance model; caller names are never stored and bundles exclude registry-resolved capabilities. Facet-kind attenuation is proved by facet_store_scope and the two rejection theorems. Source adherence is checked by check_capabilities.py and unit_ocap.py.
     theorems:
       - name: Rholphin.Linear.caller_never_stored
         strength: substantive
@@ -300,6 +300,82 @@ invariants:
       - name: Rholphin.Linear.bundle_no_registry_cap
         strength: substantive
         kind: preservation
+      - name: Rholphin.Linear.facet_store_scope
+        strength: substantive
+        kind: invariant
+      - name: Rholphin.Linear.facet_store_rejects_foreign_kind
+        strength: substantive
+        kind: rejection
+      - name: Rholphin.Linear.facet_store_rejects_foreign_auth
+        strength: substantive
+        kind: rejection
+      - name: Rholphin.Linear.mint_facet_cannot_store_burn_auth
+        strength: substantive
+        kind: rejection
+      - name: Rholphin.Linear.burn_facet_cannot_store_mint_auth
+        strength: substantive
+        kind: rejection
+      - {name: Rholphin.Linear.burn_facet_call_carries_payment, strength: substantive, kind: invariant}
+      - {name: Rholphin.Linear.settle_facet_call_carries_payment, strength: substantive, kind: invariant}
+      - {name: Rholphin.Linear.custody_deposit_carries_payment, strength: substantive, kind: invariant}
+      - {name: Rholphin.Linear.buffer_deposit_carries_payment, strength: substantive, kind: invariant}
+      - {name: Rholphin.Linear.mint_facet_call_carries_no_payment, strength: substantive, kind: invariant}
+      - {name: Rholphin.Linear.allowed_arm_has_kind, strength: substantive, kind: guard}
+  I25:
+    statement: >-
+      Provisioned facets: per-term sponsor-signed one-shot delivery; the nonce
+      is consumed before the consumer call; a forged facet is refused; a slot
+      is write-once; no facet name is returned to the caller.
+    predicate: Rholphin.Linear.provision
+    status: covered
+    note: >-
+      The provisioning model is the P5 reserve/confirm and P7 intra-deploy
+      grant. T1 publishes the issuer shop (mint/burn/settle/custody) and T3 the
+      BufferFacetShop; a consumer verifies a kind against the shop pinned for
+      it. Signatures are represented by equality with the sponsor bound at
+      creation; the deploy source is related by check_capabilities.py and the
+      RT-14/RT-15 scenarios, which have not been run on a devnet from this
+      branch.
+    theorems:
+      - {name: Rholphin.Linear.nonce_cannot_provision_twice, strength: substantive, kind: rejection}
+      - {name: Rholphin.Linear.provision_requires_pinned_shop, strength: substantive, kind: guard}
+      - {name: Rholphin.Linear.issuer_shop_cannot_issue_buffer, strength: substantive, kind: rejection}
+      - {name: Rholphin.Linear.buffer_shop_cannot_issue_mint, strength: substantive, kind: rejection}
+      - {name: Rholphin.Linear.provision_refusal_rolls_back, strength: substantive, kind: preservation}
+      - {name: Rholphin.Linear.provision_returns_no_cap, strength: substantive, kind: invariant}
+      - {name: Rholphin.Linear.provision_routes_facets_to_consumer, strength: substantive, kind: invariant}
+      - {name: Rholphin.Linear.forged_facet_refused, strength: substantive, kind: rejection}
+      - {name: Rholphin.Linear.issued_facet_accepted, strength: substantive, kind: preservation}
+      - {name: Rholphin.Linear.slot_write_once, strength: substantive, kind: rejection}
+      - {name: Rholphin.Linear.vault_accept_slot_write_once, strength: substantive, kind: rejection}
+      - {name: Rholphin.Linear.call_target_is_not_vault_accept, strength: substantive, kind: guard}
+  I26:
+    statement: >-
+      Authority rotation through Governor.authorize: the old auth is refused,
+      the new auth is accepted, and a facet that holds the auth cell stays live.
+    predicate: Rholphin.Linear.ledgerCheck
+    status: covered
+    note: >-
+      Rotation presents domain/nonce/action/argsHash/sigs to the published
+      Governor@"authorize" choke point; there is no AuthAdmin contract. The
+      domains cover four T1 auths, four T3 auths, two T4 auths, T2's
+      LiquidationAuthLedger (auth:<currency>:liquidation) and the
+      market/directory auths. The ledger creates the new auth internally. The
+      cell/value split is the model of "facets read the current auth per call".
+      The deploy-source rotation arms are exercised by RT-17, written but not
+      run from this branch.
+    theorems:
+      - {name: Rholphin.Linear.rotation_preserves_facet, strength: substantive, kind: preservation}
+      - {name: Rholphin.Linear.rotation_refuses_old, strength: substantive, kind: rejection}
+      - {name: Rholphin.Linear.rotation_accepts_new, strength: substantive, kind: preservation}
+      - {name: Rholphin.Linear.rotation_other_cell, strength: substantive, kind: preservation}
+      - {name: Rholphin.Linear.rotation_requires_governor, strength: substantive, kind: rejection}
+      - {name: Rholphin.Linear.authorized_rotation_keeps_facet, strength: substantive, kind: guard}
+      - {name: Rholphin.Linear.authorized_domain_action, strength: substantive, kind: guard}
+      - {name: Rholphin.Linear.authorized_rotation_refuses_old, strength: substantive, kind: rejection}
+      - {name: Rholphin.Linear.authorized_rotation_accepts_new, strength: substantive, kind: preservation}
+      - {name: Rholphin.Linear.auth_set_counts, strength: substantive, kind: invariant}
+      - {name: Rholphin.Linear.auth_domains_nodup, strength: substantive, kind: invariant}
   I21:
     statement: Only the owner's deployerId passes owner arms.
     predicate: Rholphin.Model.Identity.accountGate_verify
@@ -414,10 +490,17 @@ invariants:
     statement: Settle burns principal and deposits interest.
     predicate: Rholphin.Model.Issuer.Ledger
     status: partial
-    note: settle_principal is definitional; the interest deposit is not modelled.
+    note: >-
+      settle_principal is definitional; the interest deposit is not modelled.
+      The multi-term SettlementFacet return shape is modelled: a with-interest
+      reply carries the interest payment that T2 deposits via
+      BufferOperatorFacet, and a clean reply carries none.
     theorems:
       - {name: Rholphin.Model.Issuer.settle_principal, strength: definitional, kind: preservation}
       - {name: Rholphin.Model.Issuer.settle_S1, strength: substantive, kind: preservation}
+      - {name: Rholphin.Linear.settlement_interest_routes_to_buffer, strength: substantive, kind: invariant}
+      - {name: Rholphin.Linear.settlement_clean_routes_nothing, strength: definitional, kind: invariant}
+      - {name: Rholphin.Linear.settlement_return_shape, strength: substantive, kind: invariant}
   S8:
     statement: One system per currency; listing requires sponsor signature and live attestation.
     predicate: Rholphin.Model.Registry.S8
@@ -432,11 +515,17 @@ invariants:
     statement: Buffer waterfall; solvency precedes yield.
     predicate: Rholphin.Model.BufferSavings.Buffer
     status: partial
-    note: Surplus monotonicity is proved; the full waterfall order and burn step are not.
+    note: >-
+      Surplus monotonicity is proved; the full waterfall order and burn step are
+      not.  Because T1 can no longer read T3's buffer cell, the `sin > surplus`
+      recapitalisation check is a pre-effect guard on each mint consumer (T2
+      VaultBook.mint and T4 PSM.buyStable), not inside MintFacet.
     theorems:
       - {name: Rholphin.Model.BufferSavings.cover_surplus_le, strength: substantive, kind: preservation}
       - {name: Rholphin.Model.BufferSavings.paySavings_le, strength: definitional, kind: preservation}
       - {name: Rholphin.Model.BufferSavings.waterfall_le, strength: substantive, kind: preservation}
+      - {name: Rholphin.Linear.mint_consumer_refuses_recapitalise, strength: substantive, kind: rejection}
+      - {name: Rholphin.Linear.mint_consumer_recap_pre_effect, strength: substantive, kind: guard}
   S10:
     statement: Savings conservation; notify does not mint shares.
     predicate: Rholphin.S10
@@ -478,6 +567,21 @@ invariants:
       - {name: Rholphin.Invariants.S12_ready, strength: definitional, kind: preservation}
       - {name: Rholphin.Invariants.S12_nonce_monotone, strength: substantive, kind: preservation}
       - {name: Rholphin.Model.Governance.execute_not_early, strength: restatement, kind: preservation}
+  S13:
+    statement: >-
+      The admin nonce and the effect it authorizes are in the same cell, or
+      Governor owns the nonce and the effect is idempotent.
+    predicate: Rholphin.Model.Governance.Gov
+    status: partial
+    note: >-
+      Governor authorizes and consumes the per-domain nonce before the arm
+      applies the effect; the rotation is safety-idempotent and a replay is
+      refused. The deployed GovernorState is not modelled end to end.
+    theorems:
+      - {name: Rholphin.Linear.rotation_requires_governor, strength: substantive, kind: preservation}
+      - {name: Rholphin.Linear.authorized_rotation_refuses_old, strength: substantive, kind: rejection}
+      - {name: Rholphin.Linear.authorized_rotation_accepts_new, strength: substantive, kind: preservation}
+      - {name: Rholphin.Model.Market.rotate_refuses_replay, strength: substantive, kind: rejection}
 
 primitives:
   P1:
@@ -493,12 +597,27 @@ primitives:
     note: fail_aborts proves the abort is quiescent; the revalidation guard is not yet modelled.
     theorems:
       - {name: Rholphin.fail_aborts, strength: substantive, kind: law}
+  P5:
+    statement: Reserve/confirm; a nonce is reserved, external work is done, and a refusal rolls the reservation back.
+    status: partial
+    note: The provisioning instance of P5 is proved (nonce_cannot_provision_twice, provision_refusal_rolls_back); the general cross-deploy saga is not modelled.
+    theorems:
+      - {name: Rholphin.Linear.nonce_cannot_provision_twice, strength: substantive, kind: rejection}
+      - {name: Rholphin.Linear.provision_refusal_rolls_back, strength: substantive, kind: preservation}
   P6:
     statement: Fail-closed; a graceful refusal never follows a write.
     status: partial
     note: refuse_quiescent proves a refusal changes no state; the write-tracking antecedent is Phase 4.
     theorems:
       - {name: Rholphin.refuse_quiescent, strength: substantive, kind: law}
+  P7:
+    statement: Intra-deploy grant; the facet crosses as a process to the pinned consumer and no capability is returned.
+    status: covered
+    note: The no-capability and delivery halves are proved together; the forged-facet gate is the consumer-side half.
+    theorems:
+      - {name: Rholphin.Linear.provision_returns_no_cap, strength: substantive, kind: invariant}
+      - {name: Rholphin.Linear.provision_routes_facets_to_consumer, strength: substantive, kind: invariant}
+      - {name: Rholphin.Linear.forged_facet_refused, strength: substantive, kind: rejection}
   WF4:
     statement: A guarded effect preserves the arm invariant.
     status: covered
@@ -572,3 +691,4 @@ arm_coverage:
     Rholphin.Model.Oracle: {status: checked, note: I7/I8/I9}
     Rholphin.Model.Identity: {status: checked, note: I21}
     Rholphin.Model.Kernel: {status: model_only, note: pure bounds, codec and verifier surface}
+    Rholphin.Linear.Provisioning: {status: checked, note: I25/I26 provisioning and rotation}

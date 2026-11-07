@@ -1,0 +1,95 @@
+// RT-04: a caller-supplied facet is a sink. It may receive a payment through
+// `deposit`, never an authority call such as `withdraw`.
+//
+// The hostile facet records whether `withdraw` was ever called. The sender
+// escrows a REV transfer whose recipient facet is hostile, then the recipient
+// claims it with the correct secret. A correct TransferBook/TransferContract
+// calls only `deposit`; `captured` must stay false.
+//
+// Placeholders: __ROOT_URI__, __SENDER_PUB__, __RECIPIENT_PUB__, __FUND__,
+//               __AMOUNT__, __SECRET_HASH__, __SECRET__, __EXPIRY__.
+// Expected reply: [(true, amount), false].
+new
+  rl(`rho:registry:lookup`),
+  rootCh, afCh, ac, sCh, rCh,
+  ertpCh, revIssuerCh, purseCh, fundCh, wdCh, depCh, sfCh,
+  sendCh, claimCh, tcCh,
+  deployId(`rho:rchain:deployId`),
+  deployerId(`rho:rchain:deployerId`),
+  captureState, Hostile
+in {
+  captureState!({"captured": false}) |
+  contract Hostile(@"deposit", payment, ret) = { ret!((true, Nil)) } |
+  contract Hostile(@"withdraw", @amount, ret) = {
+    for (@c <<- captureState) { captureState!(c.set("captured", true)) } |
+    ret!((true, Nil))
+  } |
+
+  rl!(`__ROOT_URI__`, *rootCh) |
+  rl!(`rho:rchain:ertp`, *ertpCh) |
+  for (Root <- rootCh; @(_, ERTP) <- ertpCh) {
+    Root!("resolve", "component:account-factory", 1, *afCh) |
+    for (@(true, afUri, _) <- afCh) {
+      rl!(afUri, *ac) |
+      for (AccountFactory <- ac) {
+        AccountFactory!("getOrCreate", "__SENDER_PUB__".hexToBytes(), *sCh) |
+        for (@(true, sender, _senderId) <- sCh) {
+          AccountFactory!("getOrCreate", "__RECIPIENT_PUB__".hexToBytes(), *rCh) |
+          for (@(true, _recipient, _recipientId) <- rCh) {
+            @sender!("depositFacet", "REV", *sfCh) |
+            for (@sfr <- sfCh) {
+              match sfr {
+                (true, senderFacet) => {
+                  @ERTP!("getRevIssuer", *revIssuerCh) |
+                  for (@(revBrand, revIssuer) <- revIssuerCh) {
+                    @revIssuer!("makeEmptyPurse", *purseCh) |
+                    for (@(true, purse) <- purseCh) {
+                      @purse!("revFund", *deployerId, __FUND__, *fundCh) |
+                      for (@_ <- fundCh) {
+                        @purse!("withdraw", (revBrand, __AMOUNT__), *wdCh) |
+                        for (@(true, payment) <- wdCh) {
+                          @senderFacet!("deposit", payment, *depCh) |
+                          for (@d <- depCh) {
+                            match d {
+                              (true, _) => {
+                                @sender!("sendTransfer", *deployerId, "REV",
+                                         *Hostile,
+                                         "__RECIPIENT_PUB__".hexToBytes(),
+                                         __AMOUNT__,
+                                         "__SECRET_HASH__".hexToBytes(),
+                                         __EXPIRY__, "", "__OP_ID__", 0, *sendCh) |
+                                for (@s <- sendCh) {
+                                  match s {
+                                    (true, _id, uri) => {
+                                      rl!(uri, *tcCh) |
+                                      for (TransferContract <- tcCh) {
+                                        TransferContract!("claim",
+                                          "__SECRET__".hexToBytes(), *claimCh) |
+                                        for (@claim <- claimCh) {
+                                          for (@cap <<- captureState) {
+                                            deployId!([claim, cap.get("captured")])
+                                          }
+                                        }
+                                      }
+                                    }
+                                    _ => { deployId!(s) }
+                                  }
+                                }
+                              }
+                              _ => { deployId!(d) }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+                _ => { deployId!(sfr) }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

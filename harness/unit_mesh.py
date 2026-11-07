@@ -46,13 +46,13 @@ TERM_KEYS = [
 
 
 def canonical(schema: str, values: list[str]) -> str:
-    return schema + "|" + "|".join(f"{len(v)}:{v}" for v in values)
+    return sign_payload.canonical(schema, values)
 
 
 def admin_sigs(keys: dict, domain: str, nonce: int, action: str, args: str) -> str:
-    payload = f"rcash:admin:v1|{domain}|{nonce}|{action}|{args}"
+    payload = sign_payload.admin_payload(domain, nonce, action, [args])
     return ", ".join(
-        f'"{sign_payload.sign_payload(keys[name]["secret"], payload.encode())["signature"]}".hexToBytes()'
+        f'"{sign_payload.sign_payload(keys[name]["secret"], payload)["signature"]}".hexToBytes()'
         for name in ("admin1", "admin2"))
 
 
@@ -143,8 +143,8 @@ def main() -> int:
     sponsor = terms["sponsorPubKey"]
     sponsor_key = next(name for name in ("sponsor", "deployer")
                        if keys[name]["public"] == sponsor)
-    payload = f"rcash:market-create:v1|{new_values[0]}|{new_hash}|{sponsor}"
-    sig = sign_payload.sign_payload(keys[sponsor_key]["secret"], payload.encode())["signature"]
+    payload = sign_payload.market_create_payload(new_values[0], new_hash, sponsor)
+    sig = sign_payload.sign_payload(keys[sponsor_key]["secret"], payload)["signature"]
     terms_literal = "{" + ", ".join(
         f'"{key}": {json.dumps(new_terms[key])}' for key in TERM_KEYS) + "}"
     values_literal = "[" + ", ".join(json.dumps(v) for v in new_values) + "]"

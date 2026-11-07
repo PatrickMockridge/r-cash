@@ -10,11 +10,6 @@
     "contracts_target": 8,
     "contracts_fail": 12,
     "overrides": {
-      "contracts/build/deploy/v3/31_stablecoin.rho": {
-        "bytes": 47104,
-        "depth": 96,
-        "contracts": 69
-      },
       "contracts/build/deploy/v3/09_identity.rho": {
         "bytes": 16384,
         "depth": 96,
@@ -27,7 +22,7 @@
       },
       "contracts/build/deploy/v3/40_transfer.rho": {
         "bytes": 12288,
-        "depth": 64,
+        "depth": 80,
         "contracts": 8
       },
       "contracts/build/deploy/v3/50_market.rho": {
@@ -39,6 +34,36 @@
         "bytes": 24576,
         "depth": 96,
         "contracts": 26
+      },
+      "contracts/build/deploy/v3/31_vault.rho": {
+        "bytes": 24576,
+        "depth": 96,
+        "contracts": 32
+      },
+      "contracts/build/deploy/v3/31_buffer_savings.rho": {
+        "bytes": 16384,
+        "depth": 64,
+        "contracts": 21
+      },
+      "contracts/build/deploy/v3/31_psm.rho": {
+        "bytes": 16384,
+        "depth": 64,
+        "contracts": 19
+      },
+      "contracts/build/deploy/v3/32_currency_registry.rho": {
+        "bytes": 16384,
+        "depth": 80,
+        "contracts": 14
+      },
+      "contracts/build/deploy/v3/31_issuer.rho": {
+        "bytes": 16384,
+        "depth": 64,
+        "contracts": 27
+      },
+      "contracts/build/deploy/v3/31_params.rho": {
+        "bytes": 8192,
+        "depth": 48,
+        "contracts": 7
       }
     }
   },
@@ -471,6 +496,29 @@
         "bytes": 8192,
         "depth": 32,
         "contracts": 2
+      }
+    },
+    {
+      "name": "MarketAuthLedger",
+      "kind": "registry",
+      "stateful": true,
+      "state_cell": "marketAuthState",
+      "arms": [
+        "rotate"
+      ],
+      "dependencies": [
+        "Root",
+        "Governor"
+      ],
+      "creates": [],
+      "system": [],
+      "deploy": "contracts/src/deploy/v3/50_market.rho",
+      "instance_key": null,
+      "status": "implemented",
+      "budget": {
+        "bytes": 24576,
+        "depth": 48,
+        "contracts": 4
       }
     },
     {
@@ -921,24 +969,27 @@
         "brand",
         "issuer",
         "supply",
-        "mint",
-        "burn",
-        "settle",
         "amountOf",
+        "info",
         "attest"
       ],
-      "dependencies": [],
+      "dependencies": [
+        "Root",
+        "Governor",
+        "Codec",
+        "Verifier"
+      ],
       "creates": [],
       "system": [
         "rho:rchain:ertp"
       ],
-      "deploy": "contracts/src/deploy/v3/31_stablecoin.rho",
+      "deploy": "contracts/src/deploy/v3/31_issuer.rho",
       "instance_key": "currency",
       "status": "implemented",
       "budget": {
         "bytes": 24576,
-        "depth": 96,
-        "contracts": 35
+        "depth": 64,
+        "contracts": 16
       }
     },
     {
@@ -947,8 +998,6 @@
       "stateful": false,
       "state_cell": null,
       "arms": [
-        "deposit",
-        "withdraw",
         "balance",
         "attest"
       ],
@@ -957,13 +1006,13 @@
       "system": [
         "rho:rchain:ertp"
       ],
-      "deploy": "contracts/src/deploy/v3/31_stablecoin.rho",
+      "deploy": "contracts/src/deploy/v3/31_issuer.rho",
       "instance_key": "currency",
       "status": "implemented",
       "budget": {
         "bytes": 24576,
-        "depth": 96,
-        "contracts": 35
+        "depth": 64,
+        "contracts": 16
       }
     },
     {
@@ -974,24 +1023,25 @@
       "arms": [
         "params",
         "info",
-        "attest",
         "scheduleParams",
-        "applyParams"
+        "applyParams",
+        "attest"
       ],
       "dependencies": [
+        "Root",
         "Bounds",
         "Codec",
         "Governor"
       ],
       "creates": [],
       "system": [],
-      "deploy": "contracts/src/deploy/v3/31_stablecoin.rho",
+      "deploy": "contracts/src/deploy/v3/31_params.rho",
       "instance_key": "currency",
       "status": "implemented",
       "budget": {
         "bytes": 8192,
         "depth": 48,
-        "contracts": 5
+        "contracts": 8
       }
     },
     {
@@ -1031,7 +1081,7 @@
       "system": [
         "rho:rchain:ertp"
       ],
-      "deploy": "contracts/src/deploy/v3/31_stablecoin.rho",
+      "deploy": "contracts/src/deploy/v3/31_vault.rho",
       "instance_key": "currency",
       "status": "implemented",
       "budget": {
@@ -1046,14 +1096,15 @@
       "stateful": false,
       "state_cell": null,
       "arms": [
-        "liquidate"
+        "liquidate",
+        "attest"
       ],
       "dependencies": [
         "VaultBook"
       ],
       "creates": [],
       "system": [],
-      "deploy": "contracts/src/deploy/v3/31_stablecoin.rho",
+      "deploy": "contracts/src/deploy/v3/31_vault.rho",
       "instance_key": "currency",
       "status": "implemented",
       "budget": {
@@ -1122,7 +1173,8 @@
         "withdraw",
         "notify",
         "info",
-        "position"
+        "position",
+        "attest"
       ],
       "dependencies": [
         "Root",
@@ -1133,7 +1185,7 @@
         "rho:rchain:deployerId:ops",
         "rho:rev:address"
       ],
-      "deploy": "contracts/src/deploy/v3/31_stablecoin.rho",
+      "deploy": "contracts/src/deploy/v3/31_buffer_savings.rho",
       "instance_key": "currency",
       "status": "implemented",
       "budget": {
@@ -1148,12 +1200,11 @@
       "stateful": true,
       "state_cell": "bufferState",
       "arms": [
-        "deposit",
-        "cover",
-        "paySavings",
+        "acceptFacet",
         "info",
         "scheduleShare",
-        "applyShare"
+        "applyShare",
+        "attest"
       ],
       "dependencies": [
         "Root",
@@ -1163,7 +1214,7 @@
       ],
       "creates": [],
       "system": [],
-      "deploy": "contracts/src/deploy/v3/31_stablecoin.rho",
+      "deploy": "contracts/src/deploy/v3/31_buffer_savings.rho",
       "instance_key": "currency",
       "status": "implemented",
       "budget": {
@@ -1178,13 +1229,15 @@
       "stateful": true,
       "state_cell": "psmState",
       "arms": [
+        "acceptFacet",
         "fundRev",
-        "buyStable",
         "sellStable",
+        "buyStable",
+        "schedulePolicy",
+        "applyPolicy",
         "info",
         "debt",
-        "schedulePolicy",
-        "applyPolicy"
+        "attest"
       ],
       "dependencies": [
         "Root",
@@ -1198,13 +1251,132 @@
         "rho:rchain:ertp",
         "rho:rchain:revVault"
       ],
-      "deploy": "contracts/src/deploy/v3/31_stablecoin.rho",
+      "deploy": "contracts/src/deploy/v3/31_psm.rho",
       "instance_key": "currency",
       "status": "implemented",
       "budget": {
         "bytes": 16384,
         "depth": 96,
         "contracts": 7
+      }
+    },
+    {
+      "name": "VaultAccept",
+      "kind": "domain",
+      "stateful": true,
+      "state_cell": "provisionedState",
+      "arms": [
+        "acceptFacet"
+      ],
+      "dependencies": [
+        "Root"
+      ],
+      "creates": [],
+      "system": [],
+      "deploy": "contracts/src/deploy/v3/31_vault.rho",
+      "instance_key": null,
+      "status": "implemented",
+      "budget": {
+        "bytes": 24576,
+        "depth": 48,
+        "contracts": 2
+      }
+    },
+    {
+      "name": "LiquidationAuthLedger",
+      "kind": "registry",
+      "stateful": true,
+      "state_cell": "liquidationAuthState",
+      "arms": [
+        "rotate"
+      ],
+      "dependencies": [
+        "Root",
+        "Governor"
+      ],
+      "creates": [],
+      "system": [],
+      "deploy": "contracts/src/deploy/v3/31_vault.rho",
+      "instance_key": null,
+      "status": "implemented",
+      "budget": {
+        "bytes": 24576,
+        "depth": 48,
+        "contracts": 2
+      }
+    },
+    {
+      "name": "BufferFacetShop",
+      "kind": "registry",
+      "stateful": true,
+      "state_cell": "bufferProvisionState",
+      "arms": [
+        "provision",
+        "isFacet"
+      ],
+      "dependencies": [
+        "Root",
+        "Verifier",
+        "Codec"
+      ],
+      "creates": [],
+      "system": [],
+      "deploy": "contracts/src/deploy/v3/31_buffer_savings.rho",
+      "instance_key": null,
+      "status": "implemented",
+      "budget": {
+        "bytes": 16384,
+        "depth": 48,
+        "contracts": 2
+      }
+    },
+    {
+      "name": "AuthLedger",
+      "kind": "domain",
+      "stateful": true,
+      "state_cell": "mintAuthState",
+      "arms": [
+        "check",
+        "rotate"
+      ],
+      "dependencies": [
+        "Root",
+        "Governor"
+      ],
+      "creates": [],
+      "system": [],
+      "deploy": "contracts/src/deploy/v3/31_issuer.rho",
+      "instance_key": "currency",
+      "status": "implemented",
+      "budget": {
+        "bytes": 24576,
+        "depth": 64,
+        "contracts": 16
+      }
+    },
+    {
+      "name": "FacetShop",
+      "kind": "domain",
+      "stateful": true,
+      "state_cell": "shopState",
+      "arms": [
+        "provision",
+        "isFacet"
+      ],
+      "dependencies": [
+        "Root",
+        "Codec",
+        "Verifier"
+      ],
+      "creates": [],
+      "system": [],
+      "deploy": "contracts/src/deploy/v3/31_issuer.rho",
+      "instance_key": "currency",
+      "status": "implemented",
+      "budget": {
+        "bytes": 24576,
+        "depth": 64,
+        "contracts": 16
       }
     }
   ]

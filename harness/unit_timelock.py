@@ -28,6 +28,7 @@ import netconfig  # noqa: E402
 import deploy as node  # noqa: E402
 import sign_payload  # noqa: E402
 from unit_feed import blake2b256, canonical  # noqa: E402
+from unit_psm import psm_policy_hash, psm_policy_sigs  # noqa: E402
 from unit_v3 import call, check, one  # noqa: E402
 
 KEYS = netconfig.KEYS_PATH
@@ -36,10 +37,11 @@ DOMAIN = "stablecoin:V4T"
 
 
 def sigs_for(keys: dict, nonce: int, action: str, args_hash: str) -> str:
-    payload = f"rcash:admin:v1|{DOMAIN}|{nonce}|{action}|{args_hash}"
+    # OCAP-09: AdminGuard verifies the length-prefixed canonical preimage.
+    payload = sign_payload.admin_canonical_payload(DOMAIN, nonce, action, args_hash)
     sigs = []
     for name in ("admin1", "admin2"):
-        sig = sign_payload.sign_payload(keys[name]["secret"], payload.encode())["signature"]
+        sig = sign_payload.sign_payload(keys[name]["secret"], payload)["signature"]
         sigs.append(f'"{sig}".hexToBytes()')
     return "[" + ", ".join(sigs) + "]"
 
@@ -110,10 +112,10 @@ def main() -> int:
         "for (@x <- r) { deployId!(x) }"), deployer)
     check("share scheduled", schedule_share[0], True)
 
-    policy_hash = f"25|{ceiling}"
+    policy_hash = psm_policy_hash(25, ceiling)
     schedule_policy = one(call(psm_uri, "PegStabilityModule",
         f'PegStabilityModule!("schedulePolicy", 25, {ceiling}, {nonce_policy}, '
-        f'{sigs_for(keys, nonce_policy, "setPsmPolicy", policy_hash)}, *r) | '
+        f'{psm_policy_sigs(keys, 25, ceiling, nonce_policy, DOMAIN)}, *r) | '
         "for (@x <- r) { deployId!(x) }"), deployer)
     check("policy scheduled", schedule_policy[0], True)
 

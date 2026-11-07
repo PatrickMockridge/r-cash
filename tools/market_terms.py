@@ -11,6 +11,8 @@ import hashlib
 import json
 from pathlib import Path
 
+from sign_payload import canonical
+
 ROOT = Path(__file__).resolve().parent.parent
 VECTORS = ROOT / "tests" / "terms" / "terms-vectors.json"
 
@@ -19,11 +21,6 @@ ZONE_SCHEMA = "rcash:zone-params:v1"
 FEED_SCHEMA = "rcash:oracle-policy:v3"
 POOL_SCHEMA = "rcash:pool-params:v1"
 BOOK_SCHEMA = "rcash:book-params:v4"
-
-
-def canonical(schema: str, values: list[str | int]) -> str:
-    encoded = [f"{len(str(v).encode('utf-8'))}:{v}" for v in values]
-    return "|".join([schema, *encoded])
 
 
 def digest(text: str) -> str:

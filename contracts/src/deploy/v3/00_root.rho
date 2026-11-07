@@ -92,6 +92,18 @@ in {
 
   contract Root(@"rotate", @key, @expectedVersion, @newUri, @newVersion,
                  @nonce, @sigs, ret) = {
+    // Canonical rotate preimage: the Codec length-prefixes each field, so a
+    // URI containing "|" cannot shift the signed field boundary.
+    new cCh, argsCh in {
+      Root!("resolve", "component:codec", 1, *cCh) |
+      for (@(true, codecUri, _) <- cCh) {
+        new cc in {
+          rl!(codecUri, *cc) |
+          for (Codec <- cc) {
+            Codec!("canonical", "rcash:root-rotate:v1",
+                   [key, expectedVersion.toString(), newUri,
+                    newVersion.toString()], *argsCh) |
+            for (@argsHash <- argsCh) {
     for (@s <<- rootState) {
       if (s.get("frozen")) { ret!((false, "frozen")) }
       else {
@@ -101,9 +113,7 @@ in {
             if (entry.get("version") != expectedVersion) { ret!((false, "stale")) }
             else {
               new vCh in {
-                rootAuthorize!("root", nonce, "rotate",
-                               key ++ "|" ++ expectedVersion.toString() ++ "|"
-                               ++ newUri ++ "|" ++ newVersion.toString(),
+                rootAuthorize!("root", nonce, "rotate", argsHash,
                                sigs, s.get("admins"), s.get("threshold"), *vCh) |
                 for (@v <- vCh) {
                   match v {
@@ -134,6 +144,11 @@ in {
                   }
                 }
               }
+            }
+          }
+        }
+      }
+    }
             }
           }
         }

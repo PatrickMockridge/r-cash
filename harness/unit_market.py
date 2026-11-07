@@ -15,6 +15,7 @@ Usage:
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -34,7 +35,9 @@ from unit_v3 import call, check, faucet_top_up, one  # noqa: E402
 KEYS = netconfig.KEYS_PATH
 STATE = netconfig.STATE_PATH
 SCENARIOS = ROOT / "harness" / "scenarios"
-MARKET_ID = "REV/V4T:v1"
+MARKET_ID = os.environ.get("RCASH_MARKET_ID", "REV/V4T:v1")
+SLUG = os.environ.get("RCASH_MARKET_SLUG", "rev-v4t")
+VERSION = int(os.environ.get("RCASH_MARKET_VERSION", "1"))
 BASE = "REV"
 QUOTE = "V4T"
 SPREAD = 30
@@ -85,7 +88,11 @@ def main() -> int:
     currency_registry = state["currency_registry_uri"]
     factory = state["market_factory_uri"]
     index = state["market_index_uri"]
-    sponsor = keys["sponsor"]
+    # The seed pays the lock from the deployer purse (OCAP-12 requires the
+    # funder to be the beneficiary), so this suite uses the funded deployer as
+    # the market sponsor; the distinct-sponsor path is covered by unit-stablecoin
+    # and unit-external.
+    sponsor = keys["deployer"]
     faucet_top_up(keys["key18"]["address"])
     faucet_top_up(keys["sponsor"]["address"])
     lock_until = node.height() + 60
@@ -111,8 +118,8 @@ def main() -> int:
     v4t_entry = entry(v4t_feed, "V4T")
 
     fields = [
-        ("marketId", MARKET_ID), ("slug", "rev-v4t"), ("base", BASE), ("quote", QUOTE),
-        ("version", 1), ("sponsorPubKey", sponsor["public"]),
+        ("marketId", MARKET_ID), ("slug", SLUG), ("base", BASE), ("quote", QUOTE),
+        ("version", VERSION), ("sponsorPubKey", sponsor["public"]),
         ("sponsorOwnerId", sponsor["address"]),
         ("baseFeedPolicyHash", rev_entry.get("policyHash")),
         ("quoteFeedPolicyHash", v4t_entry.get("policyHash")),
@@ -131,8 +138,9 @@ def main() -> int:
     terms_literal = "{" + ", ".join(
         f'"{key}": {rholang_value(value)}' for key, value in fields) + "}"
     values_literal = "[" + ", ".join(f'"{v}"' for v in values) + "]"
-    payload = f"rcash:market-create:v1|{MARKET_ID}|{terms_hash}|{sponsor['public']}"
-    sig = sign_payload.sign_payload(sponsor["secret"], payload.encode())["signature"]
+    payload = sign_payload.market_create_payload(
+        MARKET_ID, terms_hash, sponsor["public"])
+    sig = sign_payload.sign_payload(sponsor["secret"], payload)["signature"]
 
     create_term = (
         "new rl(`rho:registry:lookup`), ch, r, deployId(`rho:rchain:deployId`), "
@@ -189,14 +197,14 @@ def main() -> int:
         "__POOL_URI__": pool_uri,
         "__LOCK_URI__": lock_uri,
         "__LOCK_UNTIL__": str(lock_until),
-        "__PUBKEY__": keys["deployer"]["public"],
+        "__PUBKEY__": sponsor["public"],
         "__FUND_REV__": str(FUND_REV),
         "__COLLATERAL__": str(COLLATERAL),
         "__MINT__": str(MINT),
         "__BASE_AMT__": str(BASE_AMT),
         "__QUOTE_AMT__": str(QUOTE_AMT),
     })
-        seeded = one(seed_term, keys["deployer"]["secret"])
+        seeded = one(seed_term, sponsor["secret"])
         if isinstance(seeded[2], dict):
             shares, seeded_reserves, lock_shares = seeded[1], seeded[2], seeded[3]
         else:
@@ -276,7 +284,7 @@ def main() -> int:
     gate = state["tradability_gate_uri"]
     check("view isActive",
           one(call(views, "ListingViews",
-                   'ListingViews!("isActive", "REV/V4T:v1", *r) | '
+                   f'ListingViews!("isActive", "{MARKET_ID}", *r) | '
                    "for (@x <- r) { deployId!(x) }"), keys["deployer"]["secret"]),
           (True, True))
     view_record = one(call(views, "ListingViews",
@@ -310,19 +318,19 @@ def main() -> int:
           (False, "max trade"))
 
     def set_status(status: str, nonce: int) -> list:
-        args = f"REV/V4T:v1|{status}"
-        payload = f"rcash:admin:v1|market-index|{nonce}|setStatus|{args}"
+        args = f"{MARKET_ID}|{status}"
+        payload = sign_payload.admin_payload("market-index", nonce, "setStatus", [args])
         sigs = ", ".join(
-            f'"{sign_payload.sign_payload(keys[n]["secret"], payload.encode())["signature"]}".hexToBytes()'
+            f'"{sign_payload.sign_payload(keys[n]["secret"], payload)["signature"]}".hexToBytes()'
             for n in ("admin1", "admin2"))
-        body = (f'MarketIndex!("setStatus", "REV/V4T:v1", "{status}", {nonce}, '
+        body = (f'MarketIndex!("setStatus", "{MARKET_ID}", "{status}", {nonce}, '
                 f"[{sigs}], *r) | for (@x <- r) {{ deployId!(x) }}")
         return one(call(index, "MarketIndex", body), keys["deployer"]["secret"])
 
     status_nonce = node.height()
     check("market paused", set_status("paused", status_nonce), (True, "paused"))
     check("paused view", one(call(views, "ListingViews",
-                                  'ListingViews!("isActive", "REV/V4T:v1", *r) | '
+                                  f'ListingViews!("isActive", "{MARKET_ID}", *r) | '
                                   "for (@x <- r) { deployId!(x) }"),
                              keys["deployer"]["secret"]), (True, False))
     paused_quote = one(call(pool_uri, "FxPool",
@@ -341,8 +349,9 @@ def main() -> int:
     literal2 = "{" + ", ".join(
         f'"{key}": {rholang_value(value)}' for key, value in fields2) + "}"
     values2_literal = "[" + ", ".join(f'"{v}"' for v in values2) + "]"
-    payload2 = f"rcash:market-create:v1|REV/V4T:v2|{hash2}|{sponsor['public']}"
-    sig2 = sign_payload.sign_payload(sponsor["secret"], payload2.encode())["signature"]
+    payload2 = sign_payload.market_create_payload(
+        "REV/V4T:v2", hash2, sponsor["public"])
+    sig2 = sign_payload.sign_payload(sponsor["secret"], payload2)["signature"]
     create2 = (
         "new rl(`rho:registry:lookup`), ch, r, deployId(`rho:rchain:deployId`), "
         "deployerId(`rho:rchain:deployerId`) in {\n"
