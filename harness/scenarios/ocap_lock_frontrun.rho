@@ -1,0 +1,42 @@
+// RT-12: a non-beneficiary cannot fund a market seed lock. The caller's
+// deployerId is not the lock beneficiary, so OCAP-12's funder binding must
+// refuse before the LP payment is deposited; the lock stays unfunded and the
+// beneficiary is unchanged.
+// Placeholders: __ROOT_URI__, __ATTACKER_PUB__, __LOCK_URI__,
+//               __BENEFICIARY_ID__, __LP_ASSET__, __LP_AMOUNT__,
+//               __UNTIL_HEIGHT__.
+// Expected reply: [refusal, info]; info.funder != attacker ownerId.
+new
+  rl(`rho:registry:lookup`),
+  rootCh, afCh, ac, oCh, lockCh, wdCh, r1, r2,
+  deployId(`rho:rchain:deployId`),
+  deployerId(`rho:rchain:deployerId`)
+in {
+  rl!(`__ROOT_URI__`, *rootCh) |
+  rl!(`__LOCK_URI__`, *lockCh) |
+  for (Root <- rootCh; LiquidityLock <- lockCh) {
+    Root!("resolve", "component:account-factory", 1, *afCh) |
+    for (@(true, afUri, _) <- afCh) {
+      rl!(afUri, *ac) |
+      for (AccountFactory <- ac) {
+        AccountFactory!("getOrCreate", "__ATTACKER_PUB__".hexToBytes(), *oCh) |
+        for (@(true, attacker, _ownerId) <- oCh) {
+          @attacker!("withdraw", *deployerId, "__LP_ASSET__", __LP_AMOUNT__, *wdCh) |
+          for (@w <- wdCh) {
+            match w {
+              (true, payment) => {
+                LiquidityLock!("fund", *deployerId, payment,
+                               "__BENEFICIARY_ID__", __UNTIL_HEIGHT__, *r1) |
+                for (@f <- r1) {
+                  LiquidityLock!("info", *r2) |
+                  for (@info <- r2) { deployId!([f, info]) }
+                }
+              }
+              _ => { deployId!(w) }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,21 @@
+// RT-06: a signed provisioning payload is bound to its domain/action. A
+// signature produced for `rcash:provision:v2` (or for another action) must be
+// refused by the v1 issuer shop before any nonce or slot changes. T3's buffer
+// facets use BufferFacetShop; this scenario targets the T1 issuer shop
+// (mint/burn/settle/custody).
+// Placeholders: __ISSUER_SHOP_URI__, __CONSUMER_URI__, __ISSUER_URI__, __KINDS__,
+//               __NONCE__, __DEADLINE__, __SPONSOR_HEX__, __SIGNATURE__.
+// Expected reply: (false, reason); never (true, ...).
+new
+  rl(`rho:registry:lookup`),
+  shopCh, r,
+  deployId(`rho:rchain:deployId`)
+in {
+  rl!(`__ISSUER_SHOP_URI__`, *shopCh) |
+  for (FacetShop <- shopCh) {
+    FacetShop!("provision", "__CONSUMER_URI__", "ocap-rt06", __KINDS__,
+               __NONCE__, __DEADLINE__, "__SPONSOR_HEX__",
+               "__SIGNATURE__".hexToBytes(), *r) |
+    for (@x <- r) { deployId!(x) }
+  }
+}
