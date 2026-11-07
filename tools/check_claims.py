@@ -143,6 +143,19 @@ def flow_invariants() -> dict[str, set[str]]:
     return found
 
 
+def flow_arms() -> list[tuple[str, str, str]]:
+    """Every flow arm: (arm key, lean name, status)."""
+    out: list[tuple[str, str, str]] = []
+    for path in sorted(FLOWS.glob("*.yaml")):
+        doc = yaml.safe_load(path.read_text()) or {}
+        for component in doc.get("components", []):
+            for arm in component.get("arms") or []:
+                lean = arm.get("lean")
+                if lean:
+                    out.append((str(arm.get("arm")), str(lean), str(arm.get("status"))))
+    return out
+
+
 def audit_names() -> set[str]:
     if not AUDIT.is_file():
         return set()
@@ -160,6 +173,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--check", action="store_true")
     parser.add_argument("--strict-audit", action="store_true")
+    parser.add_argument("--strict-arms", action="store_true")
     args = parser.parse_args()
 
     register = load_register()
@@ -240,6 +254,24 @@ def main() -> int:
         for inv in sorted(ids):
             if inv not in claims:
                 errors.append(f"{filename}: invariant {inv} has no claim")
+
+    coverage = (register.get("arm_coverage") or {}).get("modules") or {}
+    arms = flow_arms()
+    unclassified: list[str] = []
+    for arm, lean, status in arms:
+        if status != "verified":
+            continue
+        module = lean.rsplit(".", 1)[0]
+        if module not in coverage:
+            unclassified.append(f"{arm} -> {module}")
+    for item in unclassified:
+        message = f"flow arm has no arm_coverage module: {item}"
+        if args.strict_arms:
+            errors.append(message)
+        else:
+            warnings.append(message)
+    print(f"arm-coverage: {len(arms)} arms, {len(coverage)} modules, "
+          f"{len(unclassified)} unclassified")
 
     if args.strict_audit:
         for item in unaudited:

@@ -44,12 +44,13 @@ check-captures:
 spec-check: build measure-check check-arch check-captures
 
 # TLC is optional; the TLA+ files are specifications, not runtime dependencies.
+TLC ?= tlc
 tla-check:
-	@if command -v tlc >/dev/null 2>&1; then \
+	@if command -v $$(echo $(TLC) | cut -d' ' -f1) >/dev/null 2>&1; then \
 	  mkdir -p /tmp/rcash-tlc; \
 	  for cfg in spec/tla/*.cfg; do \
 	    echo "== $$cfg"; \
-	    tlc -metadir /tmp/rcash-tlc -config "$$cfg" "$${cfg%.cfg}.tla" || exit 1; \
+	    $(TLC) -metadir /tmp/rcash-tlc -config "$$cfg" "$${cfg%.cfg}.tla" || exit 1; \
 	  done; \
 	else \
 	  echo "tlc not installed; skipping TLA+ check"; \
@@ -161,7 +162,7 @@ flows:
 
 check-flows:
 	$(PY) tools/rho_inventory.py --check
-	$(PY) tools/check_flows.py --check --strict
+	$(PY) tools/check_flows.py --check --strict --phases --effects --guards
 	$(PY) tools/render_flows.py --check
 
 check-trace:

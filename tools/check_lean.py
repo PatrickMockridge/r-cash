@@ -128,7 +128,7 @@ def main() -> int:
             return 1
 
     claims = subprocess.run(
-        [sys.executable, str(CLAIMS), "--check"], cwd=ROOT, text=True, capture_output=True
+        [sys.executable, str(CLAIMS), "--check", "--strict-arms"], cwd=ROOT, text=True, capture_output=True
     )
     sys.stdout.write(claims.stdout)
     sys.stderr.write(claims.stderr)

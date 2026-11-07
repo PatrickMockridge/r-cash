@@ -157,10 +157,10 @@
       "brace_depth": 40,
       "contracts": 34,
       "grammar_depth": 63,
-      "minified_bytes": 20945,
+      "minified_bytes": 21472,
       "operator_run": 4,
-      "sha256": "b4dd7a35293ccdbd1523ccc2c90535614d576954f9fc71e2692457ec4b4b7717",
-      "source_bytes": 40949
+      "sha256": "ac16fa70d315b50d31fa529a75dd76fb6af3ad838b4540aa5eeb1a99c80f60fa",
+      "source_bytes": 42207
     },
     "contracts/build/deploy/v3/51_pool.rho": {
       "brace_depth": 41,

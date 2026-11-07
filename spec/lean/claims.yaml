@@ -158,12 +158,18 @@ invariants:
       - {name: Rholphin.terms_put_integrity, strength: substantive, kind: preservation}
       - {name: Rholphin.terms_put_rejects_mismatch, strength: substantive, kind: rejection}
       - {name: Rholphin.hash_distinct, strength: substantive, kind: invariant}
+      - {name: Rholphin.Model.Market.marketTerms_putChecked_integrity, strength: substantive, kind: preservation}
+      - {name: Rholphin.Model.Market.marketTerms_putChecked_refuses_bad_sponsor, strength: substantive, kind: rejection}
   I6:
     statement: Market URI slots are factory-created and sealed before activation.
-    predicate: Rholphin.Model.Market.Directory
-    status: deferred
-    deferral: {phase: 5, reason: no well-formedness predicate for sealed slots yet}
-    theorems: []
+    predicate: Rholphin.Model.Market.DirectoryWellFormed
+    status: partial
+    note: >-
+      bind and seal preserve slot well-formedness.  Factory ownership is a
+      capability in the deploy, not a modelled predicate.
+    theorems:
+      - {name: Rholphin.Model.Market.bind_preserves_directory, strength: substantive, kind: preservation}
+      - {name: Rholphin.Model.Market.seal_preserves_directory, strength: substantive, kind: preservation}
   I7:
     statement: Feed freshness; quorum, median, age, band, spread.
     predicate: Rholphin.Model.Oracle.Feed
@@ -178,16 +184,25 @@ invariants:
         kind: rejection
   I8:
     statement: Three distinct reporter keys; sponsor occupies at most one slot.
-    predicate: Rholphin.Model.Oracle.reporterSet
-    status: deferred
-    deferral: {phase: 5, reason: Feed has no reporter set in the model}
-    theorems: []
+    predicate: Rholphin.Model.Oracle.reportersOk
+    status: partial
+    note: >-
+      The three-key, distinctness and sponsor-slot implications are proved; the
+      registration wiring is traceability.
+    theorems:
+      - {name: Rholphin.Model.Oracle.reportersOk_nodup, strength: substantive, kind: invariant}
+      - {name: Rholphin.Model.Oracle.reportersOk_length, strength: substantive, kind: invariant}
+      - {name: Rholphin.Model.Oracle.reportersOk_sponsor, strength: substantive, kind: invariant}
   I9:
     statement: Pair rate is fresh per feed and within the caller's age bound.
     predicate: Rholphin.Model.Oracle.PairQuote
-    status: deferred
-    deferral: {phase: 5, reason: getPair is a projection stub}
-    theorems: []
+    status: partial
+    note: >-
+      A stale pair is refused and a successful pair exposes both ages.  The hub
+      wiring is traceability.
+    theorems:
+      - {name: Rholphin.Model.Oracle.stale_pair_refused, strength: substantive, kind: rejection}
+      - {name: Rholphin.Model.Oracle.pair_rate_ages, strength: substantive, kind: invariant}
   I10:
     statement: Pool reserves equal native custody.
     predicate: Rholphin.Model.Pool.PoolCustody
@@ -249,9 +264,15 @@ invariants:
   I15:
     statement: No payment is stranded on a refusal.
     predicate: Rholphin.Linear.NoStranded
-    status: deferred
-    deferral: {phase: 2, reason: needs the P3/P6 primitive laws and a payment abstraction}
-    theorems: []
+    status: partial
+    note: >-
+      A rejected deploy has no state effect, and a refusal leaves the store and
+      held set unchanged.  The native payment side is the ertp.native_total
+      assumption.
+    theorems:
+      - {name: Rholphin.reject_no_effect, strength: substantive, kind: law}
+      - {name: Rholphin.refuse_quiescent, strength: substantive, kind: law}
+      - {name: Rholphin.fail_aborts, strength: substantive, kind: law}
   I19:
     statement: Admin threshold and monotone nonce.
     predicate: Rholphin.Model.Governance.GovernorState
@@ -391,10 +412,14 @@ invariants:
       - {name: Rholphin.Model.Issuer.settle_S1, strength: substantive, kind: preservation}
   S8:
     statement: One system per currency; listing requires sponsor signature and live attestation.
-    predicate: Rholphin.S8
-    status: deferred
-    deferral: {phase: 5, reason: no registry/listing consistency predicate}
-    theorems: []
+    predicate: Rholphin.Model.Registry.S8
+    status: partial
+    note: >-
+      Checked registration preserves root/listing consistency.  The sponsor
+      signature and live attestation are the Sig/CollisionResistant hypotheses.
+    theorems:
+      - {name: Rholphin.Model.Registry.registerListed_refuses_no_root, strength: substantive, kind: rejection}
+      - {name: Rholphin.Model.Registry.registerListed_preserves_S8, strength: substantive, kind: preservation}
   S9:
     statement: Buffer waterfall; solvency precedes yield.
     predicate: Rholphin.Model.BufferSavings.Buffer
@@ -512,3 +537,30 @@ primitives:
     theorems:
       - {name: Rholphin.codec_no_pipe_collision, strength: substantive, kind: law}
       - {name: Rholphin.codec_injective, strength: substantive, kind: invariant}
+
+  SER:
+    statement: A committed deploy does not change a disjoint deploy's precondition or values.
+    status: covered
+    theorems:
+      - {name: Rholphin.preOk_disjoint, strength: substantive, kind: law}
+      - {name: Rholphin.commit_disjoint_does_not_block, strength: substantive, kind: law}
+      - {name: Rholphin.apply_disjoint_values, strength: substantive, kind: law}
+
+# Module-level arm coverage.  Every flow arm's `lean:` name belongs to one of
+# these modules; a new module must be classified before the gate passes.
+# `checked` means the module carries substantive claims; `model_only` means it
+# is a pure helper/read surface with no invariant obligation of its own.
+arm_coverage:
+  modules:
+    Rholphin.Model.Issuer: {status: checked, note: S1/S3/S5/S6/S7 transitions}
+    Rholphin.Model.Vault: {status: checked, note: S2/S4 transitions}
+    Rholphin.Model.BufferSavings: {status: checked, note: S9/S10 transitions}
+    Rholphin.Model.Psm: {status: checked, note: S11 checked transitions}
+    Rholphin.Model.Registry: {status: checked, note: I2/I23/S8}
+    Rholphin.Model.Transfer: {status: checked, note: I14 claim/refund exclusivity}
+    Rholphin.Model.Market: {status: checked, note: I3/I4/I6/I12}
+    Rholphin.Model.Pool: {status: checked, note: I10/I11/I13}
+    Rholphin.Model.Governance: {status: checked, note: I19/S12}
+    Rholphin.Model.Oracle: {status: checked, note: I7/I8/I9}
+    Rholphin.Model.Identity: {status: checked, note: I21}
+    Rholphin.Model.Kernel: {status: model_only, note: pure bounds, codec and verifier surface}

@@ -15,12 +15,14 @@ components:
   arms:
   - arm: MarketTerms@"put"
     transition: market.MarketTerms.put
-    lean: Rholphin.Model.Market.marketTerms_put
+    lean: Rholphin.Model.Market.marketTerms_putChecked
     kind: mutate
-    source: {file: contracts/src/deploy/v3/50_market.rho, line: 122}
+    source: {file: contracts/src/deploy/v3/50_market.rho, line: 125}
     guards:
     - {id: bounds, expr: 'Bounds.checkTerms(terms, values)', refusal: {reason: terms fields, phase: pre}}
     - {id: canonical, expr: 'hash = Codec.canonical(rcash:market-terms:v4, values)', refusal: {reason: terms fields, phase: pre}}
+    - {id: sponsor_key, expr: 'terms.sponsorPubKey = sponsorHex', refusal: {reason: bad sponsor signature, phase: pre}}
+    - {id: sponsor_sig, expr: 'Verifier.sigOk(H(rcash:market-create|marketId|hash|sponsor), sig, sponsor)', refusal: {reason: bad sponsor signature, phase: pre}}
     effects:
     - {target: 'terms[hash]', formula: '{terms: terms, values: values}'}
     - {target: rev, formula: rev + 1}
@@ -28,8 +30,10 @@ components:
     access:
     - {cell: termsState, mode: consume, actor: arm, phase: commit}
     - {cell: termsState, mode: post, actor: arm, phase: commit}
-    nested_calls: []
-    refusals: []
+    nested_calls:
+    - {callee: marketVerifier, protocol: P0, takes: [], puts: [], post_owner: helper}
+    refusals:
+    - {reason: bad sponsor signature, phase: pre, reposts: false, fail: false}
     invariants:
     - I5
     status: verified
@@ -39,7 +43,7 @@ components:
     transition: market.MarketTerms.get
     lean: Rholphin.Model.Market.marketTerms_get
     kind: read
-    source: {file: contracts/src/deploy/v3/50_market.rho, line: 163}
+    source: {file: contracts/src/deploy/v3/50_market.rho, line: 182}
     guards:
     - {id: exists, expr: 'terms[hash] != Nil', refusal: {reason: no terms, phase: pre}}
     effects:
@@ -64,7 +68,7 @@ components:
     transition: market.MarketDirectory.bind
     lean: Rholphin.Model.Market.marketDirectory_bind
     kind: mutate
-    source: {file: contracts/src/deploy/v3/50_market.rho, line: 172}
+    source: {file: contracts/src/deploy/v3/50_market.rho, line: 191}
     guards:
     - {id: auth, expr: auth = marketAuth, refusal: {reason: bad directory authority, phase: pre}}
     - {id: create_only, expr: 'slots[marketId] = Nil or slots[marketId] = {poolUri, lockUri, termsHash}', refusal: {reason: exists, phase: pre}}
@@ -89,7 +93,7 @@ components:
     transition: market.MarketDirectory.seal
     lean: Rholphin.Model.Market.marketDirectory_seal
     kind: mutate
-    source: {file: contracts/src/deploy/v3/50_market.rho, line: 199}
+    source: {file: contracts/src/deploy/v3/50_market.rho, line: 218}
     guards:
     - {id: auth, expr: auth = marketAuth, refusal: {reason: bad directory authority, phase: pre}}
     - {id: exists, expr: 'slots[marketId] != Nil', refusal: {reason: no slot, phase: pre}}
@@ -114,7 +118,7 @@ components:
     transition: market.MarketDirectory.byId
     lean: Rholphin.Model.Market.marketDirectory_byId
     kind: read
-    source: {file: contracts/src/deploy/v3/50_market.rho, line: 216}
+    source: {file: contracts/src/deploy/v3/50_market.rho, line: 235}
     guards:
     - {id: exists, expr: 'slots[marketId] != Nil', refusal: {reason: no slot, phase: pre}}
     effects:
@@ -133,7 +137,7 @@ components:
     transition: market.MarketDirectory.slot
     lean: Rholphin.Model.Market.marketDirectory_slot
     kind: read
-    source: {file: contracts/src/deploy/v3/50_market.rho, line: 225}
+    source: {file: contracts/src/deploy/v3/50_market.rho, line: 244}
     guards:
     - {id: exists, expr: 'slots[marketId] != Nil', refusal: {reason: no slot, phase: pre}}
     effects:
@@ -160,7 +164,7 @@ components:
     transition: market.MarketIndex.stage
     lean: Rholphin.Model.Market.marketIndex_stage
     kind: mutate
-    source: {file: contracts/src/deploy/v3/50_market.rho, line: 403}
+    source: {file: contracts/src/deploy/v3/50_market.rho, line: 422}
     guards:
     - {id: auth, expr: auth = marketAuth, refusal: {reason: bad index authority, phase: pre}}
     - {id: new, expr: 'markets[marketId] = Nil', refusal: {reason: exists, phase: pre}}
@@ -198,7 +202,7 @@ components:
     transition: market.MarketIndex.checkStage
     lean: Rholphin.Model.Market.marketIndex_checkStage
     kind: read
-    source: {file: contracts/src/deploy/v3/50_market.rho, line: 422}
+    source: {file: contracts/src/deploy/v3/50_market.rho, line: 441}
     guards:
     - {id: new, expr: 'markets[marketId] = Nil', refusal: {reason: exists, phase: pre}}
     - {id: slug, expr: 'bySlug[slug] = Nil', refusal: {reason: slug, phase: pre}}
@@ -225,7 +229,7 @@ components:
     transition: market.MarketIndex.activate
     lean: Rholphin.Model.Market.marketIndex_activateChecked
     kind: mutate
-    source: {file: contracts/src/deploy/v3/50_market.rho, line: 426}
+    source: {file: contracts/src/deploy/v3/50_market.rho, line: 445}
     guards:
     - {id: draft, expr: status = "draft", refusal: {reason: not draft, phase: pre}}
     - {id: sealed, expr: 'directory.slots[marketId].sealed', refusal: {reason: not sealed, phase: pre}}
@@ -275,7 +279,7 @@ components:
     transition: market.MarketIndex.market
     lean: Rholphin.Model.Market.marketIndex_market
     kind: read
-    source: {file: contracts/src/deploy/v3/50_market.rho, line: 478}
+    source: {file: contracts/src/deploy/v3/50_market.rho, line: 497}
     guards:
     - {id: exists, expr: 'markets[marketId] != Nil', refusal: {reason: no market, phase: pre}}
     effects:
@@ -294,7 +298,7 @@ components:
     transition: market.MarketIndex.markets
     lean: Rholphin.Model.Market.marketIndex_markets
     kind: read
-    source: {file: contracts/src/deploy/v3/50_market.rho, line: 487}
+    source: {file: contracts/src/deploy/v3/50_market.rho, line: 506}
     guards: []
     effects:
     - {target: reply, formula: '(true, markets)'}
@@ -311,7 +315,7 @@ components:
     transition: market.MarketIndex.marketFor
     lean: Rholphin.Model.Market.marketIndex_marketFor
     kind: read
-    source: {file: contracts/src/deploy/v3/50_market.rho, line: 491}
+    source: {file: contracts/src/deploy/v3/50_market.rho, line: 510}
     guards:
     - {id: exists, expr: 'byPair[market:base/quote] resolves', refusal: {reason: no market, phase: pre}}
     effects:
@@ -331,7 +335,7 @@ components:
     transition: market.MarketIndex.setStatus
     lean: Rholphin.Model.Market.marketIndex_setStatus
     kind: mutate
-    source: {file: contracts/src/deploy/v3/50_market.rho, line: 515}
+    source: {file: contracts/src/deploy/v3/50_market.rho, line: 534}
     guards:
     - {id: authorize, expr: 'Governor.authorize(market-index, nonce, setStatus, marketId|status)', refusal: {reason: below threshold,
         phase: pre}}
@@ -358,7 +362,7 @@ components:
     transition: market.MarketIndex.pauseAsset
     lean: Rholphin.Model.Market.marketIndex_pauseAsset
     kind: mutate
-    source: {file: contracts/src/deploy/v3/50_market.rho, line: 559}
+    source: {file: contracts/src/deploy/v3/50_market.rho, line: 578}
     guards:
     - {id: authorize, expr: 'Governor.authorize(market-index, nonce, pauseAsset, code)', refusal: {reason: below threshold, phase: pre}}
     effects:
@@ -393,7 +397,7 @@ components:
     transition: market.MarketFactory.createMarket
     lean: Rholphin.Model.Market.marketFactory_createMarket
     kind: mutate
-    source: {file: contracts/src/deploy/v3/50_market.rho, line: 786}
+    source: {file: contracts/src/deploy/v3/50_market.rho, line: 805}
     guards:
     - {id: terms, expr: 'MarketTerms.put(terms, values) = (true, termsHash)', refusal: {reason: terms fields, phase: pre}}
     - {id: sponsor_sig, expr: 'Verifier.sigOk(H(rcash:market-create:v1|marketId|termsHash|sponsor), sig)', refusal: {reason: bad sponsor
@@ -455,7 +459,7 @@ components:
     transition: market.ListingViews.marketFor
     lean: Rholphin.Model.Market.listingViews_marketFor
     kind: read
-    source: {file: contracts/src/deploy/v3/50_market.rho, line: 606}
+    source: {file: contracts/src/deploy/v3/50_market.rho, line: 625}
     guards: []
     effects:
     - {target: reply, formula: MarketIndex.marketFor}
@@ -471,7 +475,7 @@ components:
     transition: market.ListingViews.market
     lean: Rholphin.Model.Market.listingViews_market
     kind: read
-    source: {file: contracts/src/deploy/v3/50_market.rho, line: 623}
+    source: {file: contracts/src/deploy/v3/50_market.rho, line: 642}
     guards: []
     effects:
     - {target: reply, formula: MarketIndex.market}
@@ -486,7 +490,7 @@ components:
     transition: market.ListingViews.isActive
     lean: Rholphin.Model.Market.listingViews_isActive
     kind: read
-    source: {file: contracts/src/deploy/v3/50_market.rho, line: 638}
+    source: {file: contracts/src/deploy/v3/50_market.rho, line: 657}
     guards: []
     effects:
     - {target: reply, formula: '(true, record.status = active)'}
@@ -503,7 +507,7 @@ components:
     transition: market.ListingViews.terms
     lean: Rholphin.Model.Market.listingViews_terms
     kind: read
-    source: {file: contracts/src/deploy/v3/50_market.rho, line: 661}
+    source: {file: contracts/src/deploy/v3/50_market.rho, line: 680}
     guards: []
     effects:
     - {target: reply, formula: MarketTerms.get}
@@ -518,7 +522,7 @@ components:
     transition: market.ListingViews.currency
     lean: Rholphin.Model.Market.listingViews_currency
     kind: read
-    source: {file: contracts/src/deploy/v3/50_market.rho, line: 676}
+    source: {file: contracts/src/deploy/v3/50_market.rho, line: 695}
     guards: []
     effects:
     - {target: reply, formula: CurrencyRegistry.currency}
@@ -533,7 +537,7 @@ components:
     transition: market.ListingViews.currencies
     lean: Rholphin.Model.Market.listingViews_currencies
     kind: read
-    source: {file: contracts/src/deploy/v3/50_market.rho, line: 691}
+    source: {file: contracts/src/deploy/v3/50_market.rho, line: 710}
     guards: []
     effects:
     - {target: reply, formula: CurrencyRegistry.currencies}
@@ -548,7 +552,7 @@ components:
     transition: market.ListingViews.markets
     lean: Rholphin.Model.Market.listingViews_markets
     kind: read
-    source: {file: contracts/src/deploy/v3/50_market.rho, line: 706}
+    source: {file: contracts/src/deploy/v3/50_market.rho, line: 725}
     guards: []
     effects:
     - {target: reply, formula: MarketIndex.markets}
@@ -569,7 +573,7 @@ components:
     transition: market.TradabilityGate.admit
     lean: Rholphin.Model.Market.tradabilityGate_admit
     kind: read
-    source: {file: contracts/src/deploy/v3/50_market.rho, line: 590}
+    source: {file: contracts/src/deploy/v3/50_market.rho, line: 609}
     guards:
     - {id: active, expr: status = "active", refusal: {reason: not active, phase: pre}}
     - {id: fresh, expr: fresh, refusal: {reason: stale, phase: pre}}

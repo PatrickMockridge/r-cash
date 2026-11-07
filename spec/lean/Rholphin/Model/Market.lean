@@ -1,4 +1,5 @@
 import Rholphin.Model.Registry
+import Rholphin.Crypto.Hash
 
 /-!
 # Market index, directory and terms
@@ -71,6 +72,25 @@ def lookupSlot (entries : List (Nat × Slot)) (key : Nat) : Option Slot :=
 def insertSlot (entries : List (Nat × Slot)) (key : Nat) (v : Slot) : List (Nat × Slot) :=
   (key, v) :: entries
 
+/-- Authenticated content addressing: the sponsor gate and the hash agree. -/
+def marketTerms_putChecked (H : Hasher) (sponsorOk : Bool) (hash : Hash)
+    (schema : Schema) (values : Values) : Option Hash :=
+  if sponsorOk then TermsPut H hash schema values else none
+
+theorem marketTerms_putChecked_refuses_bad_sponsor {H : Hasher} {sponsorOk : Bool}
+    {hash : Hash} {schema : Schema} {values : Values} (h : sponsorOk = false) :
+    marketTerms_putChecked H sponsorOk hash schema values = none := by
+  simp [marketTerms_putChecked, h]
+
+theorem marketTerms_putChecked_integrity {H : Hasher} {sponsorOk : Bool}
+    {hash hash' : Hash} {schema : Schema} {values : Values}
+    (h : marketTerms_putChecked H sponsorOk hash schema values = some hash') :
+    hash' = H schema values := by
+  unfold marketTerms_putChecked at h
+  split at h
+  · exact terms_put_integrity h
+  · contradiction
+
 /-- Terms are content-addressed; the hash is the store key. -/
 def marketTerms_put (hash : Nat) : Option Nat := some hash
 
@@ -96,6 +116,57 @@ def marketDirectory_byId (d : Directory) (marketId : Nat) : Option Slot :=
 
 def marketDirectory_slot (d : Directory) (marketId : Nat) : Option Slot :=
   lookupSlot d.slots marketId
+
+/-! ## I6: directory well-formedness -/
+
+def Slot.wellFormed (s : Slot) : Prop := s.poolUri ≠ 0 ∧ s.lockUri ≠ 0
+
+def DirectoryWellFormed (d : Directory) : Prop :=
+  ∀ id slot, lookupSlot d.slots id = some slot → slot.wellFormed
+
+theorem bind_preserves_directory {d d' : Directory} {id : Nat} {slot : Slot}
+    (h : marketDirectory_bind d id slot = some d')
+    (hd : DirectoryWellFormed d) (hs : slot.wellFormed) :
+    DirectoryWellFormed d' := by
+  intro other s hlook
+  unfold marketDirectory_bind at h
+  split at h
+  · split at h
+    · contradiction
+    · injection h with heq
+      subst heq
+      simp only [insertSlot, lookupSlot] at hlook
+      split at hlook
+      · injection hlook with heq2
+        subst heq2
+        exact hs
+      · exact hd other s hlook
+  · injection h with heq
+    subst heq
+    simp only [insertSlot, lookupSlot] at hlook
+    split at hlook
+    · injection hlook with heq2
+      subst heq2
+      exact hs
+    · exact hd other s hlook
+
+theorem seal_preserves_directory {d d' : Directory} {id : Nat}
+    (h : marketDirectory_seal d id = some d') (hd : DirectoryWellFormed d) :
+    DirectoryWellFormed d' := by
+  intro other s hlook
+  unfold marketDirectory_seal at h
+  split at h
+  · contradiction
+  · rename_i existing hex
+    injection h with heq
+    subst heq
+    simp only [insertSlot, lookupSlot] at hlook
+    split at hlook
+    · injection hlook with heq2
+      subst heq2
+      have hw := hd id existing hex
+      simpa [Slot.wellFormed] using hw
+    · exact hd other s hlook
 
 /-! ## Status machine -/
 

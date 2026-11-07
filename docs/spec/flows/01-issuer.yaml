@@ -71,7 +71,7 @@ components:
     - {id: solvency_first, expr: not (sin > surplus), refusal: {reason: recapitalise, phase: pre}}
     - {id: supply_cap, expr: totalPrincipal + amount <= maxSupply, refusal: {reason: max supply, phase: pre}}
     - {id: rev_unchanged, expr: issuerState.rev = rev_read, refusal: {reason: changed, phase: pre}}
-    - {id: solvency_recheck, expr: not (sin2 > surplus2), refusal: {reason: recapitalise, phase: pre}}
+    - {id: solvency_recheck, expr: not (b2.sin > b2.surplus), refusal: {reason: recapitalise, phase: pre}}
     effects:
     - {target: totalPrincipal, formula: totalPrincipal + amount}
     - {target: supply, formula: totalPrincipal + amount}

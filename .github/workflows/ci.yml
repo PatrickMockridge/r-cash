@@ -37,13 +37,15 @@ jobs:
       - name: flow specification and Lean audit
         run: |
           python3 tools/rho_inventory.py --check
-          python3 tools/check_flows.py --check --strict
+          python3 tools/check_flows.py --check --strict --phases --effects --guards
           python3 tools/render_flows.py --check
           python3 tools/check_traceability.py --check --strict
           python3 tools/check_mesh.py
           python3 tools/check_vectors.py
           python3 -m unittest discover -s tests/model -t tests/model
           python3 tools/check_lean.py
+          python3 tools/check_primitives.py --check
+          python3 tools/check_arm_vectors.py --check
 
   rust:
     runs-on: ubuntu-latest
@@ -123,6 +125,21 @@ jobs:
 
   # The browser journey needs a running rholo devnet (Docker). It is manual
   # for now; the protocol demo and all unit gates run without Docker.
+  tla:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: fetch TLC
+        run: |
+          curl -L -o tla2tools.jar \
+            https://github.com/tlaplus/tlaplus/releases/download/v1.8.0/tla2tools.jar
+      - name: TLC over all seven models
+        run: make tla-check TLC="java -cp $PWD/tla2tools.jar tlc2.TLC"
+
   e2e:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest

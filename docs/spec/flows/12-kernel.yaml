@@ -176,8 +176,8 @@ components:
     - {id: age, expr: age >= 1, refusal: {reason: age, phase: pre}}
     - {id: spread, expr: 0 <= spread <= 10000, refusal: {reason: spread, phase: pre}}
     - {id: band, expr: 0 < minP <= maxP, refusal: {reason: band, phase: pre}}
-    - {id: trial, expr: trialBlocks >= 1, refusal: {reason: trial, phase: pre}}
-    - {id: trial_submits, expr: trialMinSubmits >= quorum, refusal: {reason: trial submits, phase: pre}}
+    - {id: trial, expr: tb >= 1, refusal: {reason: trial, phase: pre}}
+    - {id: trial_submits, expr: tms >= quorum, refusal: {reason: trial submits, phase: pre}}
     effects:
     - {target: reply, formula: '(true, Nil)'}
     access: []

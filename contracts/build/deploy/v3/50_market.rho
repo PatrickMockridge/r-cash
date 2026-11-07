@@ -119,13 +119,18 @@ in {
     }
   } |
 
-  contract MarketTerms(@"put", @terms, @values, ret) = {
-    new rCh, bCh, cCh in {
+  // A put is authenticated: the sponsor signs the canonical hash in the same
+  // market-create preimage the factory uses.  The terms store is content-
+  // addressed, so a relayer can carry the payload but cannot mint a new one.
+  contract MarketTerms(@"put", @terms, @values, @sponsorHex, @sig, ret) = {
+    new rCh, bCh, cCh, vCh in {
       rl!(`__ROOT_URI__`, *rCh) |
       for (Root <- rCh) {
         Root!("resolve", "component:bounds", 1, *bCh) |
         Root!("resolve", "component:codec", 1, *cCh) |
-        for (@(true, boundsUri, _) <- bCh; @(true, codecUri, _) <- cCh) {
+        marketVerifier!(*vCh) |
+        for (@(true, boundsUri, _) <- bCh; @(true, codecUri, _) <- cCh;
+             Verifier <- vCh) {
           new bc, cc, checkCh in {
             rl!(boundsUri, *bc) | rl!(codecUri, *cc) |
             for (Bounds <- bc; Codec <- cc) {
@@ -133,18 +138,32 @@ in {
               for (@checked <- checkCh) {
                 match checked {
                   (true, Nil) => {
-                    new hCh in {
+                    new hCh, payloadCh, digestCh, okCh in {
                       Codec!("canonical", "rcash:market-terms:v4", values, *hCh) |
                       for (@hash <- hCh) {
-                        for (@s <- termsState) {
-                          match s.get("terms").get(hash) {
-                            Nil => {
-                              termsState!(s.set("terms",
-                                s.get("terms").set(hash, {"terms": terms, "values": values}))
-                                .set("rev", s.get("rev") + 1)) |
-                              ret!((true, hash))
+                        payloadCh!("rcash:market-create:v1|" ++ terms.get("marketId")
+                                   ++ "|" ++ hash ++ "|" ++ sponsorHex) |
+                        for (@payload <- payloadCh) {
+                          Verifier!("hash", payload.toUtf8Bytes(), *digestCh) |
+                          for (@digest <- digestCh) {
+                            Verifier!("sigOk", digest, sig, sponsorHex.hexToBytes(), *okCh) |
+                            for (@ok <- okCh) {
+                              if (ok == false || terms.get("sponsorPubKey") != sponsorHex) {
+                                ret!((false, "bad sponsor signature"))
+                              } else {
+                                for (@s <- termsState) {
+                                  match s.get("terms").get(hash) {
+                                    Nil => {
+                                      termsState!(s.set("terms",
+                                        s.get("terms").set(hash, {"terms": terms, "values": values}))
+                                        .set("rev", s.get("rev") + 1)) |
+                                      ret!((true, hash))
+                                    }
+                                    _ => { termsState!(s) | ret!((true, hash)) }
+                                  }
+                                }
+                              }
                             }
-                            _ => { termsState!(s) | ret!((true, hash)) }
                           }
                         }
                       }
@@ -788,7 +807,7 @@ in {
         slotCh, idxCh, ckCh, stCh, recCh in {
       marketVerifier!(*vCh) |
       for (Verifier <- vCh) {
-        MarketTerms!("put", terms, values, *hCh) |
+        MarketTerms!("put", terms, values, sponsorHex, sig, *hCh) |
         for (@put <- hCh) {
           match put {
             (true, termsHash) => {

@@ -62,6 +62,13 @@ theorem commit_atomic {w w' : World} {d : Deploy} (h : Commit w d w') :
   | accept ha => exact Or.inr ⟨_, ha, rfl⟩
   | reject hr => exact Or.inl ⟨rfl, hr⟩
 
+/-- A rejected deploy has no effect on the world (I15 at the state level). -/
+theorem reject_no_effect {w w' : World} {d : Deploy} (h : Commit w d w')
+    (hrej : d.diff.apply w = none) : w' = w := by
+  cases h with
+  | accept ha => rw [ha] at hrej; contradiction
+  | reject _ => rfl
+
 /-- A committed diff leaves every cell outside its write set untouched. -/
 theorem apply_preserves_untouched {w w' : World} {d : Diff}
     (h : d.apply w = some w') (c : CellId) (hc : c ∉ d.writes) :

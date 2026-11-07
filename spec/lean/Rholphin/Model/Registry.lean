@@ -185,6 +185,52 @@ def currencyRegistry_setPaused (s : CurrencyStore) (code : Nat) (paused : Bool) 
   | none => none
   | some entry => some { s with currencies := insert s.currencies code { entry with retired := paused } }
 
+/-! ## S8: one live system per listed currency -/
+
+/-- Every listed entry resolves to a live root entry. -/
+def S8 (root : RootStore) (dir : CurrencyStore) : Prop :=
+  ∀ code entry, lookup dir.currencies code = some entry →
+    ∃ r, lookup root.entries entry.uri = some r ∧ r.retired = false
+
+/-- Register only when the root entry exists, is live, and the code is new. -/
+def currencyRegistry_registerListed (root : RootStore) (s : CurrencyStore)
+    (code : Nat) (entry : Entry) : Option CurrencyStore :=
+  match lookup root.entries entry.uri with
+  | none => none
+  | some r =>
+      if r.retired = false ∧ (lookup s.currencies code).isNone then
+        currencyRegistry_register s code entry
+      else none
+
+theorem registerListed_refuses_no_root {root : RootStore} {s : CurrencyStore}
+    {code : Nat} {entry : Entry} (h : lookup root.entries entry.uri = none) :
+    currencyRegistry_registerListed root s code entry = none := by
+  simp [currencyRegistry_registerListed, h]
+
+theorem registerListed_preserves_S8 {root : RootStore} {s s' : CurrencyStore}
+    {code : Nat} {entry : Entry}
+    (h : currencyRegistry_registerListed root s code entry = some s')
+    (hs8 : S8 root s) : S8 root s' := by
+  intro other e hlook
+  unfold currencyRegistry_registerListed at h
+  split at h
+  · contradiction
+  · rename_i r hr
+    split at h
+    · rename_i hguard
+      unfold currencyRegistry_register at h
+      split at h
+      · contradiction
+      · simp only [Option.some.injEq] at h
+        subst h
+        simp only [insert, lookup] at hlook
+        split at hlook
+        · simp only [Option.some.injEq] at hlook
+          subst hlook
+          exact ⟨r, hr, hguard.1⟩
+        · exact hs8 other e hlook
+    · contradiction
+
 /-! ## Asset resolver -/
 
 def assetResolver_issuer (assetId : Nat) (entry : Option Entry) : Option Nat :=

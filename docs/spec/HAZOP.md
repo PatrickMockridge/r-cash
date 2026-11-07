@@ -77,8 +77,8 @@ window but does not multiply commits per block.
 | HAZ-12 | No load/soak test or utilization metrics | Partial: per-endpoint counters and `doctor --json`; a load harness is still to run |
 | HAZ-24 | CLI `v4 send` defaulted to an empty opId, disabling the on-chain ledger | Fixed: generated and printed opId; retry reuses it |
 | A5 | One issuer/vault/savings/PSM cell per currency caps contract-level concurrency | Documented; a per-vault shard plus totals is a separate design spike |
-| A6 | `MarketTerms.put` stores unauthenticated content-addressed terms before the sponsor check | Open; griefing cost only |
-| A7 | Sponsor signature has no deployment domain, nonce or deadline | Open; the `deployerId` check removes third-party relay |
+| A6 | `MarketTerms.put` stored unauthenticated content-addressed terms before the sponsor check | Fixed: `put` verifies the sponsor signature over the market-create preimage before storing |
+| A7 | Sponsor signature has no deployment domain, nonce or deadline | Partial: the preimage is domain-separated (`rcash:market-create:v1`) but carries no nonce/deadline; a v2 preimage is a separate change |
 | A11 | Hostlist accepts private addresses and future `generatedAt` | Partial: future-skew rejection; private-range policy open |
 | A12 | Every typed write blocks on finality; no pipeline | Fixed in the SDK: `deploy_terms`/`submit_terms`; POST timeout remains open |
 
@@ -89,6 +89,9 @@ window but does not multiply commits per block.
   and anchor bounds (`crates/rcash-chain/src/node/pool.rs`, `node/mod.rs`,
   `crates/rcash-sdk/tests/hostlist.rs`).
 - Contract flow YAML, Lean names and the acceptance map are updated with the arms above.
+- `make formal-check` now also runs the claim/arm-coverage gate, the primitive checks
+  (G-NATIVE, G-REV, G-FACET), the strict flow phase/effect/guard checks and the arm vectors;
+  a TLC job runs all seven models in CI.
 - The behavioural harness scenarios for concurrent market creation, transfer facet
   refusal, pause interleaving and savings notify are the next evidence step on a live
   devnet; a green static gate is not a conformance campaign.
