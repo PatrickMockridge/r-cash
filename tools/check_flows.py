@@ -103,7 +103,7 @@ class Source:
             result.append((origin, helper))
             for name in helper["sends"]:
                 if name in self.helpers and name not in seen:
-                    frontier.append((f"helper:{helper['key']}", self.helpers[name]))
+                    frontier.append((origin, self.helpers[name]))
         return result
 
     def access(self, node: dict) -> tuple[dict[str, set[str]], dict[tuple[str, str], set[str]]]:

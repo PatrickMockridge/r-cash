@@ -41,6 +41,11 @@ def poolTemplate_create (base quote : Nat) : Pool × Lock :=
    { funded := false, released := false, cancelled := false, untilH := 0,
      beneficiary := 0, funder := 0, shares := 0, minBlocks := base + quote })
 
+/-- Factory creation: a fresh, empty lock for a pool's LP purse. -/
+def liquidityLockFactory_create (minBlocks : Nat) : Lock :=
+  { funded := false, released := false, cancelled := false, untilH := 0,
+    beneficiary := 0, funder := 0, shares := 0, minBlocks := minBlocks }
+
 def fxPool_pair (base quote : Nat) : Nat × Nat := (base, quote)
 def fxPool_reserves (p : Pool) : Nat × Nat × Nat × Bool :=
   (p.rb, p.rq, p.totalShares, p.seeded)

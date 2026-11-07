@@ -651,13 +651,40 @@
         "rho:rev:address",
         "rho:rchain:deployerId:ops"
       ],
-      "deploy": "contracts/src/deploy/v3/51_pool.rho",
+      "deploy": "contracts/src/deploy/v3/51_lock.rho",
       "instance_key": "market",
       "status": "implemented",
       "budget": {
         "bytes": 16384,
         "depth": 96,
         "contracts": 20
+      }
+    },
+    {
+      "name": "LiquidityLockFactory",
+      "kind": "domain",
+      "stateful": false,
+      "arms": [
+        "create"
+      ],
+      "dependencies": [
+        "Root",
+        "Clock"
+      ],
+      "creates": [
+        "LiquidityLock"
+      ],
+      "system": [
+        "rho:rchain:ertp",
+        "rho:registry:insertArbitrary"
+      ],
+      "deploy": "contracts/src/deploy/v3/51_lock.rho",
+      "instance_key": null,
+      "status": "implemented",
+      "budget": {
+        "bytes": 8192,
+        "depth": 48,
+        "contracts": 8
       }
     },
     {

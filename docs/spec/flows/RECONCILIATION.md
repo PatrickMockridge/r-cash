@@ -111,7 +111,7 @@
 | `ListingViews@"currencies"` | `market.ListingViews.currencies` | — | OK | yes | `Rholphin.Model.Market.listingViews_currencies` | verified |  |
 | `ListingViews@"markets"` | `market.ListingViews.markets` | — | OK | yes | `Rholphin.Model.Market.listingViews_markets` | verified |  |
 | `TradabilityGate@"admit"` | `market.TradabilityGate.admit` | — | OK | yes | `Rholphin.Model.Market.tradabilityGate_admit` | verified |  |
-| `PoolTemplate@"create"` | `pool.PoolTemplate.create` | post:2 | OK | yes | `Rholphin.Model.Pool.poolTemplate_create` | verified |  |
+| `PoolTemplate@"create"` | `pool.PoolTemplate.create` | post:1 | OK | yes | `Rholphin.Model.Pool.poolTemplate_create` | verified |  |
 | `FxPool@"pair"` | `pool.FxPool.pair` | — | OK | yes | `Rholphin.Model.Pool.fxPool_pair` | verified |  |
 | `FxPool@"reserves"` | `pool.FxPool.reserves` | peek:1 | OK | yes | `Rholphin.Model.Pool.fxPool_reserves` | verified |  |
 | `FxPool@"balances"` | `pool.FxPool.balances` | — | OK | yes | `Rholphin.Model.Pool.fxPool_balances` | verified |  |
@@ -120,6 +120,7 @@
 | `FxPool@"swap"` | `pool.FxPool.swap` | peek:1, consume:1, post:1 | OK | yes | `Rholphin.Model.Pool.fxPool_swap` | verified |  |
 | `FxPool@"addLiquidity"` | `pool.FxPool.addLiquidity` | peek:1, consume:1, post:1 | OK | yes | `Rholphin.Model.Pool.fxPool_addLiquidity` | verified |  |
 | `FxPool@"removeLiquidity"` | `pool.FxPool.removeLiquidity` | peek:1, consume:1, post:1 | OK | yes | `Rholphin.Model.Pool.fxPool_removeLiquidity` | verified |  |
+| `LiquidityLockFactory@"create"` | `pool.LiquidityLockFactory.create` | post:1 | OK | yes | `Rholphin.Model.Pool.liquidityLockFactory_create` | verified |  |
 | `LiquidityLock@"fund"` | `pool.LiquidityLock.fund` | consume:1, post:1 | OK | yes | `Rholphin.Model.Pool.liquidityLock_fund` | verified |  |
 | `LiquidityLock@"release"` | `pool.LiquidityLock.release` | consume:1, post:1 | OK | yes | `Rholphin.Model.Pool.liquidityLock_release` | verified |  |
 | `LiquidityLock@"cancel"` | `pool.LiquidityLock.cancel` | consume:1, post:1 | OK | yes | `Rholphin.Model.Pool.liquidityLock_cancel` | verified |  |

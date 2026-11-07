@@ -162,14 +162,23 @@
       "sha256": "ed3aca479f0592e6356c6441147020e697d42c2cdbb51d9738d36d64acec7800",
       "source_bytes": 43755
     },
-    "contracts/build/deploy/v3/51_pool.rho": {
-      "brace_depth": 43,
-      "contracts": 24,
-      "grammar_depth": 73,
-      "minified_bytes": 17697,
+    "contracts/build/deploy/v3/51_lock.rho": {
+      "brace_depth": 22,
+      "contracts": 7,
+      "grammar_depth": 37,
+      "minified_bytes": 4841,
       "operator_run": 3,
-      "sha256": "f89f3924532d73665393e5f4d83c4c93e0d288474f26e7d446445d4321713968",
-      "source_bytes": 32558
+      "sha256": "647b1bf614aebeb12e2e4f3afe79272450b0299e4afe8fdf4daac684d88746a8",
+      "source_bytes": 8685
+    },
+    "contracts/build/deploy/v3/51_pool.rho": {
+      "brace_depth": 29,
+      "contracts": 22,
+      "grammar_depth": 47,
+      "minified_bytes": 14946,
+      "operator_run": 3,
+      "sha256": "81462106a148b8d84b13fd106165484f6aa6947bec8aa5f3b4ab9d76fe2fa734",
+      "source_bytes": 25709
     }
   },
   "schema": "rcash:contract-metrics:v1"

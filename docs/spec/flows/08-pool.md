@@ -3,7 +3,7 @@
 # Flow: pool
 
 Schema: `rcash.flows/v1`
-Source: `contracts/src/deploy/v3/51_pool.rho`
+Source: `contracts/src/deploy/v3/51_pool.rho`, `contracts/src/deploy/v3/51_lock.rho`
 
 ### PoolTemplate
 
@@ -17,7 +17,7 @@ stateDiagram-v2
 
 | arm | transition | kind | guards | effects | access | refusals | invariants | status | source |
 |---|---|---|---|---|---|---|---|---|---|
-| `PoolTemplate@"create"` | `pool.PoolTemplate.create` | mutate | termsHash = H(terms) → terms fields<br>AssetResolver.issuer(base) ok → not base<br>AssetResolver.issuer(quote) ok → not quote | pool = {rb: 0, rq: 0, totalShares: 0, seeded: false}<br>lock = {funded: false, released: false, cancelled: false, untilHeight: 0, shares: 0}<br>reply = (true, poolUri, lockUri) | post lockState (helper:assemblePool)<br>post poolState (helper:assemblePool) | — | I10<br>I11<br>I13 | verified | contracts/src/deploy/v3/51_pool.rho:722 |
+| `PoolTemplate@"create"` | `pool.PoolTemplate.create` | mutate | termsHash = H(terms) → terms fields<br>AssetResolver.issuer(base) ok → not base<br>AssetResolver.issuer(quote) ok → not quote | pool = {rb: 0, rq: 0, totalShares: 0, seeded: false}<br>lock = {funded: false, released: false, cancelled: false, untilHeight: 0, shares: 0}<br>reply = (true, poolUri, lockUri) | post poolState (helper:assemblePool) | — | I10<br>I11<br>I13 | verified | contracts/src/deploy/v3/51_pool.rho:604 |
 
 ### FxPool
 
@@ -38,14 +38,28 @@ stateDiagram-v2
 
 | arm | transition | kind | guards | effects | access | refusals | invariants | status | source |
 |---|---|---|---|---|---|---|---|---|---|
-| `FxPool@"pair"` | `pool.FxPool.pair` | read | — | reply = (true, base, quote) | — | — | — | verified | contracts/src/deploy/v3/51_pool.rho:251 |
-| `FxPool@"reserves"` | `pool.FxPool.reserves` | read | — | reply = (true, {rb, rq, totalShares, seeded}) | peek poolState (arm) | — | I10 | verified | contracts/src/deploy/v3/51_pool.rho:254 |
-| `FxPool@"balances"` | `pool.FxPool.balances` | read | — | reply = (true, basePurse.balance, quotePurse.balance) | — | — | I10 | verified | contracts/src/deploy/v3/51_pool.rho:261 |
-| `FxPool@"attest"` | `pool.FxPool.attest` | read | — | reply = (true, {marketId, termsHash, base, quote, rb, rq, totalShares, seeded}) | peek poolState (arm) | — | I10<br>I11 | verified | contracts/src/deploy/v3/51_pool.rho:269 |
-| `FxPool@"quote"` | `pool.FxPool.quote` | read | market active → not active<br>fresh and rate > 0 → stale feed | reply = (true, out, fee, rate) | peek poolState (arm) | not active (pre)<br>stale feed (pre) | I9<br>I12 | verified | contracts/src/deploy/v3/51_pool.rho:283 |
-| `FxPool@"swap"` | `pool.FxPool.swap` | mutate | market active → not active<br>fresh and rate > 0 → stale feed<br>payment brand = input asset → not this asset<br>out > 0 and out >= minOut → output<br>TradabilityGate.admit ok → not active<br>deposit and withdraw ok → payment | rb = rb + amount if dir = b2q else rb - out<br>rq = rq - out if dir = b2q else rq + amount<br>poolValue = value(rb, rq, rate)<br>fee = fee(weight(rb, rq, rate), baseSpreadBps, skewSpreadBps)<br>out = out(dir, amount, rate, fee) | peek poolState (arm)<br>consume poolState (arm)<br>post poolState (arm) | conflict (pre)<br>not active (pre)<br>not this asset (pre)<br>output (pre)<br>stale feed (pre) | I9<br>I10<br>I12 | verified | contracts/src/deploy/v3/51_pool.rho:325 |
-| `FxPool@"addLiquidity"` | `pool.FxPool.addLiquidity` | mutate | market draft or active → not active<br>fresh and rate > 0 → stale feed<br>payments are base and quote → not base<br>first deposit within tolerance → first deposit balance<br>depositValue >= minLiquidity → min liquidity<br>sharesOut > 0 and sharesOut >= minShares → shares<br>deposits and LP mint ok → payment | rb = rb + baseAmt<br>rq = rq + quoteAmt<br>totalShares = totalShares + sharesOut<br>seeded = true<br>sharesOut = if first: value(rb + b, rq + q, rate) - 1e8; else: floor((value(rb + b, rq + q) - value(rb, rq)) * totalShares / value(rb, rq)) | peek poolState (arm)<br>consume poolState (arm)<br>post poolState (arm)<br>post poolState (helper:commitLiquidity) | conflict (pre)<br>first deposit balance (pre)<br>min liquidity (pre)<br>not active (pre)<br>not base (pre)<br>not quote (pre)<br>shares (pre)<br>stale feed (pre) | I10<br>I11<br>I12 | verified | contracts/src/deploy/v3/51_pool.rho:449 |
-| `FxPool@"removeLiquidity"` | `pool.FxPool.removeLiquidity` | mutate | 0 < shares <= totalShares → shares<br>baseOut >= minBase and quoteOut >= minQuote → minimum<br>LP burn and withdrawals ok → payment | baseOut = floor(rb * shares / totalShares)<br>quoteOut = floor(rq * shares / totalShares)<br>rb = rb - baseOut<br>rq = rq - quoteOut<br>totalShares = totalShares - shares<br>seeded = totalShares - shares > 0 | peek poolState (arm)<br>consume poolState (arm)<br>post poolState (arm) | conflict (pre)<br>minimum (pre)<br>not an LP payment (pre)<br>shares (pre) | I10<br>I11 | verified | contracts/src/deploy/v3/51_pool.rho:502 |
+| `FxPool@"pair"` | `pool.FxPool.pair` | read | — | reply = (true, base, quote) | — | — | — | verified | contracts/src/deploy/v3/51_pool.rho:250 |
+| `FxPool@"reserves"` | `pool.FxPool.reserves` | read | — | reply = (true, {rb, rq, totalShares, seeded}) | peek poolState (arm) | — | I10 | verified | contracts/src/deploy/v3/51_pool.rho:253 |
+| `FxPool@"balances"` | `pool.FxPool.balances` | read | — | reply = (true, basePurse.balance, quotePurse.balance) | — | — | I10 | verified | contracts/src/deploy/v3/51_pool.rho:260 |
+| `FxPool@"attest"` | `pool.FxPool.attest` | read | — | reply = (true, {marketId, termsHash, base, quote, rb, rq, totalShares, seeded}) | peek poolState (arm) | — | I10<br>I11 | verified | contracts/src/deploy/v3/51_pool.rho:268 |
+| `FxPool@"quote"` | `pool.FxPool.quote` | read | market active → not active<br>fresh and rate > 0 → stale feed | reply = (true, out, fee, rate) | peek poolState (arm) | not active (pre)<br>stale feed (pre) | I9<br>I12 | verified | contracts/src/deploy/v3/51_pool.rho:282 |
+| `FxPool@"swap"` | `pool.FxPool.swap` | mutate | market active → not active<br>fresh and rate > 0 → stale feed<br>payment brand = input asset → not this asset<br>out > 0 and out >= minOut → output<br>TradabilityGate.admit ok → not active<br>deposit and withdraw ok → payment | rb = rb + amount if dir = b2q else rb - out<br>rq = rq - out if dir = b2q else rq + amount<br>poolValue = value(rb, rq, rate)<br>fee = fee(weight(rb, rq, rate), baseSpreadBps, skewSpreadBps)<br>out = out(dir, amount, rate, fee) | peek poolState (arm)<br>consume poolState (helper:swapCalc)<br>post poolState (helper:swapCalc) | conflict (pre)<br>not active (pre)<br>not this asset (pre)<br>output (pre)<br>stale feed (pre) | I9<br>I10<br>I12 | verified | contracts/src/deploy/v3/51_pool.rho:324 |
+| `FxPool@"addLiquidity"` | `pool.FxPool.addLiquidity` | mutate | market draft or active → not active<br>fresh and rate > 0 → stale feed<br>payments are base and quote → not base<br>first deposit within tolerance → first deposit balance<br>depositValue >= minLiquidity → min liquidity<br>sharesOut > 0 and sharesOut >= minShares → shares<br>deposits and LP mint ok → payment | rb = rb + baseAmt<br>rq = rq + quoteAmt<br>totalShares = totalShares + sharesOut<br>seeded = true<br>sharesOut = if first: value(rb + b, rq + q, rate) - 1e8; else: floor((value(rb + b, rq + q) - value(rb, rq)) * totalShares / value(rb, rq)) | peek poolState (arm)<br>consume poolState (arm)<br>post poolState (arm)<br>post poolState (helper:commitLiquidity) | conflict (pre)<br>first deposit balance (pre)<br>min liquidity (pre)<br>not active (pre)<br>not base (pre)<br>not quote (pre)<br>shares (pre)<br>stale feed (pre) | I10<br>I11<br>I12 | verified | contracts/src/deploy/v3/51_pool.rho:464 |
+| `FxPool@"removeLiquidity"` | `pool.FxPool.removeLiquidity` | mutate | 0 < shares <= totalShares → shares<br>baseOut >= minBase and quoteOut >= minQuote → minimum<br>LP burn and withdrawals ok → payment | baseOut = floor(rb * shares / totalShares)<br>quoteOut = floor(rq * shares / totalShares)<br>rb = rb - baseOut<br>rq = rq - quoteOut<br>totalShares = totalShares - shares<br>seeded = totalShares - shares > 0 | peek poolState (arm)<br>consume poolState (arm)<br>post poolState (arm) | conflict (pre)<br>minimum (pre)<br>not an LP payment (pre)<br>shares (pre) | I10<br>I11 | verified | contracts/src/deploy/v3/51_pool.rho:517 |
+
+### LiquidityLockFactory
+
+```mermaid
+stateDiagram-v2
+  [*] --> Live
+  Live --> Live: pool.LiquidityLockFactory.create
+```
+
+#### LiquidityLockFactory arms
+
+| arm | transition | kind | guards | effects | access | refusals | invariants | status | source |
+|---|---|---|---|---|---|---|---|---|---|
+| `LiquidityLockFactory@"create"` | `pool.LiquidityLockFactory.create` | create | — | lock = {funded: false, released: false, cancelled: false, untilHeight: 0, shares: 0} | post lockState (arm) | — | I13 | verified | contracts/src/deploy/v3/51_lock.rho:58 |
 
 ### LiquidityLock
 
@@ -62,7 +76,7 @@ stateDiagram-v2
 
 | arm | transition | kind | guards | effects | access | refusals | invariants | status | source |
 |---|---|---|---|---|---|---|---|---|---|
-| `LiquidityLock@"fund"` | `pool.LiquidityLock.fund` | mutate | not funded → funded<br>untilHeight > 0 → height<br>untilHeight >= now + terms.lockMinBlocks → lock too short | funded = true<br>untilHeight = untilHeight<br>beneficiary = beneficiaryId<br>funder = caller address<br>shares = LP amount | consume lockState (arm)<br>post lockState (arm) | funded (pre)<br>height (pre)<br>lock too short (after_consume, repost) | I13 | verified | contracts/src/deploy/v3/51_pool.rho:574 |
-| `LiquidityLock@"release"` | `pool.LiquidityLock.release` | mutate | funded → unfunded<br>not released and not cancelled → closed<br>now >= untilHeight → locked<br>caller = beneficiary → not beneficiary<br>LP withdraw ok → payment | released = true<br>caller = LP shares | consume lockState (arm)<br>post lockState (arm) | closed (pre)<br>locked (pre)<br>not beneficiary (pre)<br>payment (pre)<br>unfunded (pre) | I13 | verified | contracts/src/deploy/v3/51_pool.rho:613 |
-| `LiquidityLock@"cancel"` | `pool.LiquidityLock.cancel` | mutate | Governor.authorize(liquidity-lock, nonce, cancel, marketId) → below threshold<br>funded and not released and not cancelled → closed<br>caller = funder or caller = beneficiary → not funder<br>LP withdraw ok → payment | cancelled = true<br>caller = LP shares | consume lockState (arm)<br>post lockState (arm) | closed (pre)<br>not funder (pre)<br>payment (pre) | I13<br>S12 | verified | contracts/src/deploy/v3/51_pool.rho:651 |
-| `LiquidityLock@"info"` | `pool.LiquidityLock.info` | read | — | reply = (true, {marketId, funded, released, cancelled, untilHeight, beneficiary, funder, shares}) | peek lockState (arm) | — | I13 | verified | contracts/src/deploy/v3/51_pool.rho:695 |
+| `LiquidityLock@"fund"` | `pool.LiquidityLock.fund` | mutate | not funded → funded<br>untilHeight > 0 → height<br>untilHeight >= now + terms.lockMinBlocks → lock too short | funded = true<br>untilHeight = untilHeight<br>beneficiary = beneficiaryId<br>funder = caller address<br>shares = LP amount | consume lockState (arm)<br>post lockState (arm) | funded (pre)<br>height (pre)<br>lock too short (after_consume, repost) | I13 | verified | contracts/src/deploy/v3/51_lock.rho:64 |
+| `LiquidityLock@"release"` | `pool.LiquidityLock.release` | mutate | funded → unfunded<br>not released and not cancelled → closed<br>now >= untilHeight → locked<br>caller = beneficiary → not beneficiary<br>LP withdraw ok → payment | released = true<br>caller = LP shares | consume lockState (arm)<br>post lockState (arm) | closed (pre)<br>locked (pre)<br>not beneficiary (pre)<br>payment (pre)<br>unfunded (pre) | I13 | verified | contracts/src/deploy/v3/51_lock.rho:103 |
+| `LiquidityLock@"cancel"` | `pool.LiquidityLock.cancel` | mutate | Governor.authorize(liquidity-lock, nonce, cancel, marketId) → below threshold<br>funded and not released and not cancelled → closed<br>caller = funder or caller = beneficiary → not funder<br>LP withdraw ok → payment | cancelled = true<br>caller = LP shares | consume lockState (arm)<br>post lockState (arm) | closed (pre)<br>not funder (pre)<br>payment (pre) | I13<br>S12 | verified | contracts/src/deploy/v3/51_lock.rho:141 |
+| `LiquidityLock@"info"` | `pool.LiquidityLock.info` | read | — | reply = (true, {marketId, funded, released, cancelled, untilHeight, beneficiary, funder, shares}) | peek lockState (arm) | — | I13 | verified | contracts/src/deploy/v3/51_lock.rho:185 |
