@@ -52,8 +52,11 @@ def main() -> int:
     state = json.loads(STATE.read_text())
     if "currency_registry_uri" not in state:
         steps = state.get("steps", {})
-        state["currency_registry_uri"] = steps["currency_registry"]["uris"][1]
-        state["stablecoin_directory_uri"] = steps["currency_registry"]["uris"][0]
+        _steps = steps.get("currency_registry") or steps.get("32_currency_registry")
+
+        state["currency_registry_uri"] = _steps["uris"][1]
+
+        state["stablecoin_directory_uri"] = _steps["uris"][0]
     root = state["root_uri"]
     secret = keys["deployer"]["secret"]
     for name in ("key12", "key13", "key14"):

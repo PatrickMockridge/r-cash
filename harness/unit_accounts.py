@@ -15,6 +15,7 @@ Usage:
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -54,7 +55,7 @@ def main() -> int:
     if not listed[0]:
         raise AssertionError("V4T is not listed; run make unit-stablecoin first")
 
-    owner = keys["business"]
+    owner = keys[os.environ.get("ACCOUNTS_KEY", "business")]
     faucet_top_up(owner["address"])
     faucet_top_up(keys["ramp"]["address"])
     owner_term = render_scenario("account_purse.rho", {
