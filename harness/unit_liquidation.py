@@ -222,8 +222,8 @@ def main() -> int:
 
     # The account resolves an asset through CurrencyRegistry, so the isolated
     # system must be listed before its stablecoin can be held in an account.
-    # The preimage is canonical v4, the ABI carries the deployed id, and the
-    # deploy is submitted with the sponsor key (OCAP-11).
+    # The preimage is canonical v4, the ABI takes the deployer id last (after
+    # the signature), and the deploy is submitted with the sponsor key (OCAP-11).
     registry_uri = state["currency_registry_uri"]
     listing_values = [CURRENCY, sc_uri, custody_uri, params_uri, vault_uri,
                       liq_uri, savings_uri, psm_uri, buffer_uri, params_hash, sponsor]
@@ -236,10 +236,10 @@ def main() -> int:
         "deployId(`rho:rchain:deployId`) in {\n"
         f"  rl!(`{registry_uri}`, *ch) |\n"
         "  for (CurrencyRegistry <- ch) {\n"
-        f'    CurrencyRegistry!("register", *deployerId, "{CURRENCY}", "{sc_uri}", '
+        f'    CurrencyRegistry!("register", "{CURRENCY}", "{sc_uri}", '
         f'"{custody_uri}", "{params_uri}", "{vault_uri}", "{liq_uri}", '
         f'"{savings_uri}", "{psm_uri}", "{buffer_uri}", "{params_hash}", '
-        f'"{sponsor}", "{listing_sig}".hexToBytes(), *r) |\n'
+        f'"{sponsor}", "{listing_sig}".hexToBytes(), *deployerId, *r) |\n'
         "    for (@x <- r) {\n"
         "      match x {\n"
         '        (true, entry) => deployId!([true, entry])\n'
