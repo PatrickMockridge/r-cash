@@ -92,6 +92,14 @@ output containing `sorryAx` or a project-local axiom.
 #print axioms Rholphin.Model.Market.stage_refuses_active
 #print axioms Rholphin.Model.Market.delisted_accepts_nothing
 #print axioms Rholphin.Model.Pool.fund_refuses_short
+#print axioms Rholphin.Model.Pool.fxPool_attest_sound
+#print axioms Rholphin.Model.Pool.empty_ledger
+#print axioms Rholphin.Model.Pool.mintShares_preserves_ledger
+#print axioms Rholphin.Model.Pool.burnShares_preserves_ledger
+#print axioms Rholphin.Model.Pool.fund_sets_funded
+#print axioms Rholphin.Model.Pool.fund_refuses_funded
+#print axioms Rholphin.Model.Pool.release_then_cancel_refused
+#print axioms Rholphin.Model.Pool.cancel_then_release_refused
 #print axioms Rholphin.Model.Governance.execute_not_early
 #print axioms Rholphin.Model.Oracle.activate_requires_trial
 #print axioms Rholphin.Model.Identity.getOrCreate_verify

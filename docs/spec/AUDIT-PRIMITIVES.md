@@ -272,7 +272,7 @@ absent. AUD-18 / PRIM-17.
 | Identity/no-op stub | ~25 | `verifier_sigOk`, `claimCode_hash`, `marketTerms_put`, `fxPool_attest`, `vaultBook_pause`, `account_claimTransfer` |
 | Alias | ~3 | `take_without_put_rejected`, `nested_take_deadlock` |
 
-The 90 substantive theorems registered in `claims.yaml` are real: the arithmetic core (division, accrual, close factor,
+The 97 substantive theorems registered in `claims.yaml` are real: the arithmetic core (division, accrual, close factor,
 savings, PSM, AMM bounds) and the S1/S2/S3/S14 transition obligations are the strongest part
 of the project. The weakness is coverage, not the quality of those proofs.
 
@@ -281,8 +281,8 @@ of the project. The weakness is coverage, not the quality of those proofs.
 | Status | Invariants |
 |---|---|
 | Covered | I1, I14, I21, I23, S1, S2, S3 |
-| Partial | I2, I3, I4, I5, I7, I19, S4, S6, S7, S9, S10, S11, S12 |
-| Deferred (no theorem) | I6, I8, I9, I10, I11, I12, I13, I15, S8 |
+| Partial | I2, I3, I4, I5, I7, I10, I11, I13, I19, S4, S6, S7, S9, S10, S11, S12 |
+| Deferred (no theorem) | I6, I8, I9, I12, I15, S8 |
 | Tool-evidenced | I20 (`check_captures.py`), I22 (`measure_contracts.py`), I24 (`check_mesh.py`) |
 
 `spec/lean/claims.yaml` is now the machine-readable record; `tools/check_claims.py`
@@ -439,9 +439,10 @@ bugs.
 - **Phase 5 (partial):** `Crypto/{Hash,Sig,Claim,Codec}.lean` provide the conditional
   interfaces and their theorems; `Model.Psm` gains checked `buyChecked`/`sellChecked` with
   guard-elimination proofs; `Model.BufferSavings` gains `notifyChecked` with the zero-share
-  refusal, and `Model.Vault` gains `mintChecked`/`withdrawChecked` plus `health_iff_maxDebt`.
-  The register is at 15 covered, 16 partial, 9 deferred, 3 tool-evidenced, 90 substantive
-  theorems; the axiom audit covers 54.
+  refusal, `Model.Vault` gains `mintChecked`/`withdrawChecked` plus
+  `health_iff_maxDebt`, and `Model.Pool` gains the share ledger (I11), attestation
+  soundness (I10) and lock one-shot/exclusivity (I13). The register is at 15 covered, 19
+  partial, 6 deferred, 3 tool-evidenced, 97 substantive theorems; the axiom audit covers 59.
 - **Phase 7 (partial):** `tools/check_primitives.py` adds G-NATIVE (no discarded native
   reply), G-REV (a rev-bearing mutation bumps `rev`) and the oracle-registry rev check;
   `make formal-check` now runs it.

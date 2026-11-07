@@ -191,15 +191,24 @@ invariants:
   I10:
     statement: Pool reserves equal native custody.
     predicate: Rholphin.Model.Pool.PoolCustody
-    status: deferred
-    deferral: {phase: 5, reason: fxPool_attest is an identity stub; needs the NativeTotal abstraction}
-    theorems: []
+    status: partial
+    note: >-
+      fxPool_attest is now a real comparison and attest_sound proves it.  The
+      custody side (reserves change only with a native move) is assumed via
+      ertp.native_total.
+    theorems:
+      - {name: Rholphin.Model.Pool.fxPool_attest_sound, strength: substantive, kind: law}
   I11:
     statement: totalShares = lpMinted - lpBurned.
     predicate: Rholphin.Model.Pool.ShareLedger
-    status: deferred
-    deferral: {phase: 5, reason: Pool has no mint/burn counters}
-    theorems: []
+    status: partial
+    note: >-
+      The ShareBook arithmetic is proved; the pool arm is tied to it by
+      traceability, not yet by a generated instance.
+    theorems:
+      - {name: Rholphin.Model.Pool.empty_ledger, strength: definitional, kind: invariant}
+      - {name: Rholphin.Model.Pool.mintShares_preserves_ledger, strength: substantive, kind: preservation}
+      - {name: Rholphin.Model.Pool.burnShares_preserves_ledger, strength: substantive, kind: preservation}
   I12:
     statement: Depth floor, min ticket, max trade and first-deposit tolerance.
     predicate: Rholphin.Model.Market.tradabilityGate_admit
@@ -209,9 +218,16 @@ invariants:
   I13:
     statement: Seed lock is one-shot; terminal flags exclusive; beneficiary/governor gated.
     predicate: Rholphin.Model.Pool.Lock
-    status: deferred
-    deferral: {phase: 5, reason: fund_refuses_short is a height check, not lock linearity}
-    theorems: []
+    status: partial
+    note: >-
+      fund is one-shot and release/cancel are mutually exclusive.  The
+      beneficiary and governor gates are model arguments, not proved against
+      the deploy identity.
+    theorems:
+      - {name: Rholphin.Model.Pool.fund_sets_funded, strength: substantive, kind: preservation}
+      - {name: Rholphin.Model.Pool.fund_refuses_funded, strength: substantive, kind: rejection}
+      - {name: Rholphin.Model.Pool.release_then_cancel_refused, strength: substantive, kind: rejection}
+      - {name: Rholphin.Model.Pool.cancel_then_release_refused, strength: substantive, kind: rejection}
   I14:
     statement: Transfer status changes at most once; claim xor refund.
     predicate: Rholphin.Model.Transfer.Transfer
