@@ -28,10 +28,8 @@ import netconfig  # noqa: E402
 
 import sign_payload  # noqa: E402
 from feed_refresh import feed_uri, set_price  # noqa: E402
-from install_v3 import render  # noqa: E402
-from unit_feed import blake2b256, canonical  # noqa: E402
 from minify_rho import minify  # noqa: E402
-from unit_stablecoin import deploy_system  # noqa: E402
+import stablecoin_support  # noqa: E402
 from unit_v3 import call, check, faucet_top_up, one  # noqa: E402
 
 KEYS = netconfig.KEYS_PATH
@@ -133,28 +131,23 @@ def main() -> int:
     for name in ("key13", "key20"):
         faucet_top_up(keys[name]["address"])
     sponsor = keys["sponsor"]["public"]
-    params = ('{"mcrBps": 20000, "bonusBps": 800, "closeFactorBps": 5000, '
-              '"ratePerBlock": 3171, "debtCeiling": 10000000000000, '
-              '"minDebt": 1000000, "maxDebt": 10000000000000, '
-              '"maxOracleAge": 50, "savingsShareBps": 5000, "psmFeeBps": 10}')
-    values = [CURRENCY, "20000", "800", "5000", "3171", "10000000000000",
-              "1000000", "10000000000000", "50", "5000", "10"]
-    params_hash = blake2b256(canonical("rcash:stablecoin-params:v2", values))
-    payload = f"rcash:stablecoin-create:v1|{CURRENCY}|{params_hash}|{sponsor}"
-    sig = sign_payload.sign_payload(keys["sponsor"]["secret"],
-                                    payload.encode())["signature"]
-    term = render("31_stablecoin", {
-        "__ROOT_URI__": root,
-        "__CURRENCY__": CURRENCY,
-        "__PARAMS__": params,
-        "__PARAMS_HASH__": params_hash,
-        "__SPONSOR_PUB__": sponsor,
-        "__SPONSOR_SIG__": sig,
-    })
-    system = deploy_system(term, secret)
-    (sc_uri, custody_uri, params_uri, vault_uri, liq_uri, savings_uri,
-     psm_uri, buffer_uri, att_reply) = system
-    check("liquidation engine attestation", att_reply[1].get("template") is not None, True)
+    params, _values, params_hash = stablecoin_support.params_for(CURRENCY)
+    system = stablecoin_support.deploy_currency_system(
+        keys, state, CURRENCY, params=params, params_hash=params_hash,
+        sponsor_sig=None, sponsor_key="sponsor")
+    sc_uri = system["sc_uri"]
+    custody_uri = system["custody_uri"]
+    params_uri = system["params_uri"]
+    vault_uri = system["vault_uri"]
+    liq_uri = system["liq_uri"]
+    savings_uri = system["savings_uri"]
+    psm_uri = system["psm_uri"]
+    buffer_uri = system["buffer_uri"]
+    liq_att = one(call(liq_uri, "LiquidationEngine",
+                       'LiquidationEngine!("attest", *r) | '
+                       "for (@x <- r) { deployId!(x) }"), secret)
+    check("liquidation engine attestation",
+          liq_att[1].get("template") is not None, True)
     print(f"stablecoin: {sc_uri}")
     print(f"liquidation engine: {liq_uri}")
 
@@ -166,25 +159,16 @@ def main() -> int:
     # The account resolves an asset through CurrencyRegistry, so the isolated
     # system must be listed before its stablecoin can be held in an account.
     registry_uri = state["currency_registry_uri"]
-    listing = (f"rcash:currency-register:v3|{CURRENCY}|{sc_uri}|{custody_uri}|"
-               f"{params_uri}|{vault_uri}|{liq_uri}|{savings_uri}|{psm_uri}|"
-               f"{buffer_uri}|{params_hash}|{sponsor}")
-    listing_sig = sign_payload.sign_payload(keys["sponsor"]["secret"],
-                                            listing.encode())["signature"]
-    register_body = (
-        f'CurrencyRegistry!("register", "{CURRENCY}", "{sc_uri}", "{custody_uri}", '
-        f'"{params_uri}", "{vault_uri}", "{liq_uri}", "{savings_uri}", "{psm_uri}", '
-        f'"{buffer_uri}", "{params_hash}", "{sponsor}", '
-        f'"{listing_sig}".hexToBytes(), *r) |\n'
-        "  for (@x <- r) {\n"
-        "    match x {\n"
-        '      (true, entry) => deployId!([true, entry])\n'
-        "      (false, why) => deployId!([false, why])\n"
-        "      _ => deployId!(x)\n"
-        "    }\n"
-        "  }"
-    )
-    listed = one(call(registry_uri, "CurrencyRegistry", register_body), secret)
+    faucet_top_up(keys["sponsor"]["address"])
+    listing_args = (CURRENCY, sc_uri, custody_uri, params_uri, vault_uri,
+                    liq_uri, savings_uri, psm_uri, buffer_uri, params_hash,
+                    sponsor)
+    listing_sig = stablecoin_support.listing_signature(
+        keys["sponsor"]["secret"],
+        *stablecoin_support.listing_values(*listing_args))
+    listed = one(stablecoin_support.full_register_term(
+        registry_uri, *listing_args, signature=listing_sig),
+        keys["sponsor"]["secret"])
     if listed[0] is not True:
         print(f"{CURRENCY} register refused (reused chain):", listed)
     check(f"{CURRENCY} listed", listed[0] is True or "exist" in str(listed[1]).lower(), True)
