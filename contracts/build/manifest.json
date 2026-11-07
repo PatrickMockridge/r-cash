@@ -83,12 +83,12 @@
     },
     "contracts/build/deploy/v3/09_identity.rho": {
       "brace_depth": 39,
-      "contracts": 23,
+      "contracts": 24,
       "grammar_depth": 68,
-      "minified_bytes": 10138,
+      "minified_bytes": 10948,
       "operator_run": 8,
-      "sha256": "f382759a02b94b63195d0ab55099cea88e257fd792ac6645b631d68bad4a22eb",
-      "source_bytes": 27354
+      "sha256": "0d952ff9b571576c4e74f86659f0535f96fe95f0b645b9bd20c1498c882f16e2",
+      "source_bytes": 29105
     },
     "contracts/build/deploy/v3/12_oracle_registry.rho": {
       "brace_depth": 20,

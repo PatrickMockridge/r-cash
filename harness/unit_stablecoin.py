@@ -212,7 +212,7 @@ def main() -> int:
     savings_text = (ROOT / "harness/scenarios/stablecoin_savings.rho").read_text()
     for key, value in {
         "__ROOT_URI__": root,
-        "__VAULT_URI__": vault_uri,
+        "__VAULT_URI__": vault_uri, "__CURRENCY__": currency,
         "__SAVINGS_URI__": savings_uri,
         "__PUBKEY__": keys["key13"]["public"],
         "__FUND__": "15000000",
@@ -231,7 +231,7 @@ def main() -> int:
     ops_text = (ROOT / "harness/scenarios/stablecoin_ops.rho").read_text()
     for key, value in {
         "__ROOT_URI__": root,
-        "__VAULT_URI__": vault_uri,
+        "__VAULT_URI__": vault_uri, "__CURRENCY__": currency,
         "__PUBKEY__": sender_pub,
         "__FUND__": "15000000",
         "__COLLATERAL__": "8000000",

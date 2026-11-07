@@ -448,7 +448,7 @@ def seed_market(keys: dict, state: dict, config: dict, base: str, quote: str,
         term = (ROOT / "harness/scenarios/stablecoin_mint_hold.rho").read_text()
         replacements = {
             "__ROOT_URI__": state["root_uri"],
-            "__VAULT_URI__": entry["vaultUri"],
+            "__VAULT_URI__": entry["vaultUri"], "__CURRENCY__": code,
             "__PUBKEY__": deployer["public"],
             "__FUND__": str(collateral),
             "__COLLATERAL__": str(collateral),

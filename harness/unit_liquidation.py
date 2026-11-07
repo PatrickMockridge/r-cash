@@ -116,7 +116,7 @@ def liquidate(keys: dict, holder: str, liq_uri: str, vault_uri: str,
     term = render_scenario("stablecoin_liquidate.rho", {
         "__HOLDER_URI__": holder,
         "__LIQ_URI__": liq_uri,
-        "__VAULT_URI__": vault_uri,
+        "__VAULT_URI__": vault_uri, "__CURRENCY__": CURRENCY,
         "__OWNER_ID__": owner_id,
         "__AMOUNT__": str(amount),
         "__MIN_COLLATERAL__": str(min_collateral),
@@ -193,7 +193,7 @@ def main() -> int:
     mint_term = render_scenario("stablecoin_mint_hold.rho", {
         "__ROOT_URI__": root,
         "__SC_URI__": sc_uri,
-        "__VAULT_URI__": vault_uri,
+        "__VAULT_URI__": vault_uri, "__CURRENCY__": CURRENCY,
         "__PUBKEY__": owner_key,
         "__FUND__": "20000000",
         "__COLLATERAL__": str(COLLATERAL),
@@ -211,7 +211,7 @@ def main() -> int:
     recap = keys["key20"]
     recap_mint = render_scenario("stablecoin_mint_hold.rho", {
         "__ROOT_URI__": root,
-        "__VAULT_URI__": vault_uri,
+        "__VAULT_URI__": vault_uri, "__CURRENCY__": CURRENCY,
         "__PUBKEY__": recap["public"],
         "__FUND__": "20000000",
         "__COLLATERAL__": "10000000",
@@ -261,7 +261,7 @@ def main() -> int:
     faucet_top_up(recap["address"])
     halt = one(render_scenario("stablecoin_mint_extra.rho", {
         "__ROOT_URI__": root,
-        "__VAULT_URI__": vault_uri,
+        "__VAULT_URI__": vault_uri, "__CURRENCY__": CURRENCY,
         "__PUBKEY__": recap["public"],
         "__MINT__": "1000000",
         "__ASSET__": CURRENCY,
@@ -276,7 +276,7 @@ def main() -> int:
     check("recap vault has accrued interest", interest_due > 0, True)
     repay_reply = one(render_scenario("stablecoin_repay_hold.rho", {
         "__ROOT_URI__": root,
-        "__VAULT_URI__": vault_uri,
+        "__VAULT_URI__": vault_uri, "__CURRENCY__": CURRENCY,
         "__PUBKEY__": recap["public"],
         "__AMOUNT__": str(interest_due),
         "__ASSET__": CURRENCY,
@@ -298,7 +298,7 @@ def main() -> int:
     # Direct VaultBook access without the liquidation cap must be refused.
     refusal = render_scenario("stablecoin_auth_refusal.rho", {
         "__HOLDER_URI__": holder,
-        "__VAULT_URI__": vault_uri,
+        "__VAULT_URI__": vault_uri, "__CURRENCY__": CURRENCY,
         "__OWNER_ID__": owner_id,
         "__AMOUNT__": "1",
     })

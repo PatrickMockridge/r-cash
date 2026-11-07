@@ -19,9 +19,9 @@ stateDiagram-v2
 
 | arm | transition | kind | guards | effects | access | refusals | invariants | status | source |
 |---|---|---|---|---|---|---|---|---|---|
-| `AccountFactory@"getOrCreate"` | `identity.AccountFactory.getOrCreate` | mutate | ownerId = revAddress(pubKeyBytes) → verify failed<br>accounts[ownerId] = Nil or return existing → exists | accounts[ownerId] = {account: bundle, proof: proof}<br>purseState = {purses: {}, rev: 0}<br>accountState = {nextTransferId: 0, ops: {}, rev: 0} | peek factoryState (arm)<br>consume factoryState (arm)<br>post accountState (arm)<br>post factoryState (arm)<br>post purseState (arm) | — | I21 | verified | contracts/src/deploy/v3/09_identity.rho:19 |
-| `AccountFactory@"verify"` | `identity.AccountFactory.verify` | read | — | reply = (true, stored.proof = proof) | peek factoryState (arm) | — | I21 | verified | contracts/src/deploy/v3/09_identity.rho:535 |
-| `AccountFactory@"accountOf"` | `identity.AccountFactory.accountOf` | read | accounts[ownerId] != Nil → no account | reply = (true, account) | peek factoryState (arm) | no account (pre) | I21 | verified | contracts/src/deploy/v3/09_identity.rho:544 |
+| `AccountFactory@"getOrCreate"` | `identity.AccountFactory.getOrCreate` | mutate | ownerId = revAddress(pubKeyBytes) → verify failed<br>accounts[ownerId] = Nil or return existing → exists | accounts[ownerId] = {account: bundle}<br>proofState = proofs[ownerId] = proof, rev: rev + 1<br>purseState = {purses: {}, rev: 0}<br>accountState = {nextTransferId: 0, ops: {}, rev: 0} | peek factoryState (arm)<br>consume factoryState (arm)<br>post accountState (arm)<br>post factoryState (arm)<br>consume proofState (arm)<br>post proofState (arm)<br>post purseState (arm) | — | I21 | verified | contracts/src/deploy/v3/09_identity.rho:63 |
+| `AccountFactory@"verify"` | `identity.AccountFactory.verify` | read | — | reply = (true, proofs[ownerId] = proof) | peek proofState (arm) | — | I21 | verified | contracts/src/deploy/v3/09_identity.rho:578 |
+| `AccountFactory@"accountOf"` | `identity.AccountFactory.accountOf` | read | accounts[ownerId] != Nil → no account | reply = (true, account) | peek factoryState (arm) | no account (pre) | I21 | verified | contracts/src/deploy/v3/09_identity.rho:587 |
 
 ### AccountGate
 
@@ -35,7 +35,7 @@ stateDiagram-v2
 
 | arm | transition | kind | guards | effects | access | refusals | invariants | status | source |
 |---|---|---|---|---|---|---|---|---|---|
-| `AccountGate@"verify"` | `identity.AccountGate.verify` | read | revAddress(deployerId.pubKey) = ownerId → not owner | reply = (true, Nil) | — | not owner (pre) | I21 | verified | contracts/src/deploy/v3/09_identity.rho:32 |
+| `AccountGate@"verify"` | `identity.AccountGate.verify` | read | revAddress(deployerId.pubKey) = ownerId → not owner | reply = (true, Nil) | — | not owner (pre) | I21 | verified | contracts/src/deploy/v3/09_identity.rho:76 |
 
 ### PurseStore
 
@@ -53,11 +53,11 @@ stateDiagram-v2
 
 | arm | transition | kind | guards | effects | access | refusals | invariants | status | source |
 |---|---|---|---|---|---|---|---|---|---|
-| `PurseStore@"ensure"` | `identity.PurseStore.ensure` | mutate | AssetResolver.issuer(assetId) ok → no purse | purses[assetId] = existing or {purse: makeEmptyPurse(issuer), brand: brand}<br>rev = rev + 1 | peek purseState (arm)<br>consume purseState (arm)<br>post purseState (arm) | — | S7 | verified | contracts/src/deploy/v3/09_identity.rho:45 |
-| `PurseStore@"deposit"` | `identity.PurseStore.deposit` | read | purses[assetId] != Nil → no purse<br>purse.deposit ok → deposit | purse.balance = balance + amount | peek purseState (arm) | no purse (pre) | S7 | verified | contracts/src/deploy/v3/09_identity.rho:92 |
-| `PurseStore@"withdraw"` | `identity.PurseStore.withdraw` | read | amount > 0 → amount<br>purses[assetId] != Nil → no purse<br>purse.withdraw ok → payment | purse.balance = balance - amount<br>caller = payment amount | peek purseState (arm) | amount (pre)<br>no purse (pre) | S7 | verified | contracts/src/deploy/v3/09_identity.rho:115 |
-| `PurseStore@"balance"` | `identity.PurseStore.balance` | read | purses[assetId] != Nil → no purse | reply = purse.balance | peek purseState (arm) | no purse (pre) | S7 | verified | contracts/src/deploy/v3/09_identity.rho:143 |
-| `PurseStore@"facet"` | `identity.PurseStore.facet` | read | purses[assetId] != Nil → no purse | reply = purse.depositFacet | peek purseState (arm) | no purse (pre) | S7 | verified | contracts/src/deploy/v3/09_identity.rho:166 |
+| `PurseStore@"ensure"` | `identity.PurseStore.ensure` | mutate | AssetResolver.issuer(assetId) ok → no purse | purses[assetId] = existing or {purse: makeEmptyPurse(issuer), brand: brand}<br>rev = rev + 1 | peek purseState (arm)<br>consume purseState (arm)<br>post purseState (arm) | — | S7 | verified | contracts/src/deploy/v3/09_identity.rho:89 |
+| `PurseStore@"deposit"` | `identity.PurseStore.deposit` | read | purses[assetId] != Nil → no purse<br>purse.deposit ok → deposit | purse.balance = balance + amount | peek purseState (arm) | no purse (pre) | S7 | verified | contracts/src/deploy/v3/09_identity.rho:136 |
+| `PurseStore@"withdraw"` | `identity.PurseStore.withdraw` | read | amount > 0 → amount<br>purses[assetId] != Nil → no purse<br>purse.withdraw ok → payment | purse.balance = balance - amount<br>caller = payment amount | peek purseState (arm) | amount (pre)<br>no purse (pre) | S7 | verified | contracts/src/deploy/v3/09_identity.rho:159 |
+| `PurseStore@"balance"` | `identity.PurseStore.balance` | read | purses[assetId] != Nil → no purse | reply = purse.balance | peek purseState (arm) | no purse (pre) | S7 | verified | contracts/src/deploy/v3/09_identity.rho:187 |
+| `PurseStore@"facet"` | `identity.PurseStore.facet` | read | purses[assetId] != Nil → no purse | reply = purse.depositFacet | peek purseState (arm) | no purse (pre) | S7 | verified | contracts/src/deploy/v3/09_identity.rho:210 |
 
 ### account
 
@@ -79,12 +79,12 @@ stateDiagram-v2
 
 | arm | transition | kind | guards | effects | access | refusals | invariants | status | source |
 |---|---|---|---|---|---|---|---|---|---|
-| `account@"vaultOpen"` | `identity.account.vaultOpen` | mutate | AccountGate.verify ok → not owner | delegate = VaultBook.open(ownerId, proof) | — | not owner (pre) | I21 | verified | contracts/src/deploy/v3/09_identity.rho:293 |
-| `account@"deposit"` | `identity.account.deposit` | mutate | AccountGate.verify ok → not owner | delegate = PurseStore.deposit(assetId, payment) | — | not owner (pre) | S7 | verified | contracts/src/deploy/v3/09_identity.rho:312 |
-| `account@"withdraw"` | `identity.account.withdraw` | mutate | AccountGate.verify ok → not owner | delegate = PurseStore.withdraw(assetId, amount) | — | not owner (pre) | S7 | verified | contracts/src/deploy/v3/09_identity.rho:326 |
-| `account@"balance"` | `identity.account.balance` | read | AccountGate.verify ok → not owner | delegate = PurseStore.balance(assetId) | — | not owner (pre) | S7 | verified | contracts/src/deploy/v3/09_identity.rho:340 |
-| `account@"depositFacet"` | `identity.account.depositFacet` | read | — | delegate = PurseStore.facet(assetId) | — | — | S7 | verified | contracts/src/deploy/v3/09_identity.rho:356 |
-| `account@"sendTransfer"` | `identity.account.sendTransfer` | mutate | AccountGate.verify ok → not owner<br>reserveSend ok → pending<br>refund facet ok → no purse<br>purse withdraw ok → payment<br>TransferBook.send ok → asset | accountState.nextTransferId = id + 1<br>accountState.ops[opId] = {id, uri}<br>accountState.rev = rev + 1<br>stipend = native REV transferred to recipientPub | consume accountState (helper:dropReserve)<br>consume accountState (helper:reserveSend)<br>consume accountState (helper:sendCommit)<br>post accountState (helper:dropReserve)<br>post accountState (helper:reserveSend)<br>post accountState (helper:sendCommit) | not owner (pre)<br>pending (pre) | I14<br>I15<br>I21 | verified | contracts/src/deploy/v3/09_identity.rho:362 |
-| `account@"claimTransfer"` | `identity.account.claimTransfer` | mutate | AccountGate.verify ok → not owner | delegate = TransferContract.claim(secret) | — | not owner (pre) | I14 | verified | contracts/src/deploy/v3/09_identity.rho:457 |
-| `account@"refundTransfer"` | `identity.account.refundTransfer` | mutate | AccountGate.verify ok → not owner | delegate = TransferContract.refund(deployerId) | — | not owner (pre) | I14 | verified | contracts/src/deploy/v3/09_identity.rho:476 |
-| `account@"transfers"` | `identity.account.transfers` | read | AccountGate.verify ok → not owner | reply = (true, accountState.ops) | peek accountState (arm) | not owner (pre) | I14 | verified | contracts/src/deploy/v3/09_identity.rho:495 |
+| `account@"vaultOpen"` | `identity.account.vaultOpen` | mutate | AccountGate.verify ok → not owner<br>registry entry has vaultUri → no vault | delegate = VaultBook.open(ownerId, proof) | — | not owner (pre)<br>no vault (pre) | I21 | verified | contracts/src/deploy/v3/09_identity.rho:337 |
+| `account@"deposit"` | `identity.account.deposit` | mutate | AccountGate.verify ok → not owner | delegate = PurseStore.deposit(assetId, payment) | — | not owner (pre) | S7 | verified | contracts/src/deploy/v3/09_identity.rho:351 |
+| `account@"withdraw"` | `identity.account.withdraw` | mutate | AccountGate.verify ok → not owner | delegate = PurseStore.withdraw(assetId, amount) | — | not owner (pre) | S7 | verified | contracts/src/deploy/v3/09_identity.rho:365 |
+| `account@"balance"` | `identity.account.balance` | read | AccountGate.verify ok → not owner | delegate = PurseStore.balance(assetId) | — | not owner (pre) | S7 | verified | contracts/src/deploy/v3/09_identity.rho:379 |
+| `account@"depositFacet"` | `identity.account.depositFacet` | read | — | delegate = PurseStore.facet(assetId) | — | — | S7 | verified | contracts/src/deploy/v3/09_identity.rho:395 |
+| `account@"sendTransfer"` | `identity.account.sendTransfer` | mutate | AccountGate.verify ok → not owner<br>reserveSend ok → pending<br>refund facet ok → no purse<br>purse withdraw ok → payment<br>TransferBook.send ok → asset | accountState.nextTransferId = id + 1<br>accountState.ops[opId] = {id, uri}<br>accountState.rev = rev + 1<br>stipend = native REV transferred to recipientPub | consume accountState (helper:dropReserve)<br>consume accountState (helper:reserveSend)<br>consume accountState (helper:sendCommit)<br>post accountState (helper:dropReserve)<br>post accountState (helper:reserveSend)<br>post accountState (helper:sendCommit) | not owner (pre)<br>pending (pre) | I14<br>I15<br>I21 | verified | contracts/src/deploy/v3/09_identity.rho:401 |
+| `account@"claimTransfer"` | `identity.account.claimTransfer` | mutate | AccountGate.verify ok → not owner | delegate = TransferContract.claim(secret) | — | not owner (pre) | I14 | verified | contracts/src/deploy/v3/09_identity.rho:496 |
+| `account@"refundTransfer"` | `identity.account.refundTransfer` | mutate | AccountGate.verify ok → not owner | delegate = TransferContract.refund(deployerId) | — | not owner (pre) | I14 | verified | contracts/src/deploy/v3/09_identity.rho:515 |
+| `account@"transfers"` | `identity.account.transfers` | read | AccountGate.verify ok → not owner | reply = (true, accountState.ops) | peek accountState (arm) | not owner (pre) | I14 | verified | contracts/src/deploy/v3/09_identity.rho:534 |

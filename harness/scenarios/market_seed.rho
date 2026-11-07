@@ -47,7 +47,7 @@ in {
                                 match e {
                                   (true, entry) => {
                                     match entry.get("vaultUri") { vaultUri => {
-                                      @account!("vaultOpen", *deployerId, vaultUri, *zCh) |
+                                      @account!("vaultOpen", *deployerId, "V4T", *zCh) |
                                       for (@z <- zCh) {
                                         match z {
                                           (true, auth) => {
