@@ -45,6 +45,90 @@ theorem sell_preserves_ceiling {p : Psm} {amount : Int}
   have := sell_decreases p amount hpos
   omega
 
+/-- A buy is accepted only for a non-negative amount within the ceiling. -/
+def buyOk (p : Psm) (stableOut : Int) : Bool :=
+  decide (0 ≤ stableOut ∧ p.stableDebt + stableOut ≤ (p.ceiling : Int))
+
+def buyChecked (p : Psm) (stableOut : Int) : Option Psm :=
+  if buyOk p stableOut then some (buy p stableOut) else none
+
+theorem buyChecked_refuses_negative {p : Psm} {stableOut : Int} (h : stableOut < 0) :
+    buyChecked p stableOut = none := by
+  unfold buyChecked
+  have hok : buyOk p stableOut = false := by
+    unfold buyOk
+    exact decide_eq_false (by intro hg; omega)
+  simp [hok]
+
+theorem buyChecked_ceiling {p p' : Psm} {stableOut : Int}
+    (h : buyChecked p stableOut = some p') :
+    p'.stableDebt ≤ (p.ceiling : Int) := by
+  unfold buyChecked at h
+  split at h
+  · rename_i hok
+    have hdec : decide (0 ≤ stableOut ∧ p.stableDebt + stableOut ≤ (p.ceiling : Int)) = true := by
+      simpa [buyOk] using hok
+    have hg : 0 ≤ stableOut ∧ p.stableDebt + stableOut ≤ (p.ceiling : Int) :=
+      of_decide_eq_true hdec
+    injection h with heq
+    subst heq
+    dsimp [buy]
+    exact hg.2
+  · contradiction
+
+theorem buyChecked_adds {p p' : Psm} {stableOut : Int}
+    (h : buyChecked p stableOut = some p') :
+    p'.stableDebt = p.stableDebt + stableOut := by
+  unfold buyChecked at h
+  split at h
+  · injection h with heq
+    subst heq
+    rfl
+  · contradiction
+
+/-- A sell is accepted only for a non-negative amount within the floor. -/
+def sellOk (p : Psm) (amount : Int) : Bool :=
+  decide (0 ≤ amount ∧ -((p.maxSupply : Int)) ≤ p.stableDebt - amount)
+
+def sellChecked (p : Psm) (amount : Int) : Option Psm :=
+  if sellOk p amount then some (sell p amount) else none
+
+theorem sellChecked_refuses_below_floor {p : Psm} {amount : Int}
+    (h : ¬ sellWithinFloor p amount) : sellChecked p amount = none := by
+  unfold sellChecked
+  have hok : sellOk p amount = false := by
+    unfold sellOk
+    exact decide_eq_false (by
+      intro hg
+      exact h (by simpa [sellWithinFloor] using hg.2))
+  simp [hok]
+
+theorem sellChecked_floor {p p' : Psm} {amount : Int}
+    (h : sellChecked p amount = some p') :
+    -((p.maxSupply : Int)) ≤ p'.stableDebt := by
+  unfold sellChecked at h
+  split at h
+  · rename_i hok
+    have hdec : decide (0 ≤ amount ∧ -((p.maxSupply : Int)) ≤ p.stableDebt - amount) = true := by
+      simpa [sellOk] using hok
+    have hg : 0 ≤ amount ∧ -((p.maxSupply : Int)) ≤ p.stableDebt - amount :=
+      of_decide_eq_true hdec
+    injection h with heq
+    subst heq
+    dsimp [sell]
+    exact hg.2
+  · contradiction
+
+theorem sellChecked_subtracts {p p' : Psm} {amount : Int}
+    (h : sellChecked p amount = some p') :
+    p'.stableDebt = p.stableDebt - amount := by
+  unfold sellChecked at h
+  split at h
+  · injection h with heq
+    subst heq
+    rfl
+  · contradiction
+
 /-! ## Arm-level surface -/
 
 def pegStabilityModule_fundRev (rev amount : Nat) : Nat := rev + amount
