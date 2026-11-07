@@ -50,8 +50,9 @@ The five original models were checked with TLC 2.19 (tla2tools 1.7.4) on 2026-10
 `AdminNonce` 64 states, `CapabilityProvenance` 13, `CellLinearity` 5,
 `PoolConservation` 60586, `TransferExclusivity` 13. `MarketCreateAtomicity` and
 `PoolCriticalSection` were added with the 2026-11-03 HAZOP; the CI `tla` job now checks all
-seven. The first CI run found an unconstrained `checked'` in `MarketCreateAtomicity.Create`;
-it is fixed. The finite bounds are deliberately small; the models check the protocol shape,
+seven. The first CI run found an unconstrained `checked'` in `MarketCreateAtomicity.Create`
+and an unbounded `revLive` in `PoolCriticalSection`; both are fixed (the latter uses a
+two-value revision toggle so the state space is finite). The finite bounds are deliberately small; the models check the protocol shape,
 not production-scale state spaces.
 
 The models are abstractions. They do not model phlo, the node scheduler or the Rholang
