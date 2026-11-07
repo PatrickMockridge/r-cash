@@ -91,11 +91,12 @@
 | `TransferContract@"info"` | `transfer.TransferContract.info` | peek:1 | OK | yes | `Rholphin.Model.Transfer.transferContract_info` | verified |  |
 | `MarketTerms@"put"` | `market.MarketTerms.put` | consume:1, post:1 | OK | yes | `Rholphin.Model.Market.marketTerms_putChecked` | verified |  |
 | `MarketTerms@"get"` | `market.MarketTerms.get` | peek:1 | OK | yes | `Rholphin.Model.Market.marketTerms_get` | verified |  |
-| `MarketDirectory@"bind"` | `market.MarketDirectory.bind` | consume:1, post:1 | OK | yes | `Rholphin.Model.Market.marketDirectory_bind` | verified |  |
-| `MarketDirectory@"seal"` | `market.MarketDirectory.seal` | consume:1, post:1 | OK | yes | `Rholphin.Model.Market.marketDirectory_seal` | verified |  |
+| `MarketDirectory@"bind"` | `market.MarketDirectory.bind` | peek:1, consume:1, post:1 | OK | yes | `Rholphin.Model.Market.marketDirectory_bind` | verified |  |
+| `MarketDirectory@"seal"` | `market.MarketDirectory.seal` | peek:1, consume:1, post:1 | OK | yes | `Rholphin.Model.Market.marketDirectory_seal` | verified |  |
 | `MarketDirectory@"byId"` | `market.MarketDirectory.byId` | peek:1 | OK | yes | `Rholphin.Model.Market.marketDirectory_byId` | verified |  |
 | `MarketDirectory@"slot"` | `market.MarketDirectory.slot` | peek:1 | OK | yes | `Rholphin.Model.Market.marketDirectory_slot` | verified |  |
-| `MarketIndex@"stage"` | `market.MarketIndex.stage` | consume:1, post:1 | OK | yes | `Rholphin.Model.Market.marketIndex_stage` | verified |  |
+| `MarketAuthLedger@"rotate"` | `market.MarketAuthLedger.rotate` | consume:1, post:1 | OK | yes | `Rholphin.Model.Market.marketAuth_rotate` | verified |  |
+| `MarketIndex@"stage"` | `market.MarketIndex.stage` | peek:1, consume:1, post:1 | OK | yes | `Rholphin.Model.Market.marketIndex_stage` | verified |  |
 | `MarketIndex@"checkStage"` | `market.MarketIndex.checkStage` | peek:1 | OK | yes | `Rholphin.Model.Market.marketIndex_checkStage` | verified |  |
 | `MarketIndex@"activate"` | `market.MarketIndex.activate` | peek:1, consume:1, post:1 | OK | yes | `Rholphin.Model.Market.marketIndex_activateChecked` | verified |  |
 | `MarketIndex@"market"` | `market.MarketIndex.market` | peek:1 | OK | yes | `Rholphin.Model.Market.marketIndex_market` | verified |  |
@@ -103,7 +104,7 @@
 | `MarketIndex@"marketFor"` | `market.MarketIndex.marketFor` | peek:1 | OK | yes | `Rholphin.Model.Market.marketIndex_marketFor` | verified |  |
 | `MarketIndex@"setStatus"` | `market.MarketIndex.setStatus` | consume:1, post:1 | OK | yes | `Rholphin.Model.Market.marketIndex_setStatus` | verified |  |
 | `MarketIndex@"pauseAsset"` | `market.MarketIndex.pauseAsset` | consume:1, post:1 | OK | yes | `Rholphin.Model.Market.marketIndex_pauseAsset` | verified |  |
-| `MarketFactory@"createMarket"` | `market.MarketFactory.createMarket` | — | OK | yes | `Rholphin.Model.Market.marketFactory_createMarket` | verified |  |
+| `MarketFactory@"createMarket"` | `market.MarketFactory.createMarket` | peek:1 | OK | yes | `Rholphin.Model.Market.marketFactory_createMarket` | verified |  |
 | `ListingViews@"marketFor"` | `market.ListingViews.marketFor` | — | OK | yes | `Rholphin.Model.Market.listingViews_marketFor` | verified |  |
 | `ListingViews@"market"` | `market.ListingViews.market` | — | OK | yes | `Rholphin.Model.Market.listingViews_market` | verified |  |
 | `ListingViews@"isActive"` | `market.ListingViews.isActive` | — | OK | yes | `Rholphin.Model.Market.listingViews_isActive` | verified |  |

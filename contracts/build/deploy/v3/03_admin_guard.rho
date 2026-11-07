@@ -48,17 +48,33 @@ in {
 
   contract AdminGuard(@"verify", @domain, @nonce, @action, @argsHash, @sigs,
                        @admins, @threshold, ret) = {
-    new dCh, okCh in {
-      match "rcash:admin:v1|" ++ domain ++ "|" ++ nonce.toString() ++ "|"
-            ++ action ++ "|" ++ argsHash {
-        payload => {
-          hash!(payload.toUtf8Bytes(), *dCh) |
-          for (@digest <- dCh) {
-            adminCount!(digest, sigs, 0, 0, admins, threshold, *okCh) |
-            for (@ok <- okCh) {
-              if (ok) { ret!((true, Nil)) }
-              else { ret!((false, "below threshold")) }
+    new rCh, cCh, cc, pCh, dCh, okCh in {
+      rl!(`__ROOT_URI__`, *rCh) |
+      for (Root <- rCh) {
+        Root!("resolve", "component:codec", 1, *cCh) |
+        for (@__replyAdmin <- cCh) {
+          match __replyAdmin {
+            (true, codecUri, _) => {
+              rl!(codecUri, *cc) |
+              for (Codec <- cc) {
+                // OCAP-09: length-prefixed canonical preimage; the opaque
+                // argsHash may contain '|' without shifting the field boundary.
+                Codec!("canonical", "rcash:admin:v1",
+                       [domain, nonce.toString(), action, argsHash], *pCh) |
+                for (@payload <- pCh) {
+                  hash!(payload.toUtf8Bytes(), *dCh) |
+                  for (@digest <- dCh) {
+                    adminCount!(digest, sigs, 0, 0, admins, threshold, *okCh) |
+                    for (@ok <- okCh) {
+                      if (ok) { ret!((true, Nil)) }
+                      else { ret!((false, "below threshold")) }
+                    }
+                  }
+                }
+              }
             }
+            (false, __why) => { ret!(1 / 0) }
+            _ => { ret!(1 / 0) }
           }
         }
       }

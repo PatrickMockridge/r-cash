@@ -474,6 +474,29 @@
       }
     },
     {
+      "name": "MarketAuthLedger",
+      "kind": "registry",
+      "stateful": true,
+      "state_cell": "marketAuthState",
+      "arms": [
+        "rotate"
+      ],
+      "dependencies": [
+        "Root",
+        "Governor"
+      ],
+      "creates": [],
+      "system": [],
+      "deploy": "contracts/src/deploy/v3/50_market.rho",
+      "instance_key": null,
+      "status": "implemented",
+      "budget": {
+        "bytes": 24576,
+        "depth": 48,
+        "contracts": 4
+      }
+    },
+    {
       "name": "MarketFactory",
       "kind": "registry",
       "stateful": false,
