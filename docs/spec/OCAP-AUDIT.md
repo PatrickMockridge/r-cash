@@ -67,26 +67,28 @@ leak: a bundle is opaque and a caller cannot rebind the free names.
 Severity is the walk's assessment. `Fixed` means the branch changes the code and
 has an executed test; `Baselined` means the gate records the finding and a
 refactor is deferred; `Accepted` means the model explicitly accepts it.
+`Model` means the multi-term artifact and proof exist on this branch but the
+deploy-source migration and its devnet runs are not merged; it is not a fix.
 
 | ID | Finding | Severity | Status |
 |---|---|---|---|
 | OCAP-01 | `Root.resolve` status arms inverted: `"retired"` succeeded and every active component refused | Critical | **Fixed** (commit `b426c72`; fresh install resolves every key) |
 | OCAP-02 | `TradabilityGate.admit` inverted: `"active"` refused, every swap failed | High | **Fixed** (`b426c72`; RT-11b) |
 | OCAP-03 | `account.vaultOpen` forwarded the owner's proof to a caller-supplied `vaultUri` | Critical | **Fixed** (registry-pinned vault; RT-03) |
-| OCAP-04 | Raw issuer auths are authority-as-argument; one leak is unlimited mint/burn/custody/liquidation | High | Accepted (design; gate `G-CAP-AUTH`/`G-CAP-BUNDLE`) |
+| OCAP-04 | Raw issuer auths are authority-as-argument; one leak is unlimited mint/burn/custody/liquidation | High | **Model**: multi-term facets and the P5/P7 shop are specified and proved (`Linear.Provisioning`); the five-term deploy migration is pending integration |
 | OCAP-05 | Account proof stored in the account registry entry and in the returned bundle | High | **Fixed** (dedicated `proofState`; the account closure still holds the proof it needs) |
-| OCAP-06 | No attenuation: issuer authority is all-or-nothing | High | Accepted (see §6 on why facets add little in a single-term deploy) |
-| OCAP-07 | No revocation for per-vault auth, issuer auth, `marketAuth`, `directoryAuth` | Medium | **Partial**: `VaultBook.rotate` added (RT-13); component URIs rotate through `Root.rotate`; issuer auths still have no rotation |
-| OCAP-08 | Authority co-location: each published stablecoin bundle carries a subset of the currency's authority | Medium | Baselined (`G-CAP-BUNDLE`, 38 metrics) |
-| OCAP-09 | Signed preimages use `toString()`/`"|"` instead of the canonical Codec | High | Baselined (`G-CAP-DOMAIN`, 14 sites) |
+| OCAP-06 | No attenuation: issuer authority is all-or-nothing | High | **Model**: `Linear.Prov` proves facet-kind attenuation (`facet_store_scope`, foreign-kind/auth rejection); the facet terms are pending integration |
+| OCAP-07 | No revocation for per-vault auth, issuer auth, `marketAuth`, `directoryAuth` | Medium | **Partial**: `VaultBook.rotate` added (RT-13); issuer/market/directory rotation is specified, proved (`Linear.Provisioning`) and modelled (`AuthRotation.tla`); the rotation arms and RT-17 are pending integration |
+| OCAP-08 | Authority co-location: each published stablecoin bundle carries a subset of the currency's authority | Medium | **Model**: the five-term split and facet bundles close over no raw auth; `G-CAP-BUNDLE` gains an annotated bare-name-slot exception. The deploy migration is pending integration |
+| OCAP-09 | Signed preimages use `toString()`/`"|"` instead of the canonical Codec | High | **Model**: the provisioning and rotation preimages bind domain/action/issuer/consumer/kind/nonce/deadline; `G-CAP-PROVISION` and RT-06 are added. The 14 legacy sites and the canonical rewrite are pending integration |
 | OCAP-10 | `registerExternal` trusts the adapter's self-reported brand/issuer | Medium | Open |
 | OCAP-11 | `register`/`registerExternal` do not require the submitter to be the sponsor | Medium | Open |
-| OCAP-12 | `LiquidityLock.fund` is permissionless; activation does not bind funder/beneficiary to the sponsor | Medium | Open |
+| OCAP-12 | `LiquidityLock.fund` is permissionless; activation does not bind funder/beneficiary to the sponsor | Medium | Open; the RT-12 scenario is written but unrun |
 | OCAP-13 | PSM sell floor `stableDebt - amount + maxSupply >= 0` looked like an over-redemption bug | Medium | **Not a defect**: SPEC §11 and the flow define it as the negative-debt floor; the comment was reconciled |
 | OCAP-14 | `check_captures.py` blind spots: no `rs!` publications, narrow bundle shapes | Medium | Mitigated by `check_capabilities.py`; captures still 0 findings |
 | OCAP-15 | G-FACET is suffix-based and only checks a literal first argument | Medium | Mitigated by `G-CAP-AUTH` (every authority parameter) |
 | OCAP-16 | Ambient `deployerId` authority in AccountGate; the account bundle is public | Medium | Accepted (the deployer identity is the authority; a shared bundle cannot act) |
-| OCAP-17 | No Lean `Prov`; I20 was tool-evidenced only | Low | **Fixed**: `Rholphin.Linear.Prov` proves `caller_never_stored`, `authority_use_requires_provenance` and `bundle_no_registry_cap`; I20 is covered |
+| OCAP-17 | No Lean `Prov`; I20 was tool-evidenced only | Low | **Fixed**: `Rholphin.Linear.Prov` proves `caller_never_stored`, `authority_use_requires_provenance`, `bundle_no_registry_cap`, and (this branch) the facet-kind attenuation lemmas; I20 is covered |
 | OCAP-18 | `TransferContract` carries the escrowed payment and both facets | Low | Accepted (claim/refund are gated; the registry entry is a bearer object by design) |
 | OCAP-19 | Claim `secretHash` is not bound to the transfer id/recipient/domain | Low | Open |
 
@@ -188,3 +190,57 @@ in the canonical order the defaults pass.
   (OCAP-16).
 - The Lean model abstracts the proof and the per-vault auth; the flow specs and
   the red-team suite are the evidence for the access-control transitions.
+
+## 10. Multi-term verification (2026-11-07)
+
+The five-term split and the P5/P7 provisioning protocol are recorded in
+[MULTI-TERM.md](MULTI-TERM.md). This branch adds the static verification layer;
+the deploy-source migration and every devnet run remain integration work.
+
+**Lean** (`spec/lean/Rholphin/Linear/Provisioning.lean`, `Prov.lean`):
+
+- `nonce_cannot_provision_twice` — a consumed nonce cannot provision twice;
+- `provision_requires_pinned_shop`, `issuer_shop_cannot_issue_buffer`,
+  `buffer_shop_cannot_issue_mint` — per-term shops, each consumer mapping a kind
+  to its pinned shop (`VaultAccept` owns T2's slot);
+- `provision_refusal_rolls_back` — a consumer refusal rolls the nonce back;
+- `provision_returns_no_cap` — the caller-visible reply exposes no capability;
+- `provision_routes_facets_to_consumer` — the requested facets are delivered to
+  the pinned consumer, not the caller;
+- `forged_facet_refused` / `slot_write_once` / `vault_accept_slot_write_once` —
+  a forged or wrong-shop facet is refused, and a filled slot is never replaced;
+- `mint_consumer_refuses_recapitalise`, `mint_consumer_recap_pre_effect` — the
+  `sin > surplus` check is a pre-effect guard on each mint consumer, not the
+  facet;
+- `settlement_interest_routes_to_buffer`, `settlement_return_shape` — the
+  `SettlementFacet` return shapes and the buffer deposit of `interestPay`;
+- `rotation_preserves_facet`, `rotation_refuses_old`, `rotation_accepts_new`,
+  `rotation_requires_governor`, `authorized_rotation_refuses_old` / `_accepts_new`
+  — rotation through `Governor@"authorize"` keeps the facet live, refuses the
+  old auth and accepts the new one; `auth_set_counts` covers the four T1, four
+  T3, two T4, liquidation and market/directory domains;
+- `facet_store_scope`, `facet_store_rejects_foreign_kind`,
+  `facet_store_rejects_foreign_auth`, `mint_facet_cannot_store_burn_auth`,
+  `burn_facet_cannot_store_mint_auth`, `burn_facet_call_carries_payment` — facet
+  attenuation and the payment-carrying ABI.
+
+All are in `Rholphin/Audit.lean`; `check_lean.py` reports 107 axiom audits with no
+`sorryAx` or project-local axiom.
+
+**TLA+**: `Provisioning.tla` (per-term shops, reserve/confirm, replay, forged
+grant, `VaultAccept`, recap guard, settlement routing) and `AuthRotation.tla`
+(old-refused/new-accepted through `Governor@"authorize"`, catalogue covering the
+liquidation ledger); `CapabilityProvenance.tla` gains facet attenuation and the
+no-facet-publication rule. TLC was run locally on 2026-11-07: 5,760, 20 and 32
+distinct states respectively, all invariants hold.
+
+**Gate**: `G-CAP-FACET` (no facet name in replies, attestations or published
+data maps), `G-CAP-PROVISION` (sponsor/issuer/consumer/kind/nonce/deadline
+binding, nonce consumed before the consumer call, `fail()` on refusal) and the
+annotated bare-name-slot exception for `G-CAP-BUNDLE`. The report-mode run is 52
+baselined findings, unchanged.
+
+**Not run**: RT-01, RT-04, RT-05, RT-06, RT-12 and RT-14–RT-17 are written as
+scenarios and, where the surface exists, as `unit_ocap.py` probes. This branch
+has no devnet and no integrated five-term install, so none is recorded as
+passing. RT-06, RT-12 and RT-14–RT-17 are pending integration.

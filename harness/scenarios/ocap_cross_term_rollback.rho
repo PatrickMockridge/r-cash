@@ -1,0 +1,28 @@
+// RT-16: a cross-term mint followed by a downstream `1/0` must abort the whole
+// deploy. T2's VaultBook.mint checks `sin <= surplus` before calling its
+// provisioned MintFacet (T1); after the facet returns, the continuation fails,
+// so the issuer supply, the consumer slot and the nonce must all roll back.
+// Placeholders: __ROOT_URI__, __VAULT_URI__, __OWNER_PUB__, __MINT_AMOUNT__.
+// Expected: the deploy is rejected (processed with error); the caller reads the
+// supply before and after and asserts it is unchanged.
+new
+  rl(`rho:registry:lookup`),
+  rootCh, vaultCh, afCh, ac, oCh, r,
+  deployId(`rho:rchain:deployId`)
+in {
+  rl!(`__ROOT_URI__`, *rootCh) |
+  rl!(`__VAULT_URI__`, *vaultCh) |
+  for (Root <- rootCh; VaultBook <- vaultCh) {
+    Root!("resolve", "component:account-factory", 1, *afCh) |
+    for (@(true, afUri, _) <- afCh) {
+      rl!(afUri, *ac) |
+      for (AccountFactory <- ac) {
+        AccountFactory!("getOrCreate", "__OWNER_PUB__".hexToBytes(), *oCh) |
+        for (@(true, _account, ownerId) <- oCh) {
+          VaultBook!("mint", ownerId, __MINT_AMOUNT__, *r) |
+          for (@_ <- r) { 1 / 0 }
+        }
+      }
+    }
+  }
+}

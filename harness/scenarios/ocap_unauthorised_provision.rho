@@ -1,0 +1,21 @@
+// RT-14: provisioning is sponsor-gated. A payload signed by a key that is not
+// the shop's bound sponsor (or with a mismatched issuer URI) must be refused
+// before the nonce is consumed and before any consumer slot is written.
+// T3's buffer shop is a separate deployment; this scenario targets the T1
+// issuer shop (mint/burn/settle/custody).
+// Placeholders: __ISSUER_SHOP_URI__, __CONSUMER_URI__, __ISSUER_URI__, __KINDS__,
+//               __NONCE__, __DEADLINE__, __WRONG_SPONSOR_HEX__, __WRONG_SIG__.
+// Expected reply: (false, reason); never (true, ...).
+new
+  rl(`rho:registry:lookup`),
+  shopCh, r,
+  deployId(`rho:rchain:deployId`)
+in {
+  rl!(`__ISSUER_SHOP_URI__`, *shopCh) |
+  for (FacetShop <- shopCh) {
+    FacetShop!("provision", "__CONSUMER_URI__", "ocap-rt14", __KINDS__,
+               __NONCE__, __DEADLINE__, "__WRONG_SPONSOR_HEX__",
+               "__WRONG_SIG__".hexToBytes(), *r) |
+    for (@x <- r) { deployId!(x) }
+  }
+}

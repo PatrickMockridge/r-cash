@@ -1,0 +1,18 @@
+// RT-15: a consumer's `acceptFacet` must refuse a fresh name that the shop did
+// not issue, and must refuse to replace an already-filled slot. The facet is
+// passed as a process (`*bogus`), exactly as a hostile consumer would.
+// Placeholders: __CONSUMER_URI__, __KIND__, __NONCE__, __DEADLINE__.
+// Expected reply: (false, reason); never (true, ...).
+new
+  rl(`rho:registry:lookup`),
+  consumerCh, r,
+  deployId(`rho:rchain:deployId`)
+in {
+  rl!(`__CONSUMER_URI__`, *consumerCh) |
+  for (Consumer <- consumerCh) {
+    new bogus in {
+      Consumer!("acceptFacet", "__KIND__", *bogus, __NONCE__, __DEADLINE__, *r) |
+      for (@x <- r) { deployId!(x) }
+    }
+  }
+}
