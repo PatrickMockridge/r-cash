@@ -121,10 +121,10 @@
       "brace_depth": 25,
       "contracts": 21,
       "grammar_depth": 42,
-      "minified_bytes": 13928,
+      "minified_bytes": 13920,
       "operator_run": 5,
-      "sha256": "5f218f7867e2d4b11842f5a7cb9429b6f3b7e9298c20887f1ab9f798dae4eba1",
-      "source_bytes": 24833
+      "sha256": "a710b516b2c0b1ec7083da8693a9555cd8496cb4678d459eea4702da5bb5aa89",
+      "source_bytes": 24827
     },
     "contracts/build/deploy/v3/31_feed.rho": {
       "brace_depth": 26,
