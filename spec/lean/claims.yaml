@@ -567,6 +567,21 @@ invariants:
       - {name: Rholphin.Invariants.S12_ready, strength: definitional, kind: preservation}
       - {name: Rholphin.Invariants.S12_nonce_monotone, strength: substantive, kind: preservation}
       - {name: Rholphin.Model.Governance.execute_not_early, strength: restatement, kind: preservation}
+  S13:
+    statement: >-
+      The admin nonce and the effect it authorizes are in the same cell, or
+      Governor owns the nonce and the effect is idempotent.
+    predicate: Rholphin.Model.Governance.Gov
+    status: partial
+    note: >-
+      Governor authorizes and consumes the per-domain nonce before the arm
+      applies the effect; the rotation is safety-idempotent and a replay is
+      refused. The deployed GovernorState is not modelled end to end.
+    theorems:
+      - {name: Rholphin.Linear.rotation_requires_governor, strength: substantive, kind: preservation}
+      - {name: Rholphin.Linear.authorized_rotation_refuses_old, strength: substantive, kind: rejection}
+      - {name: Rholphin.Linear.authorized_rotation_accepts_new, strength: substantive, kind: preservation}
+      - {name: Rholphin.Model.Market.rotate_refuses_replay, strength: substantive, kind: rejection}
 
 primitives:
   P1:

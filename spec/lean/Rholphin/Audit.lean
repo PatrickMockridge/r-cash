@@ -104,6 +104,7 @@ output containing `sorryAx` or a project-local axiom.
 #print axioms Rholphin.codec_injective
 #print axioms Rholphin.Model.Issuer.repay_S3
 #print axioms Rholphin.Model.Issuer.writeOff_S3
+#print axioms Rholphin.Model.Issuer.settle_principal
 #print axioms Rholphin.Model.Issuer.settle_S1
 #print axioms Rholphin.Model.Vault.deposit_S2
 #print axioms Rholphin.Model.Vault.mint_S2
