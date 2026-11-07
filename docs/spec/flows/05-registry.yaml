@@ -303,7 +303,7 @@ components:
     guards:
     - {id: new, expr: 'currencies[code] = Nil', refusal: {reason: exists, phase: pre}}
     - {id: submitter, expr: deployer pubkey = sponsorHex, refusal: {reason: bad sponsor, phase: pre}}
-    - {id: sponsor_sig, expr: 'Verifier.sigOk(H(rcash:currency-register:v3|...), sig, sponsor)', refusal: {reason: bad sponsor signature,
+    - {id: sponsor_sig, expr: 'Verifier.sigOk(H(canonical(rcash:currency-register:v4|code|eight Uris|paramsHash|sponsor)), sig, sponsor)', refusal: {reason: bad sponsor signature,
         phase: pre}}
     - {id: currency, expr: attestation.currency = code, refusal: {reason: currency mismatch, phase: pre}}
     - {id: params, expr: attestation.paramsHash = paramsHash, refusal: {reason: params hash, phase: pre}}
@@ -342,7 +342,7 @@ components:
     transition: registry.CurrencyRegistry.currency
     lean: Rholphin.Model.Registry.currencyRegistry_currency
     kind: read
-    source: {file: contracts/src/deploy/v3/32_currency_registry.rho, line: 440}
+    source: {file: contracts/src/deploy/v3/32_currency_registry.rho, line: 439}
     guards:
     - {id: exists, expr: 'currencies[code] != Nil', refusal: {reason: no currency, phase: pre}}
     effects:
@@ -361,7 +361,7 @@ components:
     transition: registry.CurrencyRegistry.currencies
     lean: Rholphin.Model.Registry.currencyRegistry_currencies
     kind: read
-    source: {file: contracts/src/deploy/v3/32_currency_registry.rho, line: 449}
+    source: {file: contracts/src/deploy/v3/32_currency_registry.rho, line: 448}
     guards: []
     effects:
     - {target: reply, formula: '(true, keys(currencies))'}
@@ -378,7 +378,7 @@ components:
     transition: registry.CurrencyRegistry.rotateDirectoryAuth
     lean: Rholphin.Model.Registry.currencyRegistry_rotateDirectoryAuth
     kind: mutate
-    source: {file: contracts/src/deploy/v3/32_currency_registry.rho, line: 460}
+    source: {file: contracts/src/deploy/v3/32_currency_registry.rho, line: 459}
     guards:
     - {id: authorize, expr: 'Governor.authorize(auth:registry:directory, nonce, rotate, ) ok', refusal: {reason: below threshold, phase: pre}}
     effects:
@@ -398,7 +398,7 @@ components:
     transition: registry.CurrencyRegistry.setPaused
     lean: Rholphin.Model.Registry.currencyRegistry_setPaused
     kind: mutate
-    source: {file: contracts/src/deploy/v3/32_currency_registry.rho, line: 481}
+    source: {file: contracts/src/deploy/v3/32_currency_registry.rho, line: 480}
     guards:
     - {id: exists, expr: 'currencies[code] != Nil', refusal: {reason: no currency, phase: pre}}
     - {id: external_pause, expr: 'entry.kind != external implies VaultBook.pause(paused, nonce, sigs) ok', refusal: {reason: authorize,
@@ -432,11 +432,11 @@ components:
     transition: registry.CurrencyRegistry.registerExternal
     lean: Rholphin.Model.Registry.currencyRegistry_registerExternal
     kind: mutate
-    source: {file: contracts/src/deploy/v3/32_currency_registry.rho, line: 318}
+    source: {file: contracts/src/deploy/v3/32_currency_registry.rho, line: 317}
     guards:
     - {id: new, expr: 'currencies[code] = Nil', refusal: {reason: exists, phase: pre}}
     - {id: submitter, expr: deployer pubkey = sponsorHex, refusal: {reason: bad sponsor, phase: pre}}
-    - {id: sponsor_sig, expr: 'Verifier.sigOk(H(rcash:external-asset-register:v2|code|assetUri|brand|issuer|sponsor), sig, sponsor)', refusal: {
+    - {id: sponsor_sig, expr: 'Verifier.sigOk(H(canonical(rcash:external-asset-register:v3|code|assetUri|brand|issuer|sponsor)), sig, sponsor)', refusal: {
         reason: bad sponsor signature, phase: pre}}
     - {id: asset, expr: attestation.asset = code, refusal: {reason: asset mismatch, phase: pre}}
     - {id: kind, expr: attestation.kind = external, refusal: {reason: external kind, phase: pre}}

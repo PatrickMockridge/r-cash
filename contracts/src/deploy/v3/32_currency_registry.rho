@@ -210,23 +210,22 @@ in {
             for (@sub <- subCh) {
               match sub {
                 (true, Nil) => {
-                  new rCh, vCh, dCh, okCh, allCh, dregCh in {
+                  new rCh, vCh, cCh, dCh, okCh, allCh, dregCh in {
                     rl!(`__ROOT_URI__`, *rCh) |
                     for (RegRoot <- rCh) {
                       RegRoot!("resolve", "component:verifier", 1, *vCh) |
-                      for (@__reply25 <- vCh) {
+                      RegRoot!("resolve", "component:codec", 1, *cCh) |
+                      for (@__reply25 <- vCh; @(true, codecUri, _) <- cCh) {
   match __reply25 {
     (true, verUri, _) => {
-                        new vc in {
+                        new vc, cc in {
                           rl!(verUri, *vc) |
-                          for (Verifier <- vc) {
-                            Verifier!("hash",
-                              ("rcash:currency-register:v3|" ++ code ++ "|" ++ scUri
-                               ++ "|" ++ custodyUri ++ "|" ++ paramsUri ++ "|" ++ vaultUri
-                               ++ "|" ++ liqUri ++ "|" ++ savingsUri ++ "|" ++ psmUri
-                               ++ "|" ++ bufferUri
-                               ++ "|" ++ paramsHash ++ "|" ++ sponsorHex).toUtf8Bytes(),
-                              *dCh) |
+                          rl!(codecUri, *cc) |
+                          for (Verifier <- vc; Codec <- cc) {
+                            Codec!("hash", "rcash:currency-register:v4",
+                                   [code, scUri, custodyUri, paramsUri, vaultUri,
+                                    liqUri, savingsUri, psmUri, bufferUri,
+                                    paramsHash, sponsorHex], *dCh) |
                             for (@digest <- dCh) {
                               Verifier!("sigOk", digest, sig, sponsorHex.hexToBytes(), *okCh) |
                               for (@ok <- okCh) {
@@ -325,19 +324,19 @@ in {
             for (@sub <- subCh) {
               match sub {
                 (true, Nil) => {
-                  new rCh, vCh, vc, dCh, okCh, ac, atCh, dregCh in {
+                  new rCh, vCh, cCh, vc, cc, dCh, okCh, ac, atCh, dregCh in {
                     rl!(`__ROOT_URI__`, *rCh) |
                     for (RegRoot <- rCh) {
                       RegRoot!("resolve", "component:verifier", 1, *vCh) |
-                      for (@__reply24 <- vCh) {
+                      RegRoot!("resolve", "component:codec", 1, *cCh) |
+                      for (@__reply24 <- vCh; @(true, codecUri, _) <- cCh) {
   match __reply24 {
     (true, verUri, _) => {
                         rl!(verUri, *vc) |
-                        for (Verifier <- vc) {
-                          Verifier!("hash",
-                            ("rcash:external-asset-register:v2|" ++ code ++ "|" ++ assetUri
-                             ++ "|" ++ brand ++ "|" ++ issuer
-                             ++ "|" ++ sponsorHex).toUtf8Bytes(), *dCh) |
+                        rl!(codecUri, *cc) |
+                        for (Verifier <- vc; Codec <- cc) {
+                          Codec!("hash", "rcash:external-asset-register:v3",
+                                 [code, assetUri, brand, issuer, sponsorHex], *dCh) |
                           for (@digest <- dCh) {
                             Verifier!("sigOk", digest, sig, sponsorHex.hexToBytes(), *okCh) |
                             for (@ok <- okCh) {

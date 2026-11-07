@@ -57,8 +57,9 @@ def deploy_adapter(keys: dict, code: str, decimals: int) -> tuple[str, str, str]
 def register(keys: dict, state: dict, code: str, adapter: str,
              brand: str, issuer: str):
     sponsor = keys["sponsor"]
-    payload = (f"rcash:external-asset-register:v2|{code}|{adapter}|{brand}|"
-               f"{issuer}|{sponsor['public']}")
+    payload = sign_payload.canonical(
+        "rcash:external-asset-register:v3",
+        [code, adapter, brand, issuer, sponsor["public"]])
     sig = sign_payload.sign_payload(sponsor["secret"], payload.encode())["signature"]
     body = (
         f'CurrencyRegistry!("registerExternal", "{code}", "{adapter}", '

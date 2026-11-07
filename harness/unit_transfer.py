@@ -26,6 +26,7 @@ sys.path.insert(0, str(ROOT / "harness"))
 import netconfig  # noqa: E402
 
 import deploy as node  # noqa: E402
+import sign_payload  # noqa: E402
 from minify_rho import minify  # noqa: E402
 from unit_v3 import check, faucet_top_up, one  # noqa: E402
 
@@ -46,18 +47,10 @@ def render_scenario(name: str, values: dict) -> str:
     return minify(text)
 
 
-def canonical(schema: str, values: list[str]) -> str:
-    """Length-prefixed encoding matching `Codec@"canonical"` in 01_kernel.rho."""
-    parts = [schema]
-    for value in values:
-        parts.append(f"{len(value)}:{value}")
-    return "|".join(parts)
-
-
 def claim_digest(transfer_id: int, secret: bytes) -> str:
     """OCAP-19 claim commitment over id, asset, amount and the secret."""
-    preimage = canonical("rcash:claim:v1",
-                         [str(transfer_id), "REV", str(AMOUNT), secret.hex()])
+    preimage = sign_payload.canonical(
+        "rcash:claim:v1", [transfer_id, "REV", AMOUNT, secret.hex()])
     return hashlib.blake2b(preimage.encode(), digest_size=32).hexdigest()
 
 
