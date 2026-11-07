@@ -303,8 +303,7 @@ in {
                                                 Nil => { ret!(1 / 0) }
                                                 r2 => {
                                                   match r2.get("status") {
-        "draft" => { ret!(1 / 0) }
-        _ => {
+        "draft" => {
                                                     new goCh in {
                                                       match s2.get("byPair").get(record.get("pairKey")) {
                                                         Nil => { goCh!(true) }
@@ -340,6 +339,7 @@ in {
                                                       }
                                                     }
                                                   }
+        _ => { ret!(1 / 0) }
       }
                                                 }
                                               }
@@ -463,8 +463,7 @@ in {
         Nil => { ret!((false, "no market")) }
         record => {
           match record.get("status") {
-        "draft" => { ret!((false, "not draft")) }
-        _ => {
+        "draft" => {
             new dCh, tCh, pCh, aCh, lCh, iCh in {
               MarketDirectory!("byId", marketId, *dCh) |
               MarketTerms!("get", record.get("termsHash"), *tCh) |
@@ -505,6 +504,7 @@ in {
               }
             }
           }
+        _ => { ret!((false, "not draft")) }
       }
         }
       }
@@ -642,8 +642,7 @@ in {
   contract TradabilityGate(@"admit", @status, @fresh, @inputValue, @poolValue,
                            @terms, ret) = {
     match status {
-        "active" => { ret!((false, "not active")) }
-        _ => {
+        "active" => {
       if (fresh == false) { ret!((false, "stale")) }
       else {
         if (inputValue < terms.get("minTicketQuote")) { ret!((false, "min ticket")) }
@@ -653,7 +652,8 @@ in {
           } else { ret!((true, Nil)) }
         }
       }
-    }
+        }
+        _ => { ret!((false, "not active")) }
       }
   } |
 
@@ -959,7 +959,7 @@ in {
                                                                     for (@ck <- ckCh) {
                                                                       match ck {
                                                                         (true, Nil) => {
-                                                                          MarketIndex!("stage", record, *stCh) |
+                                                                          MarketIndex!("stage", record, *marketAuth, *stCh) |
                                                                           for (@st <- stCh) {
                                                                             match st {
                                                                               (true, _) => {

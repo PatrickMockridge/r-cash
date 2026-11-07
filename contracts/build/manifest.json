@@ -6,8 +6,8 @@
       "grammar_depth": 31,
       "minified_bytes": 5969,
       "operator_run": 3,
-      "sha256": "713614b4652a6f2987fd847732dded188784dc292a3b588627fcacdaa1571a67",
-      "source_bytes": 10050
+      "sha256": "cbed42f45598169b17ce5975228899e633048ef9dde5166789adbcab9e55be89",
+      "source_bytes": 10068
     },
     "contracts/build/deploy/v3/01_kernel.rho": {
       "brace_depth": 7,
@@ -157,10 +157,10 @@
       "brace_depth": 40,
       "contracts": 34,
       "grammar_depth": 63,
-      "minified_bytes": 22701,
+      "minified_bytes": 22714,
       "operator_run": 4,
-      "sha256": "49b42290539e33bfa773e41b67f2e03b803c43ada2a251412c6effd7fcd7079b",
-      "source_bytes": 43738
+      "sha256": "ed3aca479f0592e6356c6441147020e697d42c2cdbb51d9738d36d64acec7800",
+      "source_bytes": 43755
     },
     "contracts/build/deploy/v3/51_pool.rho": {
       "brace_depth": 43,
