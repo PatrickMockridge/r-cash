@@ -26,12 +26,39 @@ FORBIDDEN = re.compile(r"(?<!#)\b(sorry|admit|native_decide)\b|^\s*axiom\s+[A-Za
 ALLOWED = {"propext", "Classical.choice", "Quot.sound"}
 
 
+def strip_strings(line: str) -> str:
+    """Blank the contents of double-quoted strings, preserving positions.
+
+    Proof-escape scanning must not fire on identifiers or prose inside a
+    string literal (for example a vector name containing `admit`).
+    """
+    out: list[str] = []
+    in_string = False
+    escaped = False
+    for char in line:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            out.append(" ")
+        else:
+            if char == '"':
+                in_string = True
+                out.append(" ")
+            else:
+                out.append(char)
+    return "".join(out)
+
+
 def source_scan() -> list[str]:
     problems: list[str] = []
     for path in sorted(LEAN.rglob("*.lean")):
         text = path.read_text()
         for number, line in enumerate(text.splitlines(), start=1):
-            code = line.split("--", 1)[0]
+            code = strip_strings(line.split("--", 1)[0])
             if FORBIDDEN.search(code):
                 problems.append(f"{path.relative_to(ROOT)}:{number}: {line.strip()}")
     return problems

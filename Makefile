@@ -196,7 +196,10 @@ lean-check:
 primitive-check:
 	$(PY) tools/check_primitives.py --check
 
-formal-check: lean-check check-flows check-trace check-mesh primitive-check
+arm-vectors:
+	$(PY) tools/check_arm_vectors.py --check
+
+formal-check: lean-check check-flows check-trace check-mesh primitive-check arm-vectors
 
 # Public testnet (network id testnet, shard /testnet). All commands are opt-in
 # and read configs/testnet.json; see book/src/guides/testnet.md.

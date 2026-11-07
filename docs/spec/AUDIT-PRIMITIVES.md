@@ -318,6 +318,7 @@ These arms are modelled as identity/no-op and must not be cited as proof.  The
 | `check_traceability.py` | bidirectional requirement/acceptance equality, criteria/check resolution, Lean names exist | structural only; does not prove any check passes |
 | `make tla-check` | TLC over 7 models if `tlc` is on PATH | not in CI; `MarketCreateAtomicity` and `PoolCriticalSection` have never been run here |
 | `check_primitives.py` | no discarded native reply; a rev-bearing mutation bumps `rev`; oracle registry is initialised with `rev` | textual and per-file, not per-arm; no facet, phase or reply-shape analysis |
+| `check_arm_vectors.py` | 19 behaviour vectors over the checked transitions and crypto/claim interfaces | model vectors only; they pin the Lean semantics, not the deployed term |
 | harness | sequential unit/scenario suites | no concurrency, interleaving or fault-injection tests |
 
 ### 4.5 What the Lean model does not represent
@@ -381,9 +382,9 @@ The approved programme (see the plan file and `PRIMITIVES-HAZOP.md`) adds:
    theorem hypothesis, recorded in `claims.yaml`; no `axiom`.
 7. **Missing invariants and strengthening** (`Invariants/*.lean`): S8, I5, I6, I8–I13, I15,
    I19, I20, I22, I24; I3/I7; the six restatements replaced.
-8. **Model↔code conformance**: `claims.yaml` strict, behavioural vectors for the 25 stubs and
-   30 high-risk arms, then all 171; a generated signature/coverage layer. No Rholang parser
-   in this programme.
+8. **Model↔code conformance**: `claims.yaml` strict, behavioural vectors for the checked
+   transitions and the crypto/claim interfaces (19 so far), then the 25 stubs and all 171
+   arms; a generated signature/coverage layer. No Rholang parser in this programme.
 9. **Blocking gates**: warnings-as-errors, per-claim audit, strict flow guards/effects/phases,
    sink-facet and native-reply checks, all 7 TLA models in CI.
 
@@ -444,6 +445,11 @@ bugs.
   soundness (I10), lock one-shot/exclusivity (I13), and the four tradability-gate
   implications (I12). The register is at 15 covered, 20 partial, 5 deferred, 3
   tool-evidenced, 101 substantive theorems; the axiom audit covers 63.
+- **Phase 6 (partial):** `Rholphin/EmitArms.lean` emits 19 behaviour vectors for the
+  checked PSM/savings/vault transitions, the market gate, and the hash/signature/claim
+  interfaces; `tests/vectors/arms.json` records the expected outputs and
+  `tools/check_arm_vectors.py` is blocking in `make formal-check`. Strict arm-to-claim
+  coverage for all 171 arms is not yet enforced.
 - **Phase 7 (partial):** `tools/check_primitives.py` adds G-NATIVE (no discarded native
   reply), G-REV (a rev-bearing mutation bumps `rev`) and the oracle-registry rev check;
   `make formal-check` now runs it.
