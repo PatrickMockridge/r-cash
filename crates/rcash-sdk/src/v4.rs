@@ -1345,10 +1345,9 @@ impl Client {
             .ok_or_else(|| ChainError::BadKey("market creation needs a signing key".into()))?;
         let sponsor = key.public_hex();
         let terms_hash = terms.canonical();
-        let payload = format!(
-            "rcash:market-create:v1|{}|{}|{}",
-            terms.market_id, terms_hash, sponsor
-        );
+        // Canonical `rcash:market-create:v1` preimage over
+        // `[marketId, termsHash, sponsorHex]`, matching the Rholang factory.
+        let payload = terms.sponsor_payload(&terms_hash);
         let sig = sign_payload_hex(key, payload.as_bytes())?;
         let (map, values) = render_terms(terms)?;
         let factory = self.require_v4()?.market_factory_uri.as_str().to_string();

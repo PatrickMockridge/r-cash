@@ -24,7 +24,6 @@ export default function Pay() {
   const [stipend, setStipend] = useState("0");
   const [opId] = useState(() => crypto.randomUUID());
   const [secret, setSecret] = useState("");
-  const [hash, setHash] = useState("");
   const [result, setResult] = useState<Sent | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -44,13 +43,24 @@ export default function Pay() {
     if (assets.includes(displayCurrency)) setAsset(displayCurrency);
   }, [assets, displayCurrency]);
 
+  // The canonical claim preimage binds opId, asset, amount and the secret, so
+  // the hash is derived from the current form rather than stored when the
+  // secret is generated.
+  const claimHash = useMemo(() => {
+    if (!secret) return "";
+    try {
+      return claim_hash(opId, asset, amount, secret);
+    } catch {
+      return "";
+    }
+  }, [secret, opId, asset, amount]);
+
   if (status !== "unlocked") return <Unlock />;
 
   const generate = () => {
     const bytes = crypto.getRandomValues(new Uint8Array(32));
     const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
     setSecret(hex);
-    setHash(claim_hash(hex));
     setResult(null);
     setError(null);
   };
@@ -62,8 +72,11 @@ export default function Pay() {
     setResult(null);
     const journalId = `send-${opId}`;
     try {
-      if (!/^[0-9a-f]{64}$/.test(hash)) {
+      if (!/^[0-9a-f]{64}$/.test(secret)) {
         throw new Error("generate a claim secret first");
+      }
+      if (!/^[0-9a-f]{64}$/.test(claimHash)) {
+        throw new Error("claim hash is unavailable; check the amount");
       }
       if (!/^[0-9a-fA-F]+$/.test(toPub)) {
         throw new Error("recipient public key must be hex");
@@ -94,7 +107,7 @@ export default function Pay() {
           toPub,
           asset,
           amount,
-          hash,
+          claimHash,
           BigInt(expiry),
           memo,
           opId,
@@ -206,10 +219,10 @@ export default function Pay() {
           {secret ? "Regenerate secret" : "Generate claim secret"}
         </button>
       </div>
-      {hash && (
+      {claimHash && (
         <p className="muted small mono">
-          claim hash {hash.slice(0, 16)}… · opId {opId.slice(0, 8)}… · expiry is absolute
-          on-chain
+          claim hash {claimHash.slice(0, 16)}… · opId {opId.slice(0, 8)}… · expiry is
+          absolute on-chain
         </p>
       )}
 

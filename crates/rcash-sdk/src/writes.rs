@@ -61,7 +61,8 @@ impl Client {
         reply(&tx.values, 0)
     }
 
-    /// Send a claimable transfer. `claim_hash_hex` is the 32-byte BLAKE2b hash of the secret.
+    /// Send a claimable transfer. `claim_hash_hex` is the legacy v0.4 raw
+    /// secret digest; the canonical preimage is used by `v4_send_transfer`.
     pub async fn send_transfer(
         &self,
         source: &str,
