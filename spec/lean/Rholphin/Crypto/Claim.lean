@@ -30,24 +30,26 @@ structure Claim where
   status : Nat
   deriving DecidableEq, Repr
 
-/-- OCAP-19: the committed preimage binds the transfer identity and amount to
-the secret.  The contract hashes `rcash:claim:v1|id|assetId|amount|secret`
-through the canonical codec; this record is the modelled field list. -/
+/-- OCAP-19: the committed preimage binds the caller-supplied opId and amount
+to the secret.  The contract hashes `rcash:claim:v1|opId|assetId|amount|secret`
+through the canonical codec; this record is the modelled field list.  opId is
+used because the account allocates the numeric transfer id inside
+`sendTransfer`, after the sender chooses the commitment. -/
 structure ClaimPreimage where
-  transferId : Nat
+  opId : Nat
   assetId : Nat
   amount : Nat
   secret : Secret
 
 /-- The ordered fields of the canonical claim preimage. -/
 def ClaimPreimage.fields (p : ClaimPreimage) : List Nat :=
-  [p.transferId, p.assetId, p.amount, p.secret.value]
+  [p.opId, p.assetId, p.amount, p.secret.value]
 
-/-- Equal preimages bind the same transfer id, so a secret committed to one
-transfer cannot be replayed as the commitment for another. -/
-theorem ClaimPreimage.transferId_injective {p q : ClaimPreimage}
-    (h : p.fields = q.fields) : p.transferId = q.transferId := by
-  have h' : p.transferId = q.transferId ∧ p.assetId = q.assetId ∧
+/-- Equal preimages bind the same opId, so a secret committed to one transfer
+cannot be replayed as the commitment for another. -/
+theorem ClaimPreimage.opId_injective {p q : ClaimPreimage}
+    (h : p.fields = q.fields) : p.opId = q.opId := by
+  have h' : p.opId = q.opId ∧ p.assetId = q.assetId ∧
       p.amount = q.amount ∧ p.secret.value = q.secret.value := by
     simpa [ClaimPreimage.fields] using h
   exact h'.1

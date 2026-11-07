@@ -122,9 +122,11 @@ in {
                               ret2!((false, "expired"))
                             } else {
                             // OCAP-19: the stored secretHash is the canonical
-                            // hash over the transfer identity, not the bare
-                            // secret, so a leaked secret cannot claim another
-                            // transfer that reuses it.
+                            // hash over the caller-supplied opId and the
+                            // transfer fields, not the bare secret, so a leaked
+                            // secret cannot claim another transfer that reuses
+                            // it. The account allocates `id` inside
+                            // sendTransfer, so opId is the pre-send binding.
                             new rCh, ccCh, hCh in {
                               rl!(`__ROOT_URI__`, *rCh) |
                               for (Root <- rCh) {
@@ -134,7 +136,7 @@ in {
                                     rl!(codecUri, *cCh) |
                                     for (Codec <- cCh) {
                                       Codec!("hash", "rcash:claim:v1",
-                                             [id.toString(), assetId,
+                                             [opId, assetId,
                                               amount.toString(), secret.bytesToHex()], *hCh) |
                                       for (@h <- hCh) {
                                         if (h != secretHash) {

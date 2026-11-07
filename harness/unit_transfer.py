@@ -47,10 +47,10 @@ def render_scenario(name: str, values: dict) -> str:
     return minify(text)
 
 
-def claim_digest(transfer_id: int, secret: bytes) -> str:
-    """OCAP-19 claim commitment over id, asset, amount and the secret."""
+def claim_digest(op_id: str, secret: bytes) -> str:
+    """OCAP-19 claim commitment over opId, asset, amount and the secret."""
     preimage = sign_payload.canonical(
-        "rcash:claim:v1", [transfer_id, "REV", AMOUNT, secret.hex()])
+        "rcash:claim:v1", [op_id, "REV", AMOUNT, secret.hex()])
     return hashlib.blake2b(preimage.encode(), digest_size=32).hexdigest()
 
 
@@ -89,9 +89,9 @@ def main() -> int:
         "__RECIPIENT_PUB__": recipient["public"],
         "__FUND__": str(FUND),
         "__AMOUNT__": str(AMOUNT),
-        "__HASH_A__": claim_digest(0, SECRET_A),
+        "__HASH_A__": claim_digest("op-a", SECRET_A),
         "__EXPIRY_A__": str(expiry_a),
-        "__HASH_B__": claim_digest(1, SECRET_B),
+        "__HASH_B__": claim_digest("op-b", SECRET_B),
         "__EXPIRY_B__": str(expiry_b),
     })
     sent = one(send_term, sender["secret"])
