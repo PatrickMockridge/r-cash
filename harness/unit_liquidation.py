@@ -31,7 +31,8 @@ import deploy as node  # noqa: E402
 import sign_payload  # noqa: E402
 from feed_refresh import feed_uri, set_price  # noqa: E402
 from install_v3 import render  # noqa: E402
-from stablecoin_support import deploy_currency_system, provision_facets  # noqa: E402
+import stablecoin_support  # noqa: E402
+from stablecoin_support import deploy_currency_system  # noqa: E402
 from unit_feed import blake2b256, canonical  # noqa: E402
 from minify_rho import minify  # noqa: E402
 from unit_v3 import call, check, faucet_top_up, one  # noqa: E402
@@ -169,21 +170,13 @@ def main() -> int:
     # OCAP-11: the listing is submitted by the sponsor key, so it must be funded.
     faucet_top_up(keys["sponsor"]["address"])
     sponsor = keys["sponsor"]["public"]
-    params = ('{"mcrBps": 20000, "bonusBps": 800, "closeFactorBps": 5000, '
-              '"ratePerBlock": 3171, "debtCeiling": 10000000000000, '
-              '"minDebt": 1000000, "maxDebt": 10000000000000, '
-              '"maxOracleAge": 50, "savingsShareBps": 5000, "psmFeeBps": 10}')
-    values = [CURRENCY, "20000", "800", "5000", "3171", "10000000000000",
-              "1000000", "10000000000000", "50", "5000", "10"]
-    params_hash = blake2b256(canonical("rcash:stablecoin-params:v2", values))
-    payload = f"rcash:stablecoin-create:v1|{CURRENCY}|{params_hash}|{sponsor}"
-    sig = sign_payload.sign_payload(keys["sponsor"]["secret"],
-                                    payload.encode())["signature"]
-
+    params, _values, params_hash = stablecoin_support.params_for(CURRENCY)
     # Deploy the five terms (T1 issuer, T5 params, T3 buffer/savings, T4 PSM,
-    # T2 vault) through the shared helper, then provision the vault consumer.
-    system = deploy_currency_system(keys, state, currency=CURRENCY, params=params,
-                                    params_hash=params_hash, sponsor_sig=sig)
+    # T2 vault) through the shared helper, then provision all five T2 facets.
+    system = stablecoin_support.deploy_currency_system(
+        keys, state, CURRENCY, params=params, params_hash=params_hash,
+        sponsor_sig=None, sponsor_key="sponsor",
+        kinds=stablecoin_support.T2_KINDS)
     sc_uri = system["sc_uri"]
     custody_uri = system["custody_uri"]
     params_uri = system["params_uri"]
@@ -193,11 +186,9 @@ def main() -> int:
     psm_uri = system["psm_uri"]
     buffer_uri = system["buffer_uri"]
 
-    # T2 accepts five facets into write-once bare-name slots. The shop consumes
-    # the sponsor nonce and delivers the facet names; no facet is returned.
-    provisioned = provision_facets(
-        keys, state, "vault", system["vault_consumer_uri"],
-        ["mint", "burn", "settle", "custody", "buffer"])
+    # The helper provisions all five T2 facets into write-once bare-name slots
+    # through the two pinned shops; no facet is returned.
+    provisioned = system["provisioned"]
     check("vault facets provisioned",
           sorted(kind for kind, ok in provisioned.items() if ok),
           ["buffer", "burn", "custody", "mint", "settle"])
@@ -225,32 +216,16 @@ def main() -> int:
     # The preimage is canonical v4, the ABI takes the deployer id last (after
     # the signature), and the deploy is submitted with the sponsor key (OCAP-11).
     registry_uri = state["currency_registry_uri"]
-    listing_values = [CURRENCY, sc_uri, custody_uri, params_uri, vault_uri,
-                      liq_uri, savings_uri, psm_uri, buffer_uri, params_hash, sponsor]
-    listing = canonical("rcash:currency-register:v4", listing_values)
-    listing_sig = sign_payload.sign_payload(keys["sponsor"]["secret"],
-                                            listing.encode())["signature"]
-    register_term = (
-        "new rl(`rho:registry:lookup`), ch, r, "
-        "deployerId(`rho:rchain:deployerId`), "
-        "deployId(`rho:rchain:deployId`) in {\n"
-        f"  rl!(`{registry_uri}`, *ch) |\n"
-        "  for (CurrencyRegistry <- ch) {\n"
-        f'    CurrencyRegistry!("register", "{CURRENCY}", "{sc_uri}", '
-        f'"{custody_uri}", "{params_uri}", "{vault_uri}", "{liq_uri}", '
-        f'"{savings_uri}", "{psm_uri}", "{buffer_uri}", "{params_hash}", '
-        f'"{sponsor}", "{listing_sig}".hexToBytes(), *deployerId, *r) |\n'
-        "    for (@x <- r) {\n"
-        "      match x {\n"
-        '        (true, entry) => deployId!([true, entry])\n'
-        "        (false, why) => deployId!([false, why])\n"
-        "        _ => deployId!(x)\n"
-        "      }\n"
-        "    }\n"
-        "  }\n"
-        "}"
-    )
-    listed = one(register_term, keys["sponsor"]["secret"])
+    faucet_top_up(keys["sponsor"]["address"])
+    listing_args = (CURRENCY, sc_uri, custody_uri, params_uri, vault_uri,
+                    liq_uri, savings_uri, psm_uri, buffer_uri, params_hash,
+                    sponsor)
+    listing_sig = stablecoin_support.listing_signature(
+        keys["sponsor"]["secret"],
+        *stablecoin_support.listing_values(*listing_args))
+    listed = one(stablecoin_support.full_register_term(
+        registry_uri, *listing_args, signature=listing_sig),
+        keys["sponsor"]["secret"])
     if listed[0] is not True:
         print(f"{CURRENCY} register refused (reused chain):", listed)
     check(f"{CURRENCY} listed", listed[0] is True or "exist" in str(listed[1]).lower(), True)

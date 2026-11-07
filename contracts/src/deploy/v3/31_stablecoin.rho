@@ -1,97 +1,38 @@
 // v0.4 stablecoin system: one REV-collateralised issuer per currency.
-// The issuer, collateral custody, risk parameters and vault book are separate
-// contracts with separate capabilities. This is issuer infrastructure, not a
-// lending product; there is no borrower-facing UI.
-// Placeholders: __ROOT_URI__, __CURRENCY__, __PARAMS__, __PARAMS_HASH__,
-//               __SPONSOR_PUB__, __SPONSOR_SIG__.
+// Transitional hybrid after the T1/T5 split: this term retains VaultBook,
+// LiquidationEngine, SavingsPool, SurplusBuffer and the PSM, reaches issuer
+// privileged operations through the facets provisioned by 31_issuer.rho, and
+// reads risk parameters from 31_params.rho. The integrator deletes this term
+// after T2/T3/T4 land.
+// Placeholders: __ROOT_URI__, __CURRENCY__, __ISSUER_URI__, __PARAMS_URI__,
+//               __ISSUER_SHOP_URI__, __BUFFER_SHOP_URI__.
 new
-  Stablecoin, issuerState,
-  CollateralCustody,
-  RiskParameters, paramsState,
   VaultBook, vaultState,
   LiquidationEngine,
   SavingsPool, savingsState,
   SurplusBuffer, bufferState,
   PegStabilityModule, psmState,
+  FacetConsumer, consumerState,
   callerOwner, bufferCancelled,
-  stablecoinCheck, vaultLiquidateCommit, vaultWriteOff, repayCommit, vaultMintCommit,
+  vaultLiquidateCommit, vaultWriteOff, repayCommit, vaultMintCommit,
   vaultNow, vaultPrice, vaultMath, vaultUpdate, vaultGovernor, vaultAccountFactory,
-  vaultCodec, vaultBounds, paramsValues, feeCeil,
-  psmSellCommit, psmBuyCommit,
+  paramsGet, stableAmountOf, brandOf, withdrawStable,
+  mintVia, burnVia, settleVia, custodyDepositVia, custodyWithdrawVia,
+  mintFacetSlot, burnFacetSlot, settleFacetSlot, custodyFacetSlot, bufferFacetSlot,
+  psCh1, psCh2, psCh3, psCh4, psCh5, psCh6, psCh7, psCh8, psCh9,
+  psmSellCommit, psmBuyCommit, feeCeil,
   rl(`rho:registry:lookup`),
   rs(`rho:registry:insertArbitrary`),
-  bd(`rho:block:data`),
   deployerId(`rho:rchain:deployerId`),
   deployerIdOps(`rho:rchain:deployerId:ops`),
   revAddress(`rho:rev:address`),
   deployId(`rho:rchain:deployId`),
-  currencyCh, paramsCh, paramsHashCh, sponsorCh, checkCh, nowCh,
-  ertpCh, kitCh, revIssuerCh, burnPurseCh, revPurseCh, burnFacetCh,
-  savingsPurseCh, bufferPurseCh, psmRevPurseCh,
-  mintAuth, burnAuth, custodyAuth, liquidationAuth,
-  settlementAuth, psmMintAuth, psmBurnAuth,
-  bufferDepositAuth, bufferPayAuth, bufferCoverAuth, savingsNotifyAuth,
-  uSC, uCustody, uParams, uVault, uLiq, uSavings, uBuffer, uPsm,
-  scUri, custodyUri, paramsUri, vaultUri, liqUri, savingsUri, psmUri, attCh
+  currencyCh, paramsUriCh, issuerUriCh, shopUriCh, bufferShopUriCh,
+  ertpCh, revIssuerCh, savingsPurseCh, bufferPurseCh, psmRevPurseCh,
+  liquidationAuth, bufferDepositAuth, bufferPayAuth, bufferCoverAuth, savingsNotifyAuth,
+  uConsumer, uVault, uLiq, uSavings, uBuffer, uPsm,
+  consumerUri, vaultUri, liqUri, savingsUri, psmUri, bufferUri
 in {
-
-  contract stablecoinCheck(@currency, @params, @paramsHash, @sponsorHex, @sig, ret) = {
-    new rCh, verCh, bCh, cCh, dCh, okCh, bzCh, hCh, payloadCh in {
-      payloadCh!(
-        "rcash:stablecoin-create:v1|" ++ currency ++ "|" ++ paramsHash ++ "|" ++ sponsorHex) |
-      for (@payload <- payloadCh) {
-        rl!(`__ROOT_URI__`, *rCh) |
-        for (Root <- rCh) {
-          Root!("resolve", "component:verifier", 1, *verCh) |
-          Root!("resolve", "component:bounds", 1, *bCh) |
-          Root!("resolve", "component:codec", 1, *cCh) |
-          for (@(true, vUri, vv) <- verCh;
-               @(true, bUri, bv) <- bCh;
-               @(true, cUri, cv) <- cCh) {
-            new vc, bc, cc in {
-              rl!(vUri, *vc) | rl!(bUri, *bc) | rl!(cUri, *cc) |
-              for (Verifier <- vc; Bounds <- bc; Codec <- cc) {
-                Verifier!("hash", payload.toUtf8Bytes(), *dCh) |
-                for (@digest <- dCh) {
-                  Verifier!("sigOk", digest, sig, sponsorHex.hexToBytes(), *okCh) |
-                  for (@ok <- okCh) {
-                    if (ok == false) { ret!((false, "bad sponsor signature")) }
-                    else {
-                      Bounds!("checkIssuer", params, *bzCh) |
-                      for (@bz <- bzCh) {
-                        match bz {
-                          (true, Nil) => {
-                            Codec!("hash", "rcash:stablecoin-params:v2",
-                                   [currency,
-                                    params.get("mcrBps").toString(),
-                                    params.get("bonusBps").toString(),
-                                    params.get("closeFactorBps").toString(),
-                                    params.get("ratePerBlock").toString(),
-                                    params.get("debtCeiling").toString(),
-                                    params.get("minDebt").toString(),
-                                    params.get("maxDebt").toString(),
-                                    params.get("maxOracleAge").toString(),
-                                    params.get("savingsShareBps").toString(),
-                                    params.get("psmFeeBps").toString()], *hCh) |
-                            for (@h <- hCh) {
-                              if (h != paramsHash.hexToBytes()) {
-                                ret!((false, "params hash"))
-                              } else { ret!((true, Nil)) }
-                            }
-                          }
-                          _ => { ret!(bz) }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  } |
 
   contract vaultNow(ret2) = {
     new rCh, cCh in {
@@ -161,36 +102,6 @@ in {
     }
   } |
 
-  contract vaultCodec(ret2) = {
-    new rCh, cCh in {
-      rl!(`__ROOT_URI__`, *rCh) |
-      for (Root <- rCh) {
-        Root!("resolve", "component:codec", 1, *cCh) |
-        for (@(true, codecUri, v) <- cCh) {
-          new cc in {
-            rl!(codecUri, *cc) |
-            for (Codec <- cc) { ret2!(*Codec) }
-          }
-        }
-      }
-    }
-  } |
-
-  contract vaultBounds(ret2) = {
-    new rCh, bCh in {
-      rl!(`__ROOT_URI__`, *rCh) |
-      for (Root <- rCh) {
-        Root!("resolve", "component:bounds", 1, *bCh) |
-        for (@(true, boundsUri, v) <- bCh) {
-          new bc in {
-            rl!(boundsUri, *bc) |
-            for (Bounds <- bc) { ret2!(*Bounds) }
-          }
-        }
-      }
-    }
-  } |
-
   // Fee ceiling in basis points, rounded up so the protocol never undercharges.
   contract feeCeil(@amount, @bps, ret2) = {
     ret2!(((amount * bps + 9999) / 10000).toInt())
@@ -203,7 +114,7 @@ in {
       ret2!((false, "psm floor", *payment))
     } else {
     new bCh, wCh, depCh in {
-      Stablecoin!("burn", *payment, amount, *psmBurnAuth, *bCh) |
+      burnVia!(*payment, amount, *bCh) |
       for (@b <- bCh) {
         match b {
           (true, _, _) => {
@@ -248,7 +159,7 @@ in {
       for (@d <- dCh) {
         match d {
           (true, _) => {
-            Stablecoin!("mint", stableOut, *psmMintAuth, *mCh) |
+            mintVia!(stableOut, *mCh) |
             for (@m <- mCh) {
               match m {
                 (true, stablePayment, _) => {
@@ -278,21 +189,6 @@ in {
         }
       }
     }
-  } |
-
-  // Canonical params values in the v2 order, from a params map.
-  contract paramsValues(@cur, @p, ret2) = {
-    ret2!([cur,
-           p.get("mcrBps").toString(),
-           p.get("bonusBps").toString(),
-           p.get("closeFactorBps").toString(),
-           p.get("ratePerBlock").toString(),
-           p.get("debtCeiling").toString(),
-           p.get("minDebt").toString(),
-           p.get("maxDebt").toString(),
-           p.get("maxOracleAge").toString(),
-           p.get("savingsShareBps").toString(),
-           p.get("psmFeeBps").toString()])
   } |
 
   contract vaultAccountFactory(ret2) = {
@@ -375,11 +271,11 @@ in {
             if (v2.get("auth") != v.get("auth") || s2.get("rev") != s.get("rev")) {
               ret2!(1 / 0)
             } else {
-              Stablecoin!("burn", *payment, amount, *burnAuth, *burnCh) |
+              burnVia!(*payment, amount, *burnCh) |
               for (@b <- burnCh) {
                 match b {
                   (true, burned, supply) => {
-                    CollateralCustody!("withdraw", seized, *custodyAuth, *wdCh) |
+                    custodyWithdrawVia!(seized, *wdCh) |
                     for (@w <- wdCh) {
                       match w {
                         (true, paymentOut) => {
@@ -433,11 +329,19 @@ in {
   contract repayCommit(@s, @v, @ownerId, @now2, @accrued, @amount,
                        @interestPaid, @principalPaid, payment, ret2) = {
     new settleCh, coverCh, payCh in {
-      Stablecoin!("settle", *payment, principalPaid, interestPaid,
-                  *settlementAuth, *settleCh) |
+      settleVia!(*payment, principalPaid, interestPaid, *settleCh) |
       for (@st <- settleCh) {
         match st {
-          (true, p, i) => {
+          (true, p, interestOut) => {
+            new depCh in {
+              if (interestPaid > 0) {
+                SurplusBuffer!("deposit", *interestOut, *bufferDepositAuth, *depCh)
+              } else {
+                depCh!((true, Nil))
+              } |
+              for (@dep <- depCh) {
+                match dep {
+                  (true, _) => {
             SurplusBuffer!("cover", 0, *bufferCoverAuth, *coverCh) |
             for (@cv <- coverCh) {
               match cv {
@@ -491,7 +395,7 @@ in {
                 _ => { ret2!(1 / 0) }
               }
             }
-          }
+          } } } } }
           _ => { ret2!(st) }
         }
       }
@@ -526,7 +430,7 @@ in {
                 s2.get("badDebt"),
                 s2.get("rev") + 1, *nsCh) |
                 for (@ns <- nsCh) {
-                  Stablecoin!("mint", amount, *mintAuth, *payCh) |
+                  mintVia!(amount, *payCh) |
                   for (@p <- payCh) {
                     match p {
                       (true, payment, supply) => {
@@ -546,372 +450,152 @@ in {
   } |
 
   currencyCh!("__CURRENCY__") |
-  paramsCh!(__PARAMS__) |
-  paramsHashCh!("__PARAMS_HASH__") |
-  sponsorCh!("__SPONSOR_PUB__") |
-  for (@currency <- currencyCh; @params <- paramsCh;
-       @paramsHash <- paramsHashCh; @sponsorHex <- sponsorCh) {
-    stablecoinCheck!(currency, params, paramsHash, sponsorHex,
-                     "__SPONSOR_SIG__".hexToBytes(), *checkCh) |
-    for (@check <- checkCh) {
-      match check {
-        (true, Nil) => {
+  paramsUriCh!("__PARAMS_URI__") |
+  issuerUriCh!("__ISSUER_URI__") |
+  shopUriCh!("__ISSUER_SHOP_URI__") |
+  bufferShopUriCh!("__BUFFER_SHOP_URI__") |
+  for (@currency <- currencyCh; @paramsUri <- paramsUriCh;
+       @issuerUri <- issuerUriCh; @shopUri <- shopUriCh;
+       @bufferShopUri <- bufferShopUriCh) {
+    new scCh, issuerCh, brandCh in {
+      rl!(issuerUri, *scCh) |
+      for (SC <- scCh) {
+        SC!("issuer", *issuerCh) |
+        SC!("brand", *brandCh) |
+        for (@(true, issuer) <- issuerCh; @(true, brand) <- brandCh) {
           rl!(`rho:rchain:ertp`, *ertpCh) |
           for (@(_, ERTP) <- ertpCh) {
-            @ERTP!("makeIssuerKit", *kitCh) |
             @ERTP!("getRevIssuer", *revIssuerCh) |
-            for (@(brand, mint, issuer) <- kitCh; @(revBrand, revIssuer) <- revIssuerCh) {
-              @issuer!("makeEmptyPurse", *burnPurseCh) |
+            for (@(revBrand, revIssuer) <- revIssuerCh) {
               @issuer!("makeEmptyPurse", *savingsPurseCh) |
               @issuer!("makeEmptyPurse", *bufferPurseCh) |
-              @revIssuer!("makeEmptyPurse", *revPurseCh) |
               @revIssuer!("makeEmptyPurse", *psmRevPurseCh) |
-              for (@(true, burnPurse) <- burnPurseCh; @(true, revPurse) <- revPurseCh;
-                   @(true, savingsPurse) <- savingsPurseCh;
+              for (@(true, savingsPurse) <- savingsPurseCh;
                    @(true, bufferPurse) <- bufferPurseCh;
                    @(true, psmRevPurse) <- psmRevPurseCh) {
-                @burnPurse!("getDepositFacet", *burnFacetCh) |
-                for (@(true, burnFacet) <- burnFacetCh) {
-                  bd!(*nowCh) |
-                  for (@now, @sender, @ts <- nowCh) {
-  contract Stablecoin(@"brand", ret2) = {
-    ret2!((true, brand))
+
+  // Per-arm reads through the pinned URIs, never at bundle creation.
+  contract paramsGet(ret2) = {
+    new pc, rc in {
+      rl!(paramsUri, *pc) |
+      for (RP <- pc) {
+        RP!("params", *rc) |
+        for (@r <- rc) {
+          match r {
+            (true, p) => { ret2!({"params": p}) }
+            _ => { ret2!(1 / 0) }
+          }
+        }
+      }
+    }
   } |
 
-  contract Stablecoin(@"issuer", ret2) = {
-    ret2!((true, issuer))
+  contract stableAmountOf(payment, ret2) = {
+    new scCh2 in {
+      rl!(issuerUri, *scCh2) |
+      for (SC <- scCh2) { SC!("amountOf", *payment, *ret2) }
+    }
   } |
 
-  contract Stablecoin(@"supply", ret2) = {
-    for (@s <<- issuerState) { ret2!((true, s.get("totalPrincipal"))) }
+  contract brandOf(ret2) = {
+    new scCh2 in {
+      rl!(issuerUri, *scCh2) |
+      for (SC <- scCh2) { SC!("brand", *ret2) }
+    }
   } |
 
-  contract Stablecoin(@"mint", @amount, @auth, ret2) = {
-    if (auth != *mintAuth && auth != *psmMintAuth) { ret2!((false, "bad mint authority")) }
-    else {
-      if (amount <= 0) { ret2!((false, "amount")) }
-      else {
-        for (@s <<- issuerState; @b <<- bufferState) {
-          if (b.get("sin") > b.get("surplus")) {
-            ret2!((false, "recapitalise"))
-          } else {
-          if (s.get("totalPrincipal") + amount > s.get("maxSupply")) {
-            ret2!((false, "max supply"))
-          } else {
-            for (@s2 <- issuerState; @b2 <<- bufferState) {
-              if (s2.get("totalPrincipal") != s.get("totalPrincipal")) {
-                issuerState!(s2) | ret2!((false, "changed"))
-              } else {
-                if (b2.get("sin") > b2.get("surplus")) {
-                  issuerState!(s2) | ret2!((false, "recapitalise"))
-                } else {
-                  new payCh in {
-                    @mint!("mintPayment", (brand, amount), *payCh) |
-                    for (@p <- payCh) {
-                      match p {
-                        (true, payment) => {
-                          issuerState!(s2.set("totalPrincipal",
-                            s2.get("totalPrincipal") + amount)) |
-                          ret2!((true, payment, s2.get("totalPrincipal") + amount))
-                        }
-                        _ => { ret2!(1 / 0) }
+  contract withdrawStable(purse, @amount, ret2) = {
+    new bc in {
+      brandOf!(*bc) |
+      for (@(true, brand) <- bc) { purse!("withdraw", (brand, amount), *ret2) }
+    }
+  } |
+
+  contract mintVia(@amount, ret2) = {
+    for (facet <<- mintFacetSlot) { facet!("mint", amount, *ret2) }
+  } |
+
+  contract burnVia(payment, @maxAmount, ret2) = {
+    for (facet <<- burnFacetSlot) { facet!("burn", *payment, maxAmount, *ret2) }
+  } |
+
+  contract settleVia(payment, @principal, @interest, ret2) = {
+    for (facet <<- settleFacetSlot) {
+      facet!("settle", *payment, principal, interest, *ret2)
+    }
+  } |
+
+  contract custodyDepositVia(payment, ret2) = {
+    for (facet <<- custodyFacetSlot) { facet!("deposit", *payment, *ret2) }
+  } |
+
+  contract custodyWithdrawVia(@amount, ret2) = {
+    for (facet <<- custodyFacetSlot) {
+      facet!("withdraw", amount, *ret2)
+    }
+  } |
+
+  // Published consumer: the shop pins this URI from the signed payload and
+  // delivers each provisioned facet once. The slots hold bare names and are
+  // read with a name peek; no facet is ever returned.
+  contract FacetConsumer(@"acceptFacet", @kind, facet, @nonce, @deadline, ret2) = {
+    new shopCh, okCh in {
+      match kind {
+        "buffer" => { rl!(bufferShopUri, *shopCh) }
+        _ => { rl!(shopUri, *shopCh) }
+      } |
+      for (Shop <- shopCh) {
+        Shop!("isFacet", kind, *facet, *okCh) |
+        for (@ok <- okCh) {
+          match ok {
+            (true, true) => {
+              for (@s <- consumerState) {
+                match s.get(kind) {
+                  true => {
+                    consumerState!(s) |
+                    ret2!((false, "already provisioned"))
+                  }
+                  _ => {
+                    match kind {
+                      "mint" => {
+                        mintFacetSlot!(*facet) |
+                        consumerState!(s.set("mint", true)) |
+                        ret2!((true, "provisioned"))
+                      }
+                      "burn" => {
+                        burnFacetSlot!(*facet) |
+                        consumerState!(s.set("burn", true)) |
+                        ret2!((true, "provisioned"))
+                      }
+                      "settle" => {
+                        settleFacetSlot!(*facet) |
+                        consumerState!(s.set("settle", true)) |
+                        ret2!((true, "provisioned"))
+                      }
+                      "custody" => {
+                        custodyFacetSlot!(*facet) |
+                        consumerState!(s.set("custody", true)) |
+                        ret2!((true, "provisioned"))
+                      }
+                      "buffer" => {
+                        bufferFacetSlot!(*facet) |
+                        consumerState!(s.set("buffer", true)) |
+                        ret2!((true, "provisioned"))
+                      }
+                      _ => {
+                        consumerState!(s) |
+                        ret2!((false, "kind"))
                       }
                     }
                   }
                 }
               }
             }
-          }
-          }
-        }
-      }
-    }
-  } |
-
-  contract Stablecoin(@"burn", payment, @maxAmount, @auth, ret2) = {
-    if (auth != *burnAuth && auth != *psmBurnAuth) { ret2!((false, "bad burn authority")) }
-    else {
-      new amtCh in {
-        @issuer!("getAmountOf", *payment, *amtCh) |
-        for (@a <- amtCh) {
-          match a {
-            (true, amount) => {
-              if (amount <= 0 || amount > maxAmount) { ret2!((false, "amount")) }
-              else {
-                for (@s <<- issuerState) {
-                  if (s.get("totalPrincipal") < amount) {
-                    ret2!((false, "supply"))
-                  } else {
-                    for (@s2 <- issuerState) {
-                      if (s2.get("totalPrincipal") != s.get("totalPrincipal")) {
-                        issuerState!(s2) | ret2!((false, "changed"))
-                      } else {
-                        new depCh in {
-                          @burnFacet!("deposit", *payment, *depCh) |
-                          for (@d <- depCh) {
-                            match d {
-                              (true, bal) => {
-                                issuerState!(s2.set("totalPrincipal",
-                                  s2.get("totalPrincipal") - amount)) |
-                                ret2!((true, amount, s2.get("totalPrincipal") - amount))
-                              }
-                              _ => { ret2!(1 / 0) }
-                            }
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-            _ => { ret2!((false, "not a stablecoin payment")) }
+            _ => { ret2!((false, "not a facet")) }
           }
         }
       }
     }
-  } |
-
-  contract Stablecoin(@"settle", payment, @principal, @interest, @auth, ret2) = {
-    if (auth != *settlementAuth) { ret2!((false, "bad settlement authority", *payment)) }
-    else {
-      if (principal < 0 || interest < 0) { ret2!((false, "amount", *payment)) }
-      else {
-        new amtCh, sCh in {
-          @issuer!("getAmountOf", *payment, *amtCh) |
-          for (@a <- amtCh) {
-            match a {
-              (true, total) => {
-                if (total != principal + interest) {
-                  ret2!((false, "amount", *payment))
-                } else {
-                  if (principal == 0) {
-                    SurplusBuffer!("deposit", *payment, *bufferDepositAuth, *sCh) |
-                    for (@s <- sCh) {
-                      match s {
-                        (true, _) => { ret2!((true, 0, interest)) }
-                        _ => { ret2!(s) }
-                      }
-                    }
-                  } else {
-                    if (interest == 0) {
-                      new bCh in {
-                        Stablecoin!("burn", *payment, principal, *burnAuth, *bCh) |
-                        for (@b <- bCh) {
-                          match b {
-                            (true, _, _) => { ret2!((true, principal, 0)) }
-                            _ => { ret2!(b) }
-                          }
-                        }
-                      }
-                    } else {
-                      new pCh, dCh, wpCh, wiCh, bCh in {
-                        @issuer!("makeEmptyPurse", *pCh) |
-                        for (@(true, purse) <- pCh) {
-                          @purse!("deposit", *payment, *dCh) |
-                          for (@(true, _) <- dCh) {
-                            @purse!("withdraw", (brand, principal), *wpCh) |
-                            for (@(true, principalPay) <- wpCh) {
-                              @purse!("withdraw", (brand, interest), *wiCh) |
-                              for (@(true, interestPay) <- wiCh) {
-                                Stablecoin!("burn", principalPay, principal, *burnAuth, *bCh) |
-                                for (@b <- bCh) {
-                                  match b {
-                                    (true, _, _) => {
-                                      SurplusBuffer!("deposit", interestPay,
-                                                     *bufferDepositAuth, *sCh) |
-                                      for (@s <- sCh) {
-                                        match s {
-                                          (true, _) => { ret2!((true, principal, interest)) }
-                                          _ => { ret2!(1 / 0) }
-                                        }
-                                      }
-                                    }
-                                    _ => { ret2!(1 / 0) }
-                                  }
-                                }
-                              }
-                            }
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-              _ => { ret2!((false, "asset", *payment)) }
-            }
-          }
-        }
-      }
-    }
-  } |
-
-  contract Stablecoin(@"amountOf", payment, ret2) = {
-    @issuer!("getAmountOf", *payment, *ret2)
-  } |
-
-  contract Stablecoin(@"attest", ret2) = {
-    ret2!((true, {
-      "currency": currency,
-      "paramsHash": paramsHash,
-      "sponsor": sponsorHex,
-      "template": "rcash:stablecoin:v1"
-    }))
-  } |
-
-  contract CollateralCustody(@"deposit", payment, @auth, ret2) = {
-    if (auth != *custodyAuth) { ret2!((false, "bad custody authority")) }
-    else {
-      new amtCh, depCh in {
-        @revIssuer!("getAmountOf", *payment, *amtCh) |
-        for (@a <- amtCh) {
-          match a {
-            (true, amount) => {
-              @revPurse!("deposit", *payment, *depCh) |
-              for (@d <- depCh) {
-                match d {
-                  (true, bal) => { ret2!((true, amount)) }
-                  _ => { ret2!(1 / 0) }
-                }
-              }
-            }
-            _ => { ret2!((false, "not a REV payment")) }
-          }
-        }
-      }
-    }
-  } |
-
-  contract CollateralCustody(@"withdraw", @amount, @auth, ret2) = {
-    if (auth != *custodyAuth) { ret2!((false, "bad custody authority")) }
-    else {
-      if (amount <= 0) { ret2!((false, "amount")) }
-      else {
-        @revPurse!("withdraw", (revBrand, amount), *ret2)
-      }
-    }
-  } |
-
-  contract CollateralCustody(@"balance", ret2) = {
-    @revPurse!("getCurrentAmount", *ret2)
-  } |
-
-  contract CollateralCustody(@"attest", ret2) = {
-    ret2!((true, {
-      "currency": currency,
-      "kind": "rev",
-      "template": "rcash:collateral-custody:v1"
-    }))
-  } |
-
-  contract RiskParameters(@"params", ret2) = {
-    for (@s <<- paramsState) { ret2!((true, s.get("params"))) }
-  } |
-
-  contract RiskParameters(@"info", ret2) = {
-    for (@s <<- paramsState) {
-      ret2!((true, {"params": s.get("params"), "paramsHash": paramsHash,
-                    "currentHash": s.get("hash"), "genesis": params,
-                    "rev": s.get("rev")}))
-    }
-  } |
-
-  contract RiskParameters(@"scheduleParams", @newParams, @nonce, @sigs, ret2) = {
-    new boundsCapCh, bzCh, pvCh, codecCh, argsCh, govCh, sCh in {
-      vaultBounds!(*boundsCapCh) |
-      for (Bounds <- boundsCapCh) {
-        Bounds!("checkIssuer", newParams, *bzCh) |
-        for (@bz <- bzCh) {
-          match bz {
-            (true, Nil) => {
-              paramsValues!(currency, newParams, *pvCh) |
-              for (@values <- pvCh) {
-                vaultCodec!(*codecCh) |
-                for (Codec <- codecCh) {
-                  Codec!("canonical", "rcash:stablecoin-params:v2", values, *argsCh) |
-                  for (@argsHash <- argsCh) {
-                    vaultGovernor!(*govCh) |
-                    for (Governor <- govCh) {
-                      Governor!("schedule", "stablecoin:" ++ currency, nonce,
-                                "setRiskParams", argsHash, newParams, sigs, *sCh) |
-                      for (@gv <- sCh) {
-                        match gv {
-                          (true, readyAt) => { ret2!((true, readyAt, argsHash)) }
-                          _ => { ret2!(gv) }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-            _ => { ret2!(bz) }
-          }
-        }
-      }
-    }
-  } |
-
-  contract RiskParameters(@"applyParams", @nonce, ret2) = {
-    new govCh, eCh, pvCh, codecCh, canCh, hashCh, boundsCh, bzCh in {
-      vaultGovernor!(*govCh) |
-      for (Governor <- govCh) {
-        Governor!("execute", "stablecoin:" ++ currency, nonce, *eCh) |
-        for (@ex <- eCh) {
-          match ex {
-            (true, action, argsHash, args) => {
-              match action {
-              "setRiskParams" => {
-                paramsValues!(currency, args, *pvCh) |
-                for (@values <- pvCh) {
-                  vaultCodec!(*codecCh) |
-                  for (Codec <- codecCh) {
-                    Codec!("canonical", "rcash:stablecoin-params:v2", values, *canCh) |
-                    for (@canonical <- canCh) {
-                      if (canonical != argsHash) { ret2!((false, "params hash")) }
-                      else {
-                        vaultBounds!(*boundsCh) |
-                        for (Bounds <- boundsCh) {
-                          Bounds!("checkIssuer", args, *bzCh) |
-                          for (@bz <- bzCh) {
-                            match bz {
-                              (true, Nil) => {
-                                Codec!("hash", "rcash:stablecoin-params:v2", values, *hashCh) |
-                                for (@h <- hashCh) {
-                                  for (@s <- paramsState) {
-                                    paramsState!(s.set("params", args).set("hash", h)
-                                      .set("rev", s.get("rev") + 1)) |
-                                    ret2!((true, {"params": args, "currentHash": h}))
-                                  }
-                                }
-                              }
-                              _ => { ret2!(bz) }
-                            }
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-              _ => { ret2!((false, "action")) }
-            }
-            }
-            _ => { ret2!(ex) }
-          }
-        }
-      }
-    }
-  } |
-
-  contract RiskParameters(@"attest", ret2) = {
-    ret2!((true, {
-      "currency": currency,
-      "paramsHash": paramsHash,
-      "sponsor": sponsorHex,
-      "template": "rcash:risk-params:v1"
-    }))
   } |
 
   // Retire a leaked vault capability. Gated by the current auth; the new auth
@@ -984,14 +668,16 @@ in {
   } |
 
   contract VaultBook(@"deposit", @ownerId, @auth, payment, ret2) = {
-    for (@s <<- vaultState; @ps <<- paramsState) {
+    paramsGet!(*psCh1) |
+  for (@ps <- psCh1) {
+  for (@s <<- vaultState) {
       match s.get("vaults").get(ownerId) {
         Nil => { ret2!((false, "no vault")) }
         v => {
           if (v.get("auth") != auth) { ret2!((false, "bad vault auth")) }
           else {
             new cCh, nowCh2, accCh, mathCh in {
-              CollateralCustody!("deposit", *payment, *custodyAuth, *cCh) |
+              custodyDepositVia!(*payment, *cCh) |
               for (@c <- cCh) {
                 match c {
                   (true, amount) => {
@@ -1043,12 +729,16 @@ in {
         }
       }
     }
+  }
+  
   } |
 
   contract VaultBook(@"mint", @ownerId, @auth, @amount, ret2) = {
     if (amount <= 0) { ret2!((false, "amount")) }
     else {
-      for (@s <<- vaultState; @ps <<- paramsState) {
+      paramsGet!(*psCh2) |
+  for (@ps <- psCh2) {
+  for (@s <<- vaultState) {
         if (s.get("paused")) { ret2!((false, "paused")) }
         else {
           match s.get("vaults").get(ownerId) {
@@ -1107,13 +797,17 @@ in {
           }
         }
       }
+  }
+  
     }
   } |
 
   contract VaultBook(@"withdraw", @ownerId, @auth, @amount, ret2) = {
     if (amount <= 0) { ret2!((false, "amount")) }
     else {
-      for (@s <<- vaultState; @ps <<- paramsState) {
+      paramsGet!(*psCh3) |
+  for (@ps <- psCh3) {
+  for (@s <<- vaultState) {
         match s.get("vaults").get(ownerId) {
           Nil => { ret2!((false, "no vault")) }
           v => {
@@ -1162,7 +856,7 @@ in {
                                               s2.get("badDebt"),
                                               s2.get("rev") + 1, *nsCh) |
                                               for (@ns <- nsCh) {
-                                                CollateralCustody!("withdraw", amount, *custodyAuth, *payCh) |
+                                                custodyWithdrawVia!(amount, *payCh) |
                                                 for (@p <- payCh) {
                                                   match p {
                                                     (true, payment) => { vaultState!(ns) | ret2!((true, payment)) }
@@ -1192,18 +886,22 @@ in {
         }
       }
     }
+  }
+  
     }
   } |
 
   contract VaultBook(@"repay", @ownerId, @auth, payment, ret2) = {
-    for (@s <<- vaultState; @ps <<- paramsState) {
+    paramsGet!(*psCh4) |
+  for (@ps <- psCh4) {
+  for (@s <<- vaultState) {
       match s.get("vaults").get(ownerId) {
         Nil => { ret2!((false, "no vault")) }
         v => {
           if (v.get("auth") != auth) { ret2!((false, "bad vault auth")) }
           else {
             new amtCh, nowCh2, accCh, mathCh in {
-              Stablecoin!("amountOf", *payment, *amtCh) |
+              stableAmountOf!(*payment, *amtCh) |
               for (@a <- amtCh) {
                 match a {
                   (true, amount) => {
@@ -1250,6 +948,8 @@ in {
         }
       }
     }
+  }
+  
   } |
 
   // Permissionless liquidation. The only authority is the liquidation cap held by
@@ -1261,13 +961,15 @@ in {
     if (auth != *liquidationAuth) { ret2!((false, "bad liquidation authority", *payment)) }
     else {
       new amtCh in {
-        Stablecoin!("amountOf", *payment, *amtCh) |
+        stableAmountOf!(*payment, *amtCh) |
         for (@a <- amtCh) {
           match a {
             (true, amount) => {
               if (amount <= 0) { ret2!((false, "amount", *payment)) }
               else {
-                for (@s <<- vaultState; @ps <<- paramsState) {
+                paramsGet!(*psCh5) |
+  for (@ps <- psCh5) {
+  for (@s <<- vaultState) {
                   match s.get("vaults").get(ownerId) {
                     Nil => { ret2!((false, "no vault", *payment)) }
                     v => {
@@ -1341,6 +1043,8 @@ in {
                     }
                   }
                 }
+  }
+  
               }
             }
             _ => { ret2!((false, "not a stablecoin payment", *payment)) }
@@ -1351,7 +1055,9 @@ in {
   } |
 
   contract VaultBook(@"vault", @ownerId, ret2) = {
-    for (@s <<- vaultState; @ps <<- paramsState) {
+    paramsGet!(*psCh6) |
+  for (@ps <- psCh6) {
+  for (@s <<- vaultState) {
       match s.get("vaults").get(ownerId) {
         Nil => { ret2!((false, "no vault")) }
         v => {
@@ -1391,6 +1097,8 @@ in {
         }
       }
     }
+  }
+  
   } |
 
   contract VaultBook(@"vaults", ret2) = {
@@ -1413,7 +1121,8 @@ in {
   } |
 
   contract VaultBook(@"params", ret2) = {
-    for (@ps <<- paramsState) { ret2!((true, ps.get("params"))) }
+    paramsGet!(*psCh9) |
+  for (@ps <- psCh9) { ret2!((true, ps.get("params"))) }
   } |
 
   contract VaultBook(@"pause", @paused, @nonce, @sigs, ret2) = {
@@ -1488,7 +1197,7 @@ in {
     new oCh, amtCh, dCh, shCh in {
       callerOwner!(*dId, *oCh) |
       for (@ownerId <- oCh) {
-        @issuer!("getAmountOf", *payment, *amtCh) |
+        stableAmountOf!(*payment, *amtCh) |
         for (@a <- amtCh) {
           match a {
             (true, amount) => {
@@ -1551,7 +1260,7 @@ in {
               } else {
                 amtCh!(((s.get("totalAssets") * shares) / s.get("totalShares")).toInt()) |
                 for (@amount <- amtCh) {
-                  @savingsPurse!("withdraw", (brand, amount), *wCh) |
+                  withdrawStable!(*savingsPurse, amount, *wCh) |
                   for (@w <- wCh) {
                     match w {
                       (true, payment) => {
@@ -1577,7 +1286,7 @@ in {
     if (auth != *savingsNotifyAuth) { ret2!((false, "bad savings authority", *payment)) }
     else {
       new amtCh, dCh in {
-        @issuer!("getAmountOf", *payment, *amtCh) |
+        stableAmountOf!(*payment, *amtCh) |
         for (@a <- amtCh) {
           match a {
             (true, amount) => {
@@ -1638,7 +1347,7 @@ in {
     if (auth != *bufferDepositAuth) { ret2!((false, "bad buffer authority", *payment)) }
     else {
       new amtCh, dCh in {
-        @issuer!("getAmountOf", *payment, *amtCh) |
+        stableAmountOf!(*payment, *amtCh) |
         for (@a <- amtCh) {
           match a {
             (true, amount) => {
@@ -1671,7 +1380,7 @@ in {
             if (move <= 0) { ret2!((true, 0, s.get("surplus"))) }
             else {
               new wCh, nCh, backCh in {
-                @bufferPurse!("withdraw", (brand, move), *wCh) |
+                withdrawStable!(*bufferPurse, move, *wCh) |
                 for (@w <- wCh) {
                   match w {
                     (true, payment) => {
@@ -1732,11 +1441,11 @@ in {
                     }
                   } else {
                     new wCh, bCh in {
-                      @bufferPurse!("withdraw", (brand, cancelled), *wCh) |
+                      withdrawStable!(*bufferPurse, cancelled, *wCh) |
                       for (@w <- wCh) {
                         match w {
                           (true, payment) => {
-                            Stablecoin!("burn", payment, cancelled, *burnAuth, *bCh) |
+                            burnVia!(payment, cancelled, *bCh) |
                             for (@b <- bCh) {
                               match b {
                                 (true, _, _) => {
@@ -1848,11 +1557,13 @@ in {
 
   contract PegStabilityModule(@"sellStable", payment, revFacet, @minRev, ret2) = {
     new amtCh, rateCh, balCh, grossCh, feeCh in {
-      @issuer!("getAmountOf", *payment, *amtCh) |
+      stableAmountOf!(*payment, *amtCh) |
       for (@a <- amtCh) {
         match a {
           (true, amount) => {
-            for (@ps <<- paramsState; @st <<- psmState; @is <<- issuerState) {
+            paramsGet!(*psCh7) |
+  for (@ps <- psCh7) {
+  for (@st <<- psmState) {
               vaultPrice!(currency, ps.get("params").get("maxOracleAge"), *rateCh) |
               for (@rr <- rateCh) {
                 match rr {
@@ -1877,7 +1588,7 @@ in {
                                         ret2!((false, "buffer", *payment))
                                       } else {
                                         psmSellCommit!(amount, revOut, feeRev, st,
-                                                       is.get("maxSupply"), psmRevPurse, revBrand,
+                                                       2000000000000000, psmRevPurse, revBrand,
                                                        *payment, *revFacet, *ret2)
                                       }
                                     }
@@ -1895,6 +1606,8 @@ in {
                 }
               }
             }
+  }
+  
           }
           _ => { ret2!((false, "asset", *payment)) }
         }
@@ -1908,7 +1621,12 @@ in {
       for (@a <- amtCh) {
         match a {
           (true, amount) => {
-            for (@ps <<- paramsState; @st <<- psmState; @vs <<- vaultState) {
+            paramsGet!(*psCh8) |
+  for (@ps <- psCh8) {
+  for (@st <<- psmState; @vs <<- vaultState; @bs <<- bufferState) {
+              if (bs.get("sin") > bs.get("surplus")) {
+                ret2!((false, "recapitalise", *payment))
+              } else {
               if (vs.get("paused")) {
                 ret2!((false, "paused", *payment))
               } else {
@@ -1946,6 +1664,9 @@ in {
                 }
               }
             }
+  }
+  
+          }
           }
           _ => { ret2!((false, "asset", *payment)) }
         }
@@ -2047,18 +1768,17 @@ in {
     for (@s <<- psmState) { ret2!((true, s.get("stableDebt"))) }
   } |
 
-                    issuerState!({
-                      "totalPrincipal": 0,
-                      "maxSupply": 2000000000000000
-                    }) |
-                    paramsState!({"params": params, "hash": paramsHash, "rev": 0}) |
+                  paramsGet!(*initPCh) |
+                  for (@ip <- initPCh) {
                     savingsState!({"totalShares": 0, "totalAssets": 0,
                                    "shares": {}, "rev": 0}) |
                     bufferState!({"surplus": 0, "sin": 0,
-                                  "savingsShareBps": params.get("savingsShareBps"),
+                                  "savingsShareBps": ip.get("params").get("savingsShareBps"),
                                   "rev": 0}) |
-                    psmState!({"stableDebt": 0, "feeBps": params.get("psmFeeBps"),
-                               "ceiling": params.get("debtCeiling"), "rev": 0}) |
+                    psmState!({"stableDebt": 0,
+                               "feeBps": ip.get("params").get("psmFeeBps"),
+                               "ceiling": ip.get("params").get("debtCeiling"),
+                               "rev": 0}) |
                     vaultState!({
                       "vaults": {},
                       "totalDebt": 0,
@@ -2069,23 +1789,19 @@ in {
                       "pausedRev": 0,
                       "rev": 0
                     }) |
-                    rs!(bundle+{*Stablecoin}, *uSC) |
-                    rs!(bundle+{*CollateralCustody}, *uCustody) |
-                    rs!(bundle+{*RiskParameters}, *uParams) |
+                    consumerState!({"mint": false, "burn": false, "settle": false,
+                                    "custody": false, "buffer": false}) |
+                    rs!(bundle+{*FacetConsumer}, *uConsumer) |
                     rs!(bundle+{*VaultBook}, *uVault) |
                     rs!(bundle+{*LiquidationEngine}, *uLiq) |
                     rs!(bundle+{*SavingsPool}, *uSavings) |
                     rs!(bundle+{*SurplusBuffer}, *uBuffer) |
                     rs!(bundle+{*PegStabilityModule}, *uPsm) |
-                    for (@scUri <- uSC; @custodyUri <- uCustody;
-                         @paramsUri <- uParams; @vaultUri <- uVault;
+                    for (@consumerUri <- uConsumer; @vaultUri <- uVault;
                          @liqUri <- uLiq; @savingsUri <- uSavings;
-                         @psmUri <- uPsm; @bufferUri <- uBuffer) {
-                      Stablecoin!("attest", *attCh) |
-                      for (@att <- attCh) {
-                        deployId!([scUri, custodyUri, paramsUri, vaultUri, liqUri,
-                                   savingsUri, psmUri, bufferUri, att])
-                      }
+                         @bufferUri <- uBuffer; @psmUri <- uPsm) {
+                      deployId!([consumerUri, vaultUri, liqUri, savingsUri,
+                                 bufferUri, psmUri])
                     }
                   }
                 }
@@ -2093,8 +1809,6 @@ in {
             }
           }
         }
-        _ => { deployId!(check) }
       }
     }
-  }
 }
