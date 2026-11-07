@@ -266,6 +266,30 @@ def tradabilityGate_admit (status : MStatus) (fresh : Bool)
   status == .active && fresh && inputValue ≥ minTicket
     && inputValue * Bps ≤ poolValue * maxTradeBps
 
+theorem admit_active {status : MStatus} {fresh : Bool} {inputValue poolValue minTicket maxTradeBps : Nat}
+    (h : tradabilityGate_admit status fresh inputValue poolValue minTicket maxTradeBps = true) :
+    status = .active := by
+  simp [tradabilityGate_admit] at h
+  exact h.1.1.1
+
+theorem admit_fresh {status : MStatus} {fresh : Bool} {inputValue poolValue minTicket maxTradeBps : Nat}
+    (h : tradabilityGate_admit status fresh inputValue poolValue minTicket maxTradeBps = true) :
+    fresh = true := by
+  simp [tradabilityGate_admit] at h
+  exact h.1.1.2
+
+theorem admit_min_ticket {status : MStatus} {fresh : Bool} {inputValue poolValue minTicket maxTradeBps : Nat}
+    (h : tradabilityGate_admit status fresh inputValue poolValue minTicket maxTradeBps = true) :
+    inputValue ≥ minTicket := by
+  simp [tradabilityGate_admit] at h
+  exact h.1.2
+
+theorem admit_max_trade {status : MStatus} {fresh : Bool} {inputValue poolValue minTicket maxTradeBps : Nat}
+    (h : tradabilityGate_admit status fresh inputValue poolValue minTicket maxTradeBps = true) :
+    inputValue * Bps ≤ poolValue * maxTradeBps := by
+  simp [tradabilityGate_admit] at h
+  exact h.2
+
 def listingViews_marketFor (i : Index) (pair reversePair : Nat) : Option Market :=
   marketIndex_marketFor i pair reversePair
 def listingViews_market (i : Index) (id : Nat) : Option Market := marketIndex_market i id

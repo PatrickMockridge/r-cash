@@ -88,6 +88,10 @@ output containing `sorryAx` or a project-local axiom.
 #print axioms Rholphin.Model.Market.staged_is_draft
 #print axioms Rholphin.Model.Market.pauseAsset_singleton
 #print axioms Rholphin.Model.Market.pauseAsset_pauses_all
+#print axioms Rholphin.Model.Market.admit_active
+#print axioms Rholphin.Model.Market.admit_fresh
+#print axioms Rholphin.Model.Market.admit_min_ticket
+#print axioms Rholphin.Model.Market.admit_max_trade
 #print axioms Rholphin.Model.Market.stage_writes_both
 #print axioms Rholphin.Model.Market.stage_refuses_active
 #print axioms Rholphin.Model.Market.delisted_accepts_nothing

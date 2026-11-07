@@ -212,9 +212,16 @@ invariants:
   I12:
     statement: Depth floor, min ticket, max trade and first-deposit tolerance.
     predicate: Rholphin.Model.Market.tradabilityGate_admit
-    status: deferred
-    deferral: {phase: 5, reason: the gate is a def; no implication theorem}
-    theorems: []
+    status: partial
+    note: >-
+      The gate's status, freshness, min-ticket and max-trade implications are
+      proved.  The depth floor and first-deposit tolerance live in the pool
+      arms, not in this gate.
+    theorems:
+      - {name: Rholphin.Model.Market.admit_active, strength: substantive, kind: preservation}
+      - {name: Rholphin.Model.Market.admit_fresh, strength: substantive, kind: preservation}
+      - {name: Rholphin.Model.Market.admit_min_ticket, strength: substantive, kind: preservation}
+      - {name: Rholphin.Model.Market.admit_max_trade, strength: substantive, kind: preservation}
   I13:
     statement: Seed lock is one-shot; terminal flags exclusive; beneficiary/governor gated.
     predicate: Rholphin.Model.Pool.Lock
