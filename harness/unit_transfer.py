@@ -26,6 +26,7 @@ sys.path.insert(0, str(ROOT / "harness"))
 import netconfig  # noqa: E402
 
 import deploy as node  # noqa: E402
+import sign_payload  # noqa: E402
 from minify_rho import minify  # noqa: E402
 from unit_v3 import check, faucet_top_up, one  # noqa: E402
 
@@ -46,8 +47,11 @@ def render_scenario(name: str, values: dict) -> str:
     return minify(text)
 
 
-def digest(secret: bytes) -> str:
-    return hashlib.blake2b(secret, digest_size=32).hexdigest()
+def claim_digest(transfer_id: int, secret: bytes) -> str:
+    """OCAP-19 claim commitment over id, asset, amount and the secret."""
+    preimage = sign_payload.canonical(
+        "rcash:claim:v1", [transfer_id, "REV", AMOUNT, secret.hex()])
+    return hashlib.blake2b(preimage.encode(), digest_size=32).hexdigest()
 
 
 def wait_height(target: int) -> None:
@@ -85,9 +89,9 @@ def main() -> int:
         "__RECIPIENT_PUB__": recipient["public"],
         "__FUND__": str(FUND),
         "__AMOUNT__": str(AMOUNT),
-        "__HASH_A__": digest(SECRET_A),
+        "__HASH_A__": claim_digest(0, SECRET_A),
         "__EXPIRY_A__": str(expiry_a),
-        "__HASH_B__": digest(SECRET_B),
+        "__HASH_B__": claim_digest(1, SECRET_B),
         "__EXPIRY_B__": str(expiry_b),
     })
     sent = one(send_term, sender["secret"])

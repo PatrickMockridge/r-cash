@@ -30,6 +30,28 @@ structure Claim where
   status : Nat
   deriving DecidableEq, Repr
 
+/-- OCAP-19: the committed preimage binds the transfer identity and amount to
+the secret.  The contract hashes `rcash:claim:v1|id|assetId|amount|secret`
+through the canonical codec; this record is the modelled field list. -/
+structure ClaimPreimage where
+  transferId : Nat
+  assetId : Nat
+  amount : Nat
+  secret : Secret
+
+/-- The ordered fields of the canonical claim preimage. -/
+def ClaimPreimage.fields (p : ClaimPreimage) : List Nat :=
+  [p.transferId, p.assetId, p.amount, p.secret.value]
+
+/-- Equal preimages bind the same transfer id, so a secret committed to one
+transfer cannot be replayed as the commitment for another. -/
+theorem ClaimPreimage.transferId_injective {p q : ClaimPreimage}
+    (h : p.fields = q.fields) : p.transferId = q.transferId := by
+  have h' : p.transferId = q.transferId ∧ p.assetId = q.assetId ∧
+      p.amount = q.amount ∧ p.secret.value = q.secret.value := by
+    simpa [ClaimPreimage.fields] using h
+  exact h'.1
+
 /-- Claim changes the status only when the presented secret matches the stored hash. -/
 def claim (C : ClaimScheme) (t : Claim) (secret : Secret) : Option Claim :=
   if C.hash secret = t.secretHash then some { t with status := 1 } else none

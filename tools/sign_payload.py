@@ -45,7 +45,6 @@ AUTH_MARKET_DOMAIN = "auth:market"
 MARKET_AUTH_ACTION = "rotate"
 MARKET_AUTH_ARGS = "marketAuth"
 
-
 def blake2b256(data: bytes) -> bytes:
     return hashlib.blake2b(data, digest_size=32).digest()
 
