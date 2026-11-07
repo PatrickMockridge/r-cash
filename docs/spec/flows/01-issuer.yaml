@@ -19,7 +19,7 @@ components:
     transition: issuer.Stablecoin.brand
     lean: Rholphin.Model.Issuer.stablecoin_brand
     kind: read
-    source: {file: contracts/src/deploy/v3/31_issuer.rho, line: 121}
+    source: {file: contracts/src/deploy/v3/31_issuer.rho, line: 92}
     guards: []
     effects: []
     access: []
@@ -34,7 +34,7 @@ components:
     transition: issuer.Stablecoin.issuer
     lean: Rholphin.Model.Issuer.stablecoin_issuer
     kind: read
-    source: {file: contracts/src/deploy/v3/31_issuer.rho, line: 125}
+    source: {file: contracts/src/deploy/v3/31_issuer.rho, line: 96}
     guards: []
     effects: []
     access: []
@@ -49,7 +49,7 @@ components:
     transition: issuer.Stablecoin.supply
     lean: Rholphin.Model.Issuer.stablecoin_supply
     kind: read
-    source: {file: contracts/src/deploy/v3/31_issuer.rho, line: 129}
+    source: {file: contracts/src/deploy/v3/31_issuer.rho, line: 100}
     guards: []
     effects: []
     access:
@@ -65,7 +65,7 @@ components:
     transition: issuer.Stablecoin.amountOf
     lean: Rholphin.Model.Issuer.stablecoin_amountOf
     kind: read
-    source: {file: contracts/src/deploy/v3/31_issuer.rho, line: 133}
+    source: {file: contracts/src/deploy/v3/31_issuer.rho, line: 104}
     guards: []
     effects: []
     access: []
@@ -80,7 +80,7 @@ components:
     transition: issuer.Stablecoin.info
     lean: Rholphin.Model.Issuer.stablecoin_info
     kind: read
-    source: {file: contracts/src/deploy/v3/31_issuer.rho, line: 137}
+    source: {file: contracts/src/deploy/v3/31_issuer.rho, line: 108}
     guards: []
     effects: []
     access:
@@ -96,7 +96,7 @@ components:
     transition: issuer.Stablecoin.attest
     lean: Rholphin.Model.Issuer.stablecoin_attest
     kind: read
-    source: {file: contracts/src/deploy/v3/31_issuer.rho, line: 149}
+    source: {file: contracts/src/deploy/v3/31_issuer.rho, line: 120}
     guards: []
     effects:
     - {target: reply, formula: '(true, {currency, paramsHash, sponsor, kind})'}
@@ -118,7 +118,7 @@ components:
     transition: issuer.CollateralCustody.balance
     lean: Rholphin.Model.Issuer.collateralCustody_balance
     kind: read
-    source: {file: contracts/src/deploy/v3/31_issuer.rho, line: 158}
+    source: {file: contracts/src/deploy/v3/31_issuer.rho, line: 129}
     guards: []
     effects:
     - {target: reply, formula: 'custody.rev'}
@@ -134,7 +134,7 @@ components:
     transition: issuer.CollateralCustody.attest
     lean: Rholphin.Model.Issuer.collateralCustody_attest
     kind: read
-    source: {file: contracts/src/deploy/v3/31_issuer.rho, line: 162}
+    source: {file: contracts/src/deploy/v3/31_issuer.rho, line: 133}
     guards: []
     effects:
     - {target: reply, formula: '(true, {currency, paramsHash, sponsor, kind})'}
@@ -156,7 +156,7 @@ components:
     transition: issuer.AuthLedger.check
     lean: Rholphin.Model.Issuer.authLedger_check
     kind: read
-    source: {file: contracts/src/deploy/v3/31_issuer.rho, line: 173}
+    source: {file: contracts/src/deploy/v3/31_issuer.rho, line: 144}
     guards:
     - {id: kind_known, expr: 'kind in mint, burn, settle, custody', refusal: {reason: kind, phase: pre}}
     effects:
@@ -180,7 +180,7 @@ components:
     transition: issuer.AuthLedger.rotate
     lean: Rholphin.Model.Issuer.authLedger_rotate
     kind: mutate
-    source: {file: contracts/src/deploy/v3/31_issuer.rho, line: 210}
+    source: {file: contracts/src/deploy/v3/31_issuer.rho, line: 181}
     guards:
     - {id: kind_known, expr: 'kind in mint, burn, settle, custody', refusal: {reason: kind, phase: pre}}
     - {id: governor, expr: 'Governor.authorize(auth:currency:kind, nonce, rotate, kind)', refusal: {reason: kind, phase: pre}}
@@ -200,7 +200,7 @@ components:
     - {cell: custodyAuthState, mode: consume, actor: arm, phase: commit}
     - {cell: custodyAuthState, mode: post, actor: arm, phase: commit}
     nested_calls:
-    - {callee: governorOf, protocol: P0, takes: [], puts: [], post_owner: helper}
+    - {callee: componentOf, protocol: P0, takes: [], puts: [], post_owner: helper}
     refusals:
     - {reason: kind, phase: pre, reposts: false, fail: false}
     invariants:
@@ -220,7 +220,7 @@ components:
     transition: issuer.MintFacet.mint
     lean: Rholphin.Model.Issuer.mintFacet_mint
     kind: mutate
-    source: {file: contracts/src/deploy/v3/31_issuer.rho, line: 477}
+    source: {file: contracts/src/deploy/v3/31_issuer.rho, line: 455}
     guards:
     - {id: auth_live, expr: 'auth = mintAuthState', refusal: {reason: bad auth, phase: pre}}
     - {id: amount_pos, expr: 'amount > 0', refusal: {reason: amount, phase: pre}}
@@ -258,7 +258,7 @@ components:
     transition: issuer.BurnFacet.burn
     lean: Rholphin.Model.Issuer.burnFacet_burn
     kind: mutate
-    source: {file: contracts/src/deploy/v3/31_issuer.rho, line: 481}
+    source: {file: contracts/src/deploy/v3/31_issuer.rho, line: 459}
     guards:
     - {id: auth_live, expr: 'auth = burnAuthState', refusal: {reason: bad auth, phase: pre}}
     - {id: payment_asset, expr: 'isStablecoinPayment(payment)', refusal: {reason: not a stablecoin payment, phase: pre}}
@@ -297,7 +297,7 @@ components:
     transition: issuer.SettlementFacet.settle
     lean: Rholphin.Model.Issuer.settlementFacet_settle
     kind: mutate
-    source: {file: contracts/src/deploy/v3/31_issuer.rho, line: 487}
+    source: {file: contracts/src/deploy/v3/31_issuer.rho, line: 465}
     guards:
     - {id: auth_live, expr: 'auth = settlementAuthState', refusal: {reason: bad auth, phase: pre}}
     - {id: amounts_nonneg, expr: 'principal >= 0 and interest >= 0', refusal: {reason: amount, phase: pre}}
@@ -339,7 +339,7 @@ components:
     transition: issuer.CustodyFacet.deposit
     lean: Rholphin.Model.Issuer.custodyFacet_deposit
     kind: read
-    source: {file: contracts/src/deploy/v3/31_issuer.rho, line: 493}
+    source: {file: contracts/src/deploy/v3/31_issuer.rho, line: 471}
     guards:
     - {id: auth_live, expr: 'auth = custodyAuthState', refusal: {reason: bad auth, phase: pre}}
     - {id: payment_asset, expr: 'isRevPayment(payment)', refusal: {reason: not a REV payment, phase: pre}}
@@ -362,7 +362,7 @@ components:
     transition: issuer.CustodyFacet.withdraw
     lean: Rholphin.Model.Issuer.custodyFacet_withdraw
     kind: read
-    source: {file: contracts/src/deploy/v3/31_issuer.rho, line: 499}
+    source: {file: contracts/src/deploy/v3/31_issuer.rho, line: 477}
     guards:
     - {id: auth_live, expr: 'auth = custodyAuthState', refusal: {reason: bad auth, phase: pre}}
     - {id: amount_pos, expr: 'amount > 0', refusal: {reason: amount, phase: pre}}
@@ -391,7 +391,7 @@ components:
     transition: issuer.FacetShop.isFacet
     lean: Rholphin.Model.Issuer.facetShop_isFacet
     kind: read
-    source: {file: contracts/src/deploy/v3/31_issuer.rho, line: 505}
+    source: {file: contracts/src/deploy/v3/31_issuer.rho, line: 483}
     guards:
     - {id: kind_known, expr: 'kind in mint, burn, settle, custody', refusal: {reason: kind, phase: pre}}
     effects:
@@ -409,7 +409,7 @@ components:
     transition: issuer.FacetShop.provision
     lean: Rholphin.Model.Issuer.facetShop_provision
     kind: mutate
-    source: {file: contracts/src/deploy/v3/31_issuer.rho, line: 609}
+    source: {file: contracts/src/deploy/v3/31_issuer.rho, line: 587}
     guards:
     - {id: sponsor_bound, expr: 'sponsorHex = shopCfg.sponsor', refusal: {reason: sponsor, phase: pre}}
     - {id: signature_ok, expr: 'Verifier.sigOk(Codec.hash(rcash:provision:v1, values))', refusal: {reason: bad sponsor signature, phase: pre}}
@@ -424,8 +424,7 @@ components:
     - {cell: shopState, mode: consume, actor: arm, phase: commit}
     - {cell: shopState, mode: post, actor: arm, phase: commit}
     nested_calls:
-    - {callee: shopCodec, protocol: P0, takes: [], puts: [], post_owner: helper}
-    - {callee: shopVerifier, protocol: P0, takes: [], puts: [], post_owner: helper}
+    - {callee: componentOf, protocol: P0, takes: [], puts: [], post_owner: helper}
     - {callee: joinKinds, protocol: P0, takes: [], puts: [], post_owner: helper}
     - {callee: kindsValid, protocol: P0, takes: [], puts: [], post_owner: helper}
     - {callee: deliverKinds, protocol: P0, takes: [], puts: [], post_owner: helper}
@@ -486,7 +485,7 @@ components:
     transition: issuer.RiskParameters.params
     lean: Rholphin.Model.Issuer.riskParameters_params
     kind: read
-    source: {file: contracts/src/deploy/v3/31_params.rho, line: 85}
+    source: {file: contracts/src/deploy/v3/31_params.rho, line: 56}
     guards: []
     effects:
     - {target: reply, formula: '(true, params)'}
@@ -503,7 +502,7 @@ components:
     transition: issuer.RiskParameters.info
     lean: Rholphin.Model.Issuer.riskParameters_info
     kind: read
-    source: {file: contracts/src/deploy/v3/31_params.rho, line: 89}
+    source: {file: contracts/src/deploy/v3/31_params.rho, line: 60}
     guards: []
     effects:
     - {target: reply, formula: '(true, {params, paramsHash, currentHash, genesis, rev})'}
@@ -520,7 +519,7 @@ components:
     transition: issuer.RiskParameters.scheduleParams
     lean: Rholphin.Model.Issuer.riskParameters_scheduleParams
     kind: create
-    source: {file: contracts/src/deploy/v3/31_params.rho, line: 97}
+    source: {file: contracts/src/deploy/v3/31_params.rho, line: 68}
     guards:
     - {id: bounds, expr: 'Bounds.checkIssuer(newParams)', refusal: {reason: params hash, phase: pre}}
     - {id: canonical, expr: 'argsHash = H(rcash:stablecoin-params:v2, values)', refusal: {reason: params hash, phase: pre}}
@@ -529,9 +528,7 @@ components:
     access: []
     nested_calls:
     - {callee: paramsValues, protocol: P0, takes: [], puts: [], post_owner: helper}
-    - {callee: paramsBounds, protocol: P0, takes: [], puts: [], post_owner: helper}
-    - {callee: paramsCodec, protocol: P0, takes: [], puts: [], post_owner: helper}
-    - {callee: paramsGovernor, protocol: P0, takes: [], puts: [], post_owner: helper}
+    - {callee: paramsComponent, protocol: P0, takes: [], puts: [], post_owner: helper}
     refusals: []
     invariants:
     - S12
@@ -543,7 +540,7 @@ components:
     transition: issuer.RiskParameters.applyParams
     lean: Rholphin.Model.Issuer.riskParameters_applyParams
     kind: mutate
-    source: {file: contracts/src/deploy/v3/31_params.rho, line: 133}
+    source: {file: contracts/src/deploy/v3/31_params.rho, line: 104}
     guards:
     - {id: action, expr: 'action = setRiskParams', refusal: {reason: action, phase: pre}}
     - {id: hash, expr: 'argsHash = H(rcash:stablecoin-params:v2, values)', refusal: {reason: params hash, phase: pre}}
@@ -558,9 +555,7 @@ components:
     - {cell: paramsState, mode: post, actor: arm, phase: commit}
     nested_calls:
     - {callee: paramsValues, protocol: P0, takes: [], puts: [], post_owner: helper}
-    - {callee: paramsBounds, protocol: P0, takes: [], puts: [], post_owner: helper}
-    - {callee: paramsCodec, protocol: P0, takes: [], puts: [], post_owner: helper}
-    - {callee: paramsGovernor, protocol: P0, takes: [], puts: [], post_owner: helper}
+    - {callee: paramsComponent, protocol: P0, takes: [], puts: [], post_owner: helper}
     refusals:
     - {reason: action, phase: pre, reposts: false, fail: false}
     - {reason: params hash, phase: pre, reposts: false, fail: false}
@@ -576,7 +571,7 @@ components:
     transition: issuer.RiskParameters.attest
     lean: Rholphin.Model.Issuer.riskParameters_attest
     kind: read
-    source: {file: contracts/src/deploy/v3/31_params.rho, line: 185}
+    source: {file: contracts/src/deploy/v3/31_params.rho, line: 156}
     guards: []
     effects:
     - {target: reply, formula: '(true, {currency, paramsHash, sponsor, kind:params})'}

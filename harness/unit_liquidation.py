@@ -143,6 +143,9 @@ def main() -> int:
     savings_uri = system["savings_uri"]
     psm_uri = system["psm_uri"]
     buffer_uri = system["buffer_uri"]
+    liquidation_auth_ledger_uri = system["liquidation_auth_ledger_uri"]
+    if liquidation_auth_ledger_uri:
+        print(f"liquidation auth ledger: {liquidation_auth_ledger_uri}")
     liq_att = one(call(liq_uri, "LiquidationEngine",
                        'LiquidationEngine!("attest", *r) | '
                        "for (@x <- r) { deployId!(x) }"), secret)

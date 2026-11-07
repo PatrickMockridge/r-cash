@@ -6,7 +6,7 @@
 //               __SPONSOR_PUB__.
 new
   RiskParameters, paramsState, paramsValues,
-  paramsBounds, paramsCodec, paramsGovernor,
+  paramsComponent,
   rl(`rho:registry:lookup`),
   rs(`rho:registry:insertArbitrary`),
   deployerId(`rho:rchain:deployerId`),
@@ -15,45 +15,16 @@ new
   uParams, attCh, bzCh, pvCh, hCh
 in {
 
-  contract paramsBounds(ret2) = {
-    new rCh, bCh in {
+  // One Root resolver for every registry-resolved component this term uses.
+  contract paramsComponent(@key, ret2) = {
+    new rCh, uCh in {
       rl!(`__ROOT_URI__`, *rCh) |
       for (Root <- rCh) {
-        Root!("resolve", "component:bounds", 1, *bCh) |
-        for (@(true, boundsUri, v) <- bCh) {
-          new bc in {
-            rl!(boundsUri, *bc) |
-            for (Bounds <- bc) { ret2!(*Bounds) }
-          }
-        }
-      }
-    }
-  } |
-
-  contract paramsCodec(ret2) = {
-    new rCh, cCh in {
-      rl!(`__ROOT_URI__`, *rCh) |
-      for (Root <- rCh) {
-        Root!("resolve", "component:codec", 1, *cCh) |
-        for (@(true, codecUri, v) <- cCh) {
+        Root!("resolve", key, 1, *uCh) |
+        for (@(true, compUri, v) <- uCh) {
           new cc in {
-            rl!(codecUri, *cc) |
-            for (Codec <- cc) { ret2!(*Codec) }
-          }
-        }
-      }
-    }
-  } |
-
-  contract paramsGovernor(ret2) = {
-    new rCh, gCh in {
-      rl!(`__ROOT_URI__`, *rCh) |
-      for (Root <- rCh) {
-        Root!("resolve", "component:governor", 1, *gCh) |
-        for (@(true, govUri, v) <- gCh) {
-          new gc in {
-            rl!(govUri, *gc) |
-            for (Governor <- gc) { ret2!(*Governor) }
+            rl!(compUri, *cc) |
+            for (Component <- cc) { ret2!(*Component) }
           }
         }
       }
@@ -96,7 +67,7 @@ in {
 
   contract RiskParameters(@"scheduleParams", @newParams, @nonce, @sigs, ret2) = {
     new boundsCapCh, bzCh2, pvCh2, codecCh, argsCh, govCh, sCh in {
-      paramsBounds!(*boundsCapCh) |
+      paramsComponent!("component:bounds", *boundsCapCh) |
       for (Bounds <- boundsCapCh) {
         Bounds!("checkIssuer", newParams, *bzCh2) |
         for (@bz <- bzCh2) {
@@ -104,11 +75,11 @@ in {
             (true, Nil) => {
               paramsValues!(currency, newParams, *pvCh2) |
               for (@values <- pvCh2) {
-                paramsCodec!(*codecCh) |
+                paramsComponent!("component:codec", *codecCh) |
                 for (Codec <- codecCh) {
                   Codec!("canonical", "rcash:stablecoin-params:v2", values, *argsCh) |
                   for (@argsHash <- argsCh) {
-                    paramsGovernor!(*govCh) |
+                    paramsComponent!("component:governor", *govCh) |
                     for (Governor <- govCh) {
                       Governor!("schedule", "stablecoin:" ++ currency, nonce,
                                 "setRiskParams", argsHash, newParams, sigs, *sCh) |
@@ -132,7 +103,7 @@ in {
 
   contract RiskParameters(@"applyParams", @nonce, ret2) = {
     new govCh, eCh, pvCh2, codecCh, canCh, hashCh, boundsCh, bzCh2 in {
-      paramsGovernor!(*govCh) |
+      paramsComponent!("component:governor", *govCh) |
       for (Governor <- govCh) {
         Governor!("execute", "stablecoin:" ++ currency, nonce, *eCh) |
         for (@ex <- eCh) {
@@ -142,13 +113,13 @@ in {
               "setRiskParams" => {
                 paramsValues!(currency, args, *pvCh2) |
                 for (@values <- pvCh2) {
-                  paramsCodec!(*codecCh) |
+                  paramsComponent!("component:codec", *codecCh) |
                   for (Codec <- codecCh) {
                     Codec!("canonical", "rcash:stablecoin-params:v2", values, *canCh) |
                     for (@canonical <- canCh) {
                       if (canonical != argsHash) { ret2!((false, "params hash")) }
                       else {
-                        paramsBounds!(*boundsCh) |
+                        paramsComponent!("component:bounds", *boundsCh) |
                         for (Bounds <- boundsCh) {
                           Bounds!("checkIssuer", args, *bzCh2) |
                           for (@bz <- bzCh2) {
@@ -191,7 +162,7 @@ in {
     }))
   } |
 
-  paramsBounds!(*checkCh) |
+  paramsComponent!("component:bounds", *checkCh) |
   for (Bounds <- checkCh) {
     Bounds!("checkIssuer", params, *bzCh) |
     for (@bz <- bzCh) {
@@ -199,7 +170,7 @@ in {
         (true, Nil) => {
           paramsValues!(currency, params, *pvCh) |
           for (@values <- pvCh) {
-            paramsCodec!(*hCh) |
+            paramsComponent!("component:codec", *hCh) |
             for (Codec <- hCh) {
               new hsCh in {
                 Codec!("hash", "rcash:stablecoin-params:v2", values, *hsCh) |

@@ -17,7 +17,7 @@ new
   mintCore, burnCore, settleCore,
   custodyDepositCore, custodyWithdrawCore,
   joinKinds, kindsValid, deliverKinds, deliverOne,
-  governorOf, shopCodec, shopVerifier,
+  componentOf,
   rl(`rho:registry:lookup`),
   rs(`rho:registry:insertArbitrary`),
   bd(`rho:block:data`),
@@ -29,45 +29,16 @@ new
   rCh, gCh, gc
 in {
 
-  contract governorOf(ret2) = {
-    new rCh2, gCh2 in {
+  // One Root resolver for every registry-resolved component this term uses.
+  contract componentOf(@key, ret2) = {
+    new rCh2, uCh in {
       rl!(`__ROOT_URI__`, *rCh2) |
       for (Root <- rCh2) {
-        Root!("resolve", "component:governor", 1, *gCh2) |
-        for (@(true, govUri, v) <- gCh2) {
-          new gc2 in {
-            rl!(govUri, *gc2) |
-            for (Governor <- gc2) { ret2!(*Governor) }
-          }
-        }
-      }
-    }
-  } |
-
-  contract shopCodec(ret2) = {
-    new rCh2, cCh in {
-      rl!(`__ROOT_URI__`, *rCh2) |
-      for (Root <- rCh2) {
-        Root!("resolve", "component:codec", 1, *cCh) |
-        for (@(true, codecUri, v) <- cCh) {
+        Root!("resolve", key, 1, *uCh) |
+        for (@(true, compUri, v) <- uCh) {
           new cc in {
-            rl!(codecUri, *cc) |
-            for (Codec <- cc) { ret2!(*Codec) }
-          }
-        }
-      }
-    }
-  } |
-
-  contract shopVerifier(ret2) = {
-    new rCh2, vCh in {
-      rl!(`__ROOT_URI__`, *rCh2) |
-      for (Root <- rCh2) {
-        Root!("resolve", "component:verifier", 1, *vCh) |
-        for (@(true, verUri, v) <- vCh) {
-          new vc in {
-            rl!(verUri, *vc) |
-            for (Verifier <- vc) { ret2!(*Verifier) }
+            rl!(compUri, *cc) |
+            for (Component <- cc) { ret2!(*Component) }
           }
         }
       }
@@ -211,7 +182,7 @@ in {
           new gCh2, vCh in {
             match kind {
               "mint" => {
-                governorOf!(*gCh2) |
+                componentOf!("component:governor", *gCh2) |
                 for (Governor <- gCh2) {
                   Governor!("authorize", "auth:" ++ "__CURRENCY__" ++ ":mint",
                             nonce, "rotate", kind, sigs, *vCh) |
@@ -230,7 +201,7 @@ in {
                 }
               }
               "burn" => {
-                governorOf!(*gCh2) |
+                componentOf!("component:governor", *gCh2) |
                 for (Governor <- gCh2) {
                   Governor!("authorize", "auth:" ++ "__CURRENCY__" ++ ":burn",
                             nonce, "rotate", kind, sigs, *vCh) |
@@ -249,7 +220,7 @@ in {
                 }
               }
               "settle" => {
-                governorOf!(*gCh2) |
+                componentOf!("component:governor", *gCh2) |
                 for (Governor <- gCh2) {
                   Governor!("authorize", "auth:" ++ "__CURRENCY__" ++ ":settle",
                             nonce, "rotate", kind, sigs, *vCh) |
@@ -268,7 +239,7 @@ in {
                 }
               }
               "custody" => {
-                governorOf!(*gCh2) |
+                componentOf!("component:governor", *gCh2) |
                 for (Governor <- gCh2) {
                   Governor!("authorize", "auth:" ++ "__CURRENCY__" ++ ":custody",
                             nonce, "rotate", kind, sigs, *vCh) |
@@ -621,14 +592,14 @@ in {
               else {
                 joinKinds!(kinds, 0, "", *ksCh) |
                 for (@kindsText <- ksCh) {
-                  shopCodec!(*canCh2) |
+                  componentOf!("component:codec", *canCh2) |
                   for (Codec <- canCh2) {
                     Codec!("hash", "rcash:provision:v1",
                            [cfg.get("uri"), consumerUri, consumerTag, kindsText,
                             nonce.toString(), deadline.toString(), sponsorHex],
                            *dgCh) |
                     for (@digest <- dgCh) {
-                      shopVerifier!(*okCh2) |
+                      componentOf!("component:verifier", *okCh2) |
                       for (Verifier <- okCh2) {
                         Verifier!("sigOk", digest, sig, sponsorHex.hexToBytes(), *kbCh) |
                         for (@ok <- kbCh) {

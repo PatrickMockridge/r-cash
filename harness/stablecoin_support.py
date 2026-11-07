@@ -32,7 +32,6 @@ import netconfig  # noqa: E402
 import deploy as node  # noqa: E402
 import sign_payload  # noqa: E402
 from install_v3 import render  # noqa: E402
-from unit_feed import blake2b256, canonical  # noqa: E402
 from unit_v3 import call, faucet_top_up, one  # noqa: E402
 
 KEYS = netconfig.KEYS_PATH
@@ -42,7 +41,7 @@ PHLO = 100_000_000
 # The protocol constant shared by T1's issuer state and the transitional PSM.
 MAX_SUPPLY = 2_000_000_000_000_000
 PARAMS_SCHEMA = "rcash:stablecoin-params:v2"
-PROVISION_SCHEMA = "rcash:provision:v1"
+PROVISION_SCHEMA = sign_payload.PROVISION_SCHEMA
 LISTING_SCHEMA = "rcash:currency-register:v4"
 
 # T2 receives four issuer facets and one buffer facet. The issuer shop serves
@@ -85,7 +84,7 @@ def params_for(currency: str, config: dict | None = None) -> tuple[dict, list[st
         p = DEFAULT_PARAMS
     params = {field: p[field] for field in PARAM_FIELDS}
     values = [currency] + [str(params[field]) for field in PARAM_FIELDS]
-    params_hash = blake2b256(canonical(PARAMS_SCHEMA, values))
+    params_hash = sign_payload.hash_canonical_hex(PARAMS_SCHEMA, values)
     return params, values, params_hash
 
 
@@ -143,7 +142,7 @@ def provision_signature(secret: str, issuer_uri: str, consumer_uri: str,
                         sponsor: str) -> str:
     values = provision_values(issuer_uri, consumer_uri, consumer_tag, kinds,
                               nonce, deadline, sponsor)
-    payload = canonical(PROVISION_SCHEMA, values).encode()
+    payload = sign_payload.canonical(PROVISION_SCHEMA, values).encode()
     return sign_payload.sign_payload(secret, payload)["signature"]
 
 
@@ -197,7 +196,7 @@ def listing_values(currency: str, sc_uri: str, custody_uri: str, params_uri: str
 
 
 def listing_signature(secret: str, *values: str) -> str:
-    payload = canonical(LISTING_SCHEMA, list(values)).encode()
+    payload = sign_payload.canonical(LISTING_SCHEMA, list(values)).encode()
     return sign_payload.sign_payload(secret, payload)["signature"]
 
 
@@ -377,6 +376,7 @@ def deploy_currency_system(keys: dict, state: dict, currency: str,
         }
         vault_uri, liq_uri = deployed["vault"][0], deployed["vault"][1]
         vault_consumer_uri = deployed["vault"][2]
+        liquidation_auth_ledger_uri = deployed["vault"][3]
         savings_uri, buffer_uri = (deployed["buffer_savings"][0],
                                    deployed["buffer_savings"][1])
         buffer_shop_uri = deployed["buffer_savings"][2]
@@ -387,6 +387,8 @@ def deploy_currency_system(keys: dict, state: dict, currency: str,
                           buffer_shop_uri), secret)
         (vault_consumer_uri, vault_uri, liq_uri, savings_uri, buffer_uri,
          psm_uri) = legacy_result
+        # The transitional monolith has no separate liquidation ledger.
+        liquidation_auth_ledger_uri = None
 
     provision_consumer = consumer_uri or vault_consumer_uri
     provision_kinds = tuple(kinds) if kinds is not None else ISSUER_KINDS
@@ -414,6 +416,7 @@ def deploy_currency_system(keys: dict, state: dict, currency: str,
         "consumer_uri": provision_consumer,
         "vault_consumer_uri": provision_consumer,
         "vault_uri": vault_uri,
+        "liquidation_auth_ledger_uri": liquidation_auth_ledger_uri,
         "liq_uri": liq_uri,
         "liquidation_uri": liq_uri,
         "savings_uri": savings_uri,
@@ -475,7 +478,8 @@ def deploy_system(keys: dict, state: dict, currency: str,
 #     `deploy_currency_system`. Each renderer receives keyword pins
 #     (`root`, `currency`, `sc_uri`, `params_uri`, `issuer_shop_uri`,
 #     `buffer_shop_uri`) and returns a deploy term. Result conventions:
-#       vault           -> [vaultUri, liquidationUri, vaultAcceptUri]
+#       vault           -> [vaultUri, liquidationUri, vaultAcceptUri,
+#                           liquidationAuthLedgerUri]
 #       buffer_savings  -> [savingsUri, bufferUri, bufferShopUri]
 #       psm             -> [psmUri]
 #     T2's `VaultAccept` URI is what `provision_facets` receives as its
