@@ -475,6 +475,24 @@ def deploy_currency_system(keys: dict, state: dict, currency: str,
         secret=secret)
     state["issuer_shop_uri"] = issuer_shop_uri
     state["buffer_shop_uri"] = buffer_shop_uri
+    state.update({
+        "stablecoin_uri": sc_uri,
+        "custody_uri": custody_uri,
+        "params_uri": params_uri,
+        "vault_uri": vault_uri,
+        "liquidation_uri": liq_uri,
+        "savings_uri": savings_uri,
+        "psm_uri": psm_uri,
+        "buffer_uri": buffer_uri,
+        "surplus_buffer_uri": buffer_uri,
+        "vault_accept_uri": vault_consumer_uri,
+        "issuer_auth_ledger_uri": auth_ledger_uri,
+        "liquidation_auth_ledger_uri": liquidation_auth_ledger_uri,
+    })
+    try:
+        STATE.write_text(json.dumps(state, indent=2) + "\n")
+    except OSError:
+        pass
 
     return {
         "currency": currency,
