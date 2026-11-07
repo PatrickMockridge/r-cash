@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Exercise liquidation and bad-debt write-off on the v0.4 stablecoin issuer.
+"""Exercise liquidation and bad-debt write-off on the multi-term issuer.
 
-Deploys an isolated currency system (V5T), mints near the MCR against REV, then
-moves the REV oracle down through a partial liquidation and a fully underwater
-write-off. Checks the close factor, the bonus seizure, the bad-debt accounting
-and the capability refusal on the direct VaultBook arm.
+Deploys an isolated five-term currency system (V5T), provisions T2's five
+facets, mints near the MCR against REV, then moves the REV oracle down through a
+partial liquidation and a fully underwater write-off. Checks the close factor,
+the bonus seizure, the bad-debt accounting and the capability refusal on the
+direct VaultBook arm.
 
 Usage:
     python3 harness/unit_liquidation.py
@@ -26,13 +27,27 @@ sys.path.insert(0, str(ROOT / "harness"))
 
 import netconfig  # noqa: E402
 
+import deploy as node  # noqa: E402
 import sign_payload  # noqa: E402
 from feed_refresh import feed_uri, set_price  # noqa: E402
 from install_v3 import render  # noqa: E402
+from stablecoin_support import deploy_currency_system, provision_facets  # noqa: E402
 from unit_feed import blake2b256, canonical  # noqa: E402
 from minify_rho import minify  # noqa: E402
-from unit_stablecoin import deploy_system  # noqa: E402
 from unit_v3 import call, check, faucet_top_up, one  # noqa: E402
+
+# `stablecoin_support` (issuer-core) is the five-term deployment helper. The
+# interface this suite codes against is:
+#   deploy_currency_system(keys, state, currency:, params:, params_hash:,
+#                          sponsor_sig:) -> dict with sc_uri, custody_uri,
+#       params_uri, vault_uri, liq_uri, savings_uri, psm_uri, buffer_uri,
+#       vault_consumer_uri, liquidation_auth_ledger_uri
+#   provision_facets(keys, state, consumer, consumer_uri, kinds) -> dict
+#       mapping each kind to True on acceptance.
+# The T2 term receives five kinds (mint, burn, settle, custody, buffer). The
+# helper renders T2 with both pinned shops: __ISSUER_SHOP_URI__ verifies the
+# four issuer facets and __BUFFER_SHOP_URI__ verifies the buffer operator. T4
+# two and T3 one are provisioned by the helper in its own deploys.
 
 KEYS = netconfig.KEYS_PATH
 STATE = netconfig.STATE_PATH
@@ -111,6 +126,25 @@ def check_invariant(label: str, keys: dict, sc_uri: str, vault_uri: str) -> dict
     return tot
 
 
+def rotate_liquidation_auth(keys: dict, ledger_uri: str) -> list:
+    """Governor-authorized rotation of T2's liquidation auth.
+
+    The signed preimage is
+    rcash:admin:v1|auth:<currency>:liquidation|<nonce>|rotateLiquidationAuth|liquidation.
+    The engine reads the cell per call, so liquidation keeps working afterwards.
+    """
+    nonce = node.height()
+    payload = (f"rcash:admin:v1|auth:{CURRENCY}:liquidation|{nonce}|"
+               "rotateLiquidationAuth|liquidation")
+    sigs = ", ".join(
+        f'"{sign_payload.sign_payload(keys[n]["secret"], payload.encode())["signature"]}".hexToBytes()'
+        for n in ("admin1", "admin2"))
+    body = (f'LiquidationAuthLedger!("rotate", {nonce}, [{sigs}], *r) | '
+            "for (@x <- r) { deployId!(x) }")
+    return one(call(ledger_uri, "LiquidationAuthLedger", body),
+               keys["deployer"]["secret"])
+
+
 def liquidate(keys: dict, holder: str, liq_uri: str, vault_uri: str,
               owner_id: str, amount: int, min_collateral: int = 0) -> list:
     term = render_scenario("stablecoin_liquidate.rho", {
@@ -143,19 +177,40 @@ def main() -> int:
     payload = f"rcash:stablecoin-create:v1|{CURRENCY}|{params_hash}|{sponsor}"
     sig = sign_payload.sign_payload(keys["sponsor"]["secret"],
                                     payload.encode())["signature"]
-    term = render("31_stablecoin", {
-        "__ROOT_URI__": root,
-        "__CURRENCY__": CURRENCY,
-        "__PARAMS__": params,
-        "__PARAMS_HASH__": params_hash,
-        "__SPONSOR_PUB__": sponsor,
-        "__SPONSOR_SIG__": sig,
-    })
-    system = deploy_system(term, secret)
-    (sc_uri, custody_uri, params_uri, vault_uri, liq_uri, savings_uri,
-     psm_uri, buffer_uri, att_reply) = system
-    check("liquidation engine attestation", att_reply[1].get("template") is not None, True)
+
+    # Deploy the five terms (T1 issuer, T5 params, T3 buffer/savings, T4 PSM,
+    # T2 vault) through the shared helper, then provision the vault consumer.
+    system = deploy_currency_system(keys, state, currency=CURRENCY, params=params,
+                                    params_hash=params_hash, sponsor_sig=sig)
+    sc_uri = system["sc_uri"]
+    custody_uri = system["custody_uri"]
+    params_uri = system["params_uri"]
+    vault_uri = system["vault_uri"]
+    liq_uri = system["liq_uri"]
+    savings_uri = system["savings_uri"]
+    psm_uri = system["psm_uri"]
+    buffer_uri = system["buffer_uri"]
+
+    # T2 accepts five facets into write-once bare-name slots. The shop consumes
+    # the sponsor nonce and delivers the facet names; no facet is returned.
+    provisioned = provision_facets(
+        keys, state, "vault", system["vault_consumer_uri"],
+        ["mint", "burn", "settle", "custody", "buffer"])
+    check("vault facets provisioned",
+          sorted(kind for kind, ok in provisioned.items() if ok),
+          ["buffer", "burn", "custody", "mint", "settle"])
+
+    vault_att = one(call(vault_uri, "VaultBook",
+                         'VaultBook!("attest", *r) | for (@x <- r) { deployId!(x) }'),
+                    secret)[1]
+    check("vault attestation kind", vault_att.get("kind"), "vault")
+
+    # Rotate T2's liquidation auth. The engine reads the cell per call, so the
+    # liquidations below exercise the post-rotation cell.
+    rotated = rotate_liquidation_auth(keys, system["liquidation_auth_ledger_uri"])
+    check("liquidation auth rotation", isinstance(rotated, tuple) and rotated[0] is True, True)
     print(f"stablecoin: {sc_uri}")
+    print(f"vault book: {vault_uri}")
     print(f"liquidation engine: {liq_uri}")
 
     rev_feed = feed_uri(keys, root, registry, "REV", [REV_HIGH, REV_HIGH, REV_HIGH])

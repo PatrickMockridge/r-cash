@@ -412,4 +412,129 @@ def vaultBook_attest (currency paramsHash : Nat) : Nat × Nat := (currency, para
 def liquidationEngine_liquidate := liquidate
 def liquidationEngine_attest (currency : Nat) : Nat := currency
 
+/-! ## Multi-term provisioning and waterfall
+
+The vault term owns `vaultState`, `liquidationAuth` and the per-vault auths. The
+T1 issuer and T3 buffer effects arrive through provisioned facets; the T5 params
+and the T1/T3/T4 reads are pinned URIs. The model below records the two
+structural changes: a facet slot is write-once, and a deploy either commits the
+post-state or aborts after an effect (P6). -/
+
+/-- The five facets the vault consumer accepts. -/
+inductive FacetKind where
+  | mint
+  | burn
+  | settle
+  | custody
+  | buffer
+  deriving DecidableEq, Repr
+
+/-- The consumer's write-once slots, abstracted to the installed-kind set. -/
+structure Slots where
+  installed : FacetKind → Bool
+
+def Slots.empty : Slots := { installed := fun _ => false }
+
+/-- Install a facet once. A second install is refused, which is what the shop's
+one-shot nonce plus this guard enforce together. -/
+def Slots.install (s : Slots) (k : FacetKind) : Option Slots :=
+  if s.installed k then none
+  else some { installed := fun j => if j = k then true else s.installed j }
+
+theorem install_first (s : Slots) (k : FacetKind) (h : s.installed k = false) :
+    (s.install k).isSome = true := by
+  unfold Slots.install
+  simp [h]
+
+theorem install_twice_refused (s : Slots) (k : FacetKind) (h : s.installed k = true) :
+    s.install k = none := by
+  unfold Slots.install
+  simp [h]
+
+theorem install_marks (s : Slots) (k : FacetKind) :
+    ∀ s', s.install k = some s' → s'.installed k = true := by
+  intro s' hinst
+  unfold Slots.install at hinst
+  split at hinst
+  · contradiction
+  · injection hinst with heq
+    subst heq
+    simp
+
+/-- The consumer's `acceptFacet` transition: install the verified facet once. -/
+def vaultAccept_acceptFacet (s : Slots) (k : FacetKind) : Option Slots := s.install k
+
+/-- The external effects the waterfall may perform before committing. -/
+inductive Effect where
+  | mint (amount : Nat)
+  | burn (amount : Nat)
+  | settle (principal interest : Nat)
+  | custodyDeposit (amount : Nat)
+  | custodyWithdraw (amount : Nat)
+  | bufferCover (badDebt : Nat)
+  | bufferPaySavings
+  deriving DecidableEq, Repr
+
+/-- A deploy either commits the computed post-state or aborts. Aborting is
+`fail()`: the whole deploy rolls back, including every effect above. -/
+inductive DeployResult (α : Type) where
+  | committed (value : α)
+  | aborted
+  deriving Repr
+
+/-- Effect-then-commit: `effectOk` records the pinned callee's success and
+`revalidated` records the vault-state rev/auth check after the effect. -/
+def waterfall (pre post : Book) (effectOk revalidated : Bool) : DeployResult Book :=
+  if effectOk && revalidated then .committed post else .aborted
+
+theorem waterfall_abort (pre post : Book) (effectOk : Bool) :
+    waterfall pre post effectOk false = .aborted := by
+  simp [waterfall]
+
+theorem waterfall_commit (pre post : Book) :
+    waterfall pre post true true = .committed post := by
+  simp [waterfall]
+
+/-- A committed waterfall preserves S2 whenever the computed post-state does. -/
+theorem waterfall_commit_S2 {pre post : Book} (h : S2 post) :
+    ∀ r, waterfall pre post true true = .committed r → S2 r := by
+  intro r hr
+  rw [waterfall_commit] at hr
+  injection hr with heq
+  subst heq
+  exact h
+
+/-- A per-auth cell read by a facet on every call, not snapshotted. -/
+structure AuthCell where
+  value : Nat
+  rev : Nat
+
+def AuthCell.check (c : AuthCell) (auth : Nat) : Bool := auth == c.value
+
+def AuthCell.rotate (c : AuthCell) (newAuth : Nat) : AuthCell :=
+  { value := newAuth, rev := c.rev + 1 }
+
+theorem rotate_old_refused (c : AuthCell) (newAuth : Nat) (h : newAuth ≠ c.value) :
+    (c.rotate newAuth).check c.value = false := by
+  have h' : c.value ≠ newAuth := fun he => h he.symm
+  simp [AuthCell.rotate, AuthCell.check, h']
+
+theorem rotate_new_accepted (c : AuthCell) (newAuth : Nat) :
+    (c.rotate newAuth).check newAuth = true := by
+  simp [AuthCell.rotate, AuthCell.check]
+
+/-- A provisioned facet holds the cell, not a snapshot, so it stays live across
+rotation while the old raw auth is refused. -/
+def facetMint (c : AuthCell) (auth : Nat) : Option Nat :=
+  if c.check auth then some 1 else none
+
+theorem facet_survives_rotation (c : AuthCell) (newAuth : Nat) :
+    facetMint (c.rotate newAuth) newAuth = some 1 := by
+  simp [facetMint, rotate_new_accepted]
+
+/-- Governor-authorized liquidation-auth rotation: the cell is reposted with a
+fresh value, so the old auth is refused and the engine stays live. -/
+def liquidationAuthLedger_rotate (c : AuthCell) (newAuth : Nat) : AuthCell :=
+  c.rotate newAuth
+
 end Rholphin.Model.Vault
