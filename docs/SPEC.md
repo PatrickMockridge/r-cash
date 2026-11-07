@@ -118,6 +118,7 @@ and payments are sinks, not authority (capability-provenance exception, §3.3).
 | SPEC-MOD-06 | MUST | Caller-supplied facets are sinks: they may receive value, never authority. | Account, TransferContract, FxPool, PSM | implemented |
 | SPEC-MOD-07 | MUST | Unmatched receives are silent in Rholang; every call path either replies or is documented as fire-and-forget. | all | implemented |
 | SPEC-MOD-08 | MUST | An attestation identifies template and currency and reveals no secret. | all attest arms | implemented |
+| SPEC-MOD-09 | MUST | Every `match` arm and receive pattern is total over its reply domain or fails closed; `check_match.py` passes. | all | implemented |
 
 ## 4. Identity, accounts and purses
 

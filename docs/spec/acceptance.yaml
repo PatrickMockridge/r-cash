@@ -194,6 +194,25 @@ SPEC-MOD-08:
     checks:
     - model:refusals
     - static:flows
+SPEC-MOD-09:
+  level: MUST
+  owner: all
+  status: verified
+  spec_status: implemented
+  criteria:
+  - id: AC-SPEC-MOD-09.1
+    given: every contract source in contracts/src/deploy/v3
+    when: the pattern conformance gate runs
+    then: every `match` arm and receive pattern is total over its reply domain or fails closed; `check_match.py` passes.
+    checks:
+    - static:match
+    - static:flows
+  - id: AC-SPEC-MOD-09.2
+    given: the reviewed baseline of remaining partial patterns
+    when: the gate compares current findings to tools/match_baseline.json
+    then: no new partial pattern is introduced and every baselined finding names a finding ID and reason.
+    checks:
+    - static:match
 SPEC-ID-01:
   level: MUST
   owner: AccountFactory

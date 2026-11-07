@@ -25,6 +25,7 @@ Read in order:
 Supporting material:
 
 - [`EXTERNAL-ASSETS.md`](EXTERNAL-ASSETS.md) — the adapter interface for bridged assets.
+- [`MATCH-REVIEW.md`](MATCH-REVIEW.md) — the `match`/receive pattern-effectiveness review.
 - [`flows/README.md`](flows/README.md) — the behavioural transition specification.
 - [`acceptance.yaml`](acceptance.yaml) — requirement → acceptance criteria.
 - [`checks.yaml`](checks.yaml) — the evidence registry.
@@ -45,6 +46,7 @@ Checks:
 python3 tools/measure_contracts.py --check
 python3 tools/check_arch.py --check
 python3 tools/check_captures.py --check
+python3 tools/check_match.py --check
 make formal-check
 make tla-check                 # optional; requires TLC on PATH
 ```

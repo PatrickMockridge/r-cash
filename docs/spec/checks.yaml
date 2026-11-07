@@ -28,6 +28,9 @@ static:arch:
 static:captures:
   kind: static
   command: "python3 tools/check_captures.py --check"
+static:match:
+  kind: static
+  command: "python3 tools/check_match.py --check"
 static:measure:
   kind: static
   command: "python3 tools/measure_contracts.py --check"

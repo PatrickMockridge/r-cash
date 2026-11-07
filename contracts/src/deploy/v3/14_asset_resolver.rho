@@ -13,7 +13,8 @@ new
 in {
 
   contract AssetResolver(@"issuer", @assetId, ret) = {
-    if (assetId == "REV") {
+    match assetId {
+      "REV" => {
       new ec, revCh in {
         rl!(`rho:rchain:ertp`, *ec) |
         for (@(_, ERTP) <- ec) {
@@ -23,12 +24,15 @@ in {
           }
         }
       }
-    } else {
+      }
+      _ => {
       new rCh, regCh, eCh, scCh, bCh, iCh in {
         rl!(`__ROOT_URI__`, *rCh) |
         for (Root <- rCh) {
           Root!("resolve", "component:currency-registry", 1, *regCh) |
-          for (@(true, regUri, _) <- regCh) {
+          for (@__reply8 <- regCh) {
+  match __reply8 {
+    (true, regUri, _) => {
             new rc in {
               rl!(regUri, *rc) |
               for (CurrencyRegistry <- rc) {
@@ -71,19 +75,27 @@ in {
               }
             }
           }
+    (false, __why) => { ret!(1 / 0) }
+    _ => { ret!(1 / 0) }
+  }
+}
         }
       }
+    }
     }
   } |
 
   contract AssetResolver(@"kind", @assetId, ret) = {
-    if (assetId == "REV") { ret!((true, "rev")) }
-    else {
+    match assetId {
+      "REV" => { ret!((true, "rev")) }
+      _ => {
       new rCh, regCh, eCh in {
         rl!(`__ROOT_URI__`, *rCh) |
         for (Root <- rCh) {
           Root!("resolve", "component:currency-registry", 1, *regCh) |
-          for (@(true, regUri, _) <- regCh) {
+          for (@__reply7 <- regCh) {
+  match __reply7 {
+    (true, regUri, _) => {
             new rc in {
               rl!(regUri, *rc) |
               for (CurrencyRegistry <- rc) {
@@ -91,9 +103,10 @@ in {
                 for (@e <- eCh) {
                   match e {
                     (true, entry) => {
-                      if (entry.get("kind") == "external") {
-                        ret!((true, "external"))
-                      } else { ret!((true, "stablecoin")) }
+                      match entry.get("kind") {
+                        "external" => { ret!((true, "external")) }
+                        _ => { ret!((true, "stablecoin")) }
+                      }
                     }
                     _ => { ret!((false, "unknown asset")) }
                   }
@@ -101,8 +114,13 @@ in {
               }
             }
           }
+    (false, __why) => { ret!(1 / 0) }
+    _ => { ret!(1 / 0) }
+  }
+}
         }
       }
+    }
     }
   } |
 

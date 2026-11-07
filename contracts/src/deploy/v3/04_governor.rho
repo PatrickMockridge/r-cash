@@ -24,10 +24,16 @@ in {
       rl!(`__ROOT_URI__`, *rootCh) |
       for (Root <- rootCh) {
         Root!("resolve", "component:admin-guard", 1, *rCh) |
-        for (@(true, agUri, v) <- rCh) {
+        for (@__reply1 <- rCh) {
+  match __reply1 {
+    (true, agUri, v) => {
           rl!(agUri, *agCh) |
           for (AdminGuard <- agCh) { ret!(*AdminGuard) }
         }
+    (false, __why) => { ret!(1 / 0) }
+    _ => { ret!(1 / 0) }
+  }
+}
       }
     }
   } |
@@ -191,6 +197,8 @@ in {
                             } else {
                               match action {
                                 "setAdmins" => {
+                      if (args.length() != 2) { governorState!(s2) | ret!((false, "action")) }
+                      else {
                                   match args.nth(0) {
                                     newAdmins => {
                                       match args.nth(1) {
@@ -210,7 +218,10 @@ in {
                                     }
                                   }
                                 }
+                    }
                                 "setThreshold" => {
+                      if (args.length() != 1) { governorState!(s2) | ret!((false, "action")) }
+                      else {
                                   match args.nth(0) {
                                     newThreshold => {
                                       if (newThreshold < 1
@@ -225,7 +236,10 @@ in {
                                     }
                                   }
                                 }
+                    }
                                 "setTimelock" => {
+                      if (args.length() != 1) { governorState!(s2) | ret!((false, "action")) }
+                      else {
                                   match args.nth(0) {
                                     newTimelock => {
                                       if (newTimelock < 1 || newTimelock > 1296000) {
@@ -239,6 +253,7 @@ in {
                                     }
                                   }
                                 }
+                    }
                                 _ => {
                                   governorState!(s2) | ret!((false, "unknown admin action"))
                                 }

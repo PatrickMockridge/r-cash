@@ -43,7 +43,7 @@ components:
     transition: governance.Governor.authorize
     lean: Rholphin.Model.Governance.governor_authorize
     kind: mutate
-    source: {file: contracts/src/deploy/v3/04_governor.rho, line: 35}
+    source: {file: contracts/src/deploy/v3/04_governor.rho, line: 41}
     guards:
     - {id: nonce, expr: nonce > last(domain), refusal: {reason: replay, phase: pre}}
     - {id: threshold, expr: 'AdminGuard.verify(domain, nonce, action, argsHash)', refusal: {reason: below threshold, phase: pre}}
@@ -69,7 +69,7 @@ components:
     transition: governance.Governor.schedule
     lean: Rholphin.Model.Governance.governor_schedule
     kind: mutate
-    source: {file: contracts/src/deploy/v3/04_governor.rho, line: 76}
+    source: {file: contracts/src/deploy/v3/04_governor.rho, line: 82}
     guards:
     - {id: nonce, expr: nonce > last(domain), refusal: {reason: replay, phase: pre}}
     - {id: absent, expr: 'pending[domain|nonce] = Nil', refusal: {reason: pending, phase: pre}}
@@ -98,7 +98,7 @@ components:
     transition: governance.Governor.execute
     lean: Rholphin.Model.Governance.governor_execute
     kind: mutate
-    source: {file: contracts/src/deploy/v3/04_governor.rho, line: 122}
+    source: {file: contracts/src/deploy/v3/04_governor.rho, line: 128}
     guards:
     - {id: pending, expr: 'pending[domain|nonce] != Nil', refusal: {reason: unknown, phase: pre}}
     - {id: ready, expr: height >= readyAt, refusal: {reason: early, phase: pre}}
@@ -126,7 +126,7 @@ components:
     transition: governance.Governor.pending
     lean: Rholphin.Model.Governance.governor_pending
     kind: read
-    source: {file: contracts/src/deploy/v3/04_governor.rho, line: 152}
+    source: {file: contracts/src/deploy/v3/04_governor.rho, line: 158}
     guards:
     - {id: pending, expr: 'pending[domain|nonce] != Nil', refusal: {reason: unknown, phase: pre}}
     effects:
@@ -145,7 +145,7 @@ components:
     transition: governance.Governor.admins
     lean: Rholphin.Model.Governance.governor_admins
     kind: read
-    source: {file: contracts/src/deploy/v3/04_governor.rho, line: 164}
+    source: {file: contracts/src/deploy/v3/04_governor.rho, line: 170}
     guards: []
     effects:
     - {target: reply, formula: '(true, admins, threshold)'}
@@ -162,7 +162,7 @@ components:
     transition: governance.Governor.admin
     lean: Rholphin.Model.Governance.governor_admin
     kind: mutate
-    source: {file: contracts/src/deploy/v3/04_governor.rho, line: 170}
+    source: {file: contracts/src/deploy/v3/04_governor.rho, line: 176}
     guards:
     - {id: nonce, expr: nonce > last(governor), refusal: {reason: replay, phase: pre}}
     - {id: threshold, expr: 'AdminGuard.verify(governor, nonce, action, args)', refusal: {reason: below threshold, phase: pre}}
@@ -184,6 +184,7 @@ components:
     - {reason: replay, phase: pre, reposts: false, fail: false}
     - {reason: threshold, phase: pre, reposts: false, fail: false}
     - {reason: timelock, phase: pre, reposts: false, fail: false}
+    - {reason: action, phase: pre, reposts: false, fail: false}
     - {reason: unknown admin action, phase: pre, reposts: false, fail: false}
     invariants:
     - I19

@@ -22,7 +22,7 @@ components:
     transition: registry.Root.resolve
     lean: Rholphin.Model.Registry.root_resolve
     kind: read
-    source: {file: contracts/src/deploy/v3/00_root.rho, line: 29}
+    source: {file: contracts/src/deploy/v3/00_root.rho, line: 35}
     guards:
     - {id: exists, expr: 'entries[key] != Nil', refusal: {reason: unknown component, phase: pre}}
     - {id: not_retired, expr: 'entries[key].status != "retired"', refusal: {reason: retired, phase: pre}}
@@ -45,7 +45,7 @@ components:
     transition: registry.Root.get
     lean: Rholphin.Model.Registry.root_get
     kind: read
-    source: {file: contracts/src/deploy/v3/00_root.rho, line: 44}
+    source: {file: contracts/src/deploy/v3/00_root.rho, line: 52}
     guards:
     - {id: exists, expr: 'entries[key] != Nil', refusal: {reason: unknown component, phase: pre}}
     effects:
@@ -63,7 +63,7 @@ components:
     transition: registry.Root.keys
     lean: Rholphin.Model.Registry.root_keys
     kind: read
-    source: {file: contracts/src/deploy/v3/00_root.rho, line: 53}
+    source: {file: contracts/src/deploy/v3/00_root.rho, line: 61}
     guards: []
     effects:
     - {target: reply, formula: '(true, keys(entries))'}
@@ -79,7 +79,7 @@ components:
     transition: registry.Root.register
     lean: Rholphin.Model.Registry.root_register
     kind: mutate
-    source: {file: contracts/src/deploy/v3/00_root.rho, line: 57}
+    source: {file: contracts/src/deploy/v3/00_root.rho, line: 65}
     guards:
     - {id: unfrozen, expr: not frozen, refusal: {reason: frozen, phase: pre}}
     - {id: installer, expr: pk = installer, refusal: {reason: not installer, phase: pre}}
@@ -105,7 +105,7 @@ components:
     transition: registry.Root.rotate
     lean: Rholphin.Model.Registry.root_rotate
     kind: mutate
-    source: {file: contracts/src/deploy/v3/00_root.rho, line: 85}
+    source: {file: contracts/src/deploy/v3/00_root.rho, line: 93}
     guards:
     - {id: unfrozen, expr: not frozen, refusal: {reason: frozen, phase: pre}}
     - {id: exists, expr: 'entries[key] != Nil', refusal: {reason: unknown component, phase: pre}}
@@ -139,7 +139,7 @@ components:
     transition: registry.Root.deprecate
     lean: Rholphin.Model.Registry.root_deprecate
     kind: mutate
-    source: {file: contracts/src/deploy/v3/00_root.rho, line: 136}
+    source: {file: contracts/src/deploy/v3/00_root.rho, line: 144}
     guards:
     - {id: unfrozen, expr: not frozen, refusal: {reason: frozen, phase: pre}}
     - {id: authorize, expr: 'AdminGuard.verify(root, nonce, deprecate, key)', refusal: {reason: below threshold, phase: pre}}
@@ -168,7 +168,7 @@ components:
     transition: registry.Root.freeze
     lean: Rholphin.Model.Registry.root_freeze
     kind: mutate
-    source: {file: contracts/src/deploy/v3/00_root.rho, line: 170}
+    source: {file: contracts/src/deploy/v3/00_root.rho, line: 178}
     guards:
     - {id: unfrozen, expr: not frozen, refusal: {reason: frozen, phase: pre}}
     - {id: authorize, expr: 'AdminGuard.verify(root, nonce, freeze, empty)', refusal: {reason: below threshold, phase: pre}}
@@ -195,7 +195,7 @@ components:
     transition: registry.Root.admin
     lean: Rholphin.Model.Registry.root_admin
     kind: mutate
-    source: {file: contracts/src/deploy/v3/00_root.rho, line: 197}
+    source: {file: contracts/src/deploy/v3/00_root.rho, line: 205}
     guards:
     - {id: unfrozen, expr: not frozen, refusal: {reason: frozen, phase: pre}}
     - {id: authorize, expr: 'AdminGuard.verify(root, nonce, action, args)', refusal: {reason: below threshold, phase: pre}}
@@ -215,6 +215,7 @@ components:
     - {reason: frozen, phase: pre, reposts: false, fail: false}
     - {reason: replay, phase: pre, reposts: false, fail: false}
     - {reason: threshold, phase: pre, reposts: false, fail: false}
+    - {reason: action, phase: pre, reposts: false, fail: false}
     - {reason: unknown admin action, phase: pre, reposts: false, fail: false}
     invariants:
     - I19
@@ -297,7 +298,7 @@ components:
     transition: registry.CurrencyRegistry.register
     lean: Rholphin.Model.Registry.currencyRegistry_register
     kind: mutate
-    source: {file: contracts/src/deploy/v3/32_currency_registry.rho, line: 121}
+    source: {file: contracts/src/deploy/v3/32_currency_registry.rho, line: 130}
     guards:
     - {id: new, expr: 'currencies[code] = Nil', refusal: {reason: exists, phase: pre}}
     - {id: sponsor_sig, expr: 'Verifier.sigOk(H(rcash:currency-register:v3|...), sig, sponsor)', refusal: {reason: bad sponsor signature,
@@ -333,7 +334,7 @@ components:
     transition: registry.CurrencyRegistry.currency
     lean: Rholphin.Model.Registry.currencyRegistry_currency
     kind: read
-    source: {file: contracts/src/deploy/v3/32_currency_registry.rho, line: 326}
+    source: {file: contracts/src/deploy/v3/32_currency_registry.rho, line: 348}
     guards:
     - {id: exists, expr: 'currencies[code] != Nil', refusal: {reason: no currency, phase: pre}}
     effects:
@@ -352,7 +353,7 @@ components:
     transition: registry.CurrencyRegistry.currencies
     lean: Rholphin.Model.Registry.currencyRegistry_currencies
     kind: read
-    source: {file: contracts/src/deploy/v3/32_currency_registry.rho, line: 335}
+    source: {file: contracts/src/deploy/v3/32_currency_registry.rho, line: 357}
     guards: []
     effects:
     - {target: reply, formula: '(true, keys(currencies))'}
@@ -369,7 +370,7 @@ components:
     transition: registry.CurrencyRegistry.setPaused
     lean: Rholphin.Model.Registry.currencyRegistry_setPaused
     kind: mutate
-    source: {file: contracts/src/deploy/v3/32_currency_registry.rho, line: 341}
+    source: {file: contracts/src/deploy/v3/32_currency_registry.rho, line: 363}
     guards:
     - {id: exists, expr: 'currencies[code] != Nil', refusal: {reason: no currency, phase: pre}}
     - {id: external_pause, expr: 'entry.kind != external implies VaultBook.pause(paused, nonce, sigs) ok', refusal: {reason: authorize,
@@ -403,7 +404,7 @@ components:
     transition: registry.CurrencyRegistry.registerExternal
     lean: Rholphin.Model.Registry.currencyRegistry_registerExternal
     kind: mutate
-    source: {file: contracts/src/deploy/v3/32_currency_registry.rho, line: 231}
+    source: {file: contracts/src/deploy/v3/32_currency_registry.rho, line: 246}
     guards:
     - {id: new, expr: 'currencies[code] = Nil', refusal: {reason: exists, phase: pre}}
     - {id: sponsor_sig, expr: 'Verifier.sigOk(H(rcash:external-asset-register:v1|code|assetUri|sponsor), sig, sponsor)', refusal: {
@@ -468,7 +469,7 @@ components:
     transition: registry.AssetResolver.kind
     lean: Rholphin.Model.Registry.assetResolver_kind
     kind: read
-    source: {file: contracts/src/deploy/v3/14_asset_resolver.rho, line: 79}
+    source: {file: contracts/src/deploy/v3/14_asset_resolver.rho, line: 88}
     guards:
     - {id: known, expr: '(assetId = REV) or currencies[assetId] != Nil', refusal: {reason: unknown asset, phase: pre}}
     effects:

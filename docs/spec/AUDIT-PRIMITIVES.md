@@ -443,6 +443,12 @@ bugs.
 - **Phase 7:** `--phases --effects --guards` are blocking, `check_primitives.py` covers
   G-NATIVE/G-REV/G-FACET, and CI runs TLC over all seven models.
 
+**Pattern layer:** [`MATCH-REVIEW.md`](MATCH-REVIEW.md) extends this audit to every `match`
+arm and receive pattern. It fixes the partial matches, the silent catch-alls, the bare
+boolean helpers and the `Nil` tombstone, converts 31 single-clause component receives, and
+adds G-MATCH-01…12 to `formal-check`. The remaining MATCH findings are cross-referenced
+from the HAZOP deviations PRIM-09/PRIM-10/PRIM-18.
+
 **Not done:** the live devnet/load campaign and the public-testnet campaign (no devnet in
 this environment), overlapping-write serialisability, and the R3/R5 design changes.
 

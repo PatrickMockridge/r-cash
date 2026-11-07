@@ -20,7 +20,7 @@ components:
     transition: transfer.TransferBook.send
     lean: Rholphin.Model.Transfer.transferBook_send
     kind: mutate
-    source: {file: contracts/src/deploy/v3/40_transfer.rho, line: 84}
+    source: {file: contracts/src/deploy/v3/40_transfer.rho, line: 96}
     guards:
     - {id: amount, expr: amount >= minAmount and amount > 0, refusal: {reason: amount, phase: pre}}
     - {id: expiry, expr: now < expiry <= now + maxExpiryBlocks, refusal: {reason: expiry, phase: pre}}
@@ -62,7 +62,7 @@ components:
     transition: transfer.TransferContract.claim
     lean: Rholphin.Model.Transfer.transferContract_claim
     kind: mutate
-    source: {file: contracts/src/deploy/v3/40_transfer.rho, line: 102}
+    source: {file: contracts/src/deploy/v3/40_transfer.rho, line: 114}
     guards:
     - {id: open, expr: status = "open", refusal: {reason: closed, phase: pre}}
     - {id: not_expired, expr: now < expiry, refusal: {reason: expired, phase: pre}}
@@ -92,7 +92,7 @@ components:
     transition: transfer.TransferContract.refund
     lean: Rholphin.Model.Transfer.transferContract_refund
     kind: mutate
-    source: {file: contracts/src/deploy/v3/40_transfer.rho, line: 164}
+    source: {file: contracts/src/deploy/v3/40_transfer.rho, line: 176}
     guards:
     - {id: open, expr: status = "open", refusal: {reason: closed, phase: pre}}
     - {id: expired, expr: now >= expiry, refusal: {reason: not expired, phase: pre}}
@@ -121,7 +121,7 @@ components:
     transition: transfer.TransferContract.info
     lean: Rholphin.Model.Transfer.transferContract_info
     kind: read
-    source: {file: contracts/src/deploy/v3/40_transfer.rho, line: 228}
+    source: {file: contracts/src/deploy/v3/40_transfer.rho, line: 240}
     guards: []
     effects:
     - {target: reply, formula: '(true, {sender, asset, amount, secretHash, expiry, status, memo, opId, stipend})'}
