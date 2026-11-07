@@ -231,6 +231,12 @@ def main(argv: list[str] | None = None) -> int:
     state["transfer_book_uri"] = transfer["uris"][0]
     save(state)
 
+    lock_factory = step("51_lock", "liquidity_lock_factory", {
+        "__ROOT_URI__": root_uri,
+    }, STEP_KEYS["liquidity_lock_factory"])
+    state["liquidity_lock_factory_uri"] = lock_factory["uris"][0]
+    save(state)
+
     pool_template = step("51_pool", "pool_template", {
         "__ROOT_URI__": root_uri,
         "__ASSET_RESOLVER_URI__": resolver["uris"][0],

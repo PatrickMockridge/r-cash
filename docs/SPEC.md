@@ -135,8 +135,10 @@ only receive.
 purse per asset. `deposit` measures nothing (the purse's ERTP deposit validates the
 payment); `withdraw` refuses a non-positive amount; `balance` reads the purse.
 
-`vaultOpen(dId, vaultUri)` opens (or returns) this owner's vault in the named
-`VaultBook` and returns the one-shot vault capability.
+`vaultOpen(dId, code)` resolves the vault URI pinned for `code` in the currency
+registry, opens (or returns) this owner's vault there and returns the one-shot vault
+capability. The caller never supplies the vault URI, so an arbitrary contract cannot
+capture the owner's proof.
 
 | ID | Level | Requirement | Owner | Status |
 |---|---|---|---|---|

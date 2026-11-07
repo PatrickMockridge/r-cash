@@ -83,7 +83,7 @@ def main() -> int:
         "stablecoin_mint_hold",
         {
             "__ROOT_URI__": root,
-            "__VAULT_URI__": vault,
+            "__VAULT_URI__": vault, "__CURRENCY__": "V4T",
             "__PUBKEY__": owner["public"],
             "__FUND__": "20000000",
             "__COLLATERAL__": "10000000",
@@ -102,7 +102,7 @@ def main() -> int:
         "stablecoin_repay_hold",
         {
             "__ROOT_URI__": root,
-            "__VAULT_URI__": vault,
+            "__VAULT_URI__": vault, "__CURRENCY__": "V4T",
             "__PUBKEY__": owner["public"],
             "__AMOUNT__": str(REPAY),
             "__ASSET__": "V4T",

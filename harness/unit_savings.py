@@ -84,7 +84,7 @@ def main() -> int:
 
     hold = render("stablecoin_savings_hold", {
         "__ROOT_URI__": root,
-        "__VAULT_URI__": vault,
+        "__VAULT_URI__": vault, "__CURRENCY__": "V4T",
         "__SAVINGS_URI__": savings,
         "__PUBKEY__": saver["public"],
         "__FUND__": "15000000",
@@ -100,7 +100,7 @@ def main() -> int:
 
     mint = render("stablecoin_mint_hold", {
         "__ROOT_URI__": root,
-        "__VAULT_URI__": vault,
+        "__VAULT_URI__": vault, "__CURRENCY__": "V4T",
         "__PUBKEY__": borrower["public"],
         "__FUND__": "15000000",
         "__COLLATERAL__": "8000000",
@@ -119,7 +119,7 @@ def main() -> int:
                         deployer)[1]
     repay = render("stablecoin_repay_hold", {
         "__ROOT_URI__": root,
-        "__VAULT_URI__": vault,
+        "__VAULT_URI__": vault, "__CURRENCY__": "V4T",
         "__PUBKEY__": borrower["public"],
         "__AMOUNT__": str(REPAY),
         "__ASSET__": "V4T",

@@ -1,0 +1,216 @@
+// v0.4 LiquidityLock: the seed-lock contract for one FxPool.
+// The lock factory creates a fresh LP purse and a LiquidityLock per pool; the
+// pool template resolves the factory and passes the LP issuer, brand and terms.
+// Placeholders: __ROOT_URI__.
+new
+  LiquidityLockFactory, lockNow, lockGovernor,
+  rl(`rho:registry:lookup`),
+  rs(`rho:registry:insertArbitrary`),
+  deployerId(`rho:rchain:deployerId`),
+  deployerIdOps(`rho:rchain:deployerId:ops`),
+  revAddress(`rho:rev:address`),
+  deployId(`rho:rchain:deployId`),
+  rootCh, Root, uFactory, ack
+in {
+
+  contract lockNow(ret) = {
+    new rCh, cCh in {
+      rl!(`__ROOT_URI__`, *rCh) |
+      for (Root <- rCh) {
+        Root!("resolve", "component:clock", 1, *cCh) |
+        for (@r <- cCh) {
+          match r {
+            (true, clockUri, _) => {
+              new cc in {
+                rl!(clockUri, *cc) |
+                for (Clock <- cc) { Clock!("now", *ret) }
+              }
+            }
+            (false, _why) => { ret!(1 / 0) }
+            _ => { ret!(1 / 0) }
+          }
+        }
+      }
+    }
+  } |
+
+  contract lockGovernor(ret) = {
+    new rCh, gCh in {
+      rl!(`__ROOT_URI__`, *rCh) |
+      for (Root <- rCh) {
+        Root!("resolve", "component:governor", 1, *gCh) |
+        for (@r <- gCh) {
+          match r {
+            (true, govUri, _) => {
+              new gc in {
+                rl!(govUri, *gc) |
+                for (Governor <- gc) { ret!(*Governor) }
+              }
+            }
+            (false, _why) => { ret!(1 / 0) }
+            _ => { ret!(1 / 0) }
+          }
+        }
+      }
+    }
+  } |
+
+  contract LiquidityLockFactory(@"create", @lpIssuer, @lpBrand, @terms,
+                                 @termsHash, ret) = {
+    new lpPurseCh in {
+      @lpIssuer!("makeEmptyPurse", *lpPurseCh) |
+      for (@(true, lockPurse) <- lpPurseCh) {
+        new LiquidityLock, lockState, uLock in {
+          contract LiquidityLock(@"fund", dId, lpPayment, @beneficiaryId,
+                                 @untilHeight, ret2) = {
+            new nowCh2, pkCh, aCh in {
+              lockNow!(*nowCh2) |
+              deployerIdOps!("pubKeyBytes", *dId, *pkCh) |
+              for (@now2 <- nowCh2; @pk <- pkCh) {
+                revAddress!("fromPublicKey", pk, *aCh) |
+                for (@funder <- aCh) {
+                  for (@s <- lockState) {
+                    if (s.get("funded")) { lockState!(s) | ret2!((false, "funded", *lpPayment)) }
+                    else {
+                      if (untilHeight <= 0) { lockState!(s) | ret2!((false, "height", *lpPayment)) }
+                      else {
+                        if (untilHeight < now2 + terms.get("lockMinBlocks")) {
+                          lockState!(s) | ret2!((false, "lock too short", *lpPayment))
+                        } else {
+                          new amtCh in {
+                            @lockPurse!("deposit", *lpPayment, *amtCh) |
+                            for (@amt <- amtCh) {
+                              match amt {
+                                (true, shares) => {
+                                  lockState!(s.set("funded", true).set("untilHeight", untilHeight)
+                                               .set("beneficiary", beneficiaryId)
+                                               .set("funder", funder).set("shares", shares)) |
+                                  ret2!((true, shares))
+                                }
+                                _ => { ret2!(1 / 0) }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          } |
+
+          contract LiquidityLock(@"release", dId, ret2) = {
+            new nowCh, pkCh, aCh, payCh in {
+              lockNow!(*nowCh) |
+              deployerIdOps!("pubKeyBytes", *dId, *pkCh) |
+              for (@now <- nowCh; @pk <- pkCh) {
+                revAddress!("fromPublicKey", pk, *aCh) |
+                for (@addr <- aCh) {
+                  for (@s <- lockState) {
+                    if (s.get("funded") == false) { lockState!(s) | ret2!((false, "unfunded")) }
+                    else {
+                      if (s.get("released") || s.get("cancelled")) {
+                        lockState!(s) | ret2!((false, "closed"))
+                      } else {
+                        if (now < s.get("untilHeight")) { lockState!(s) | ret2!((false, "locked")) }
+                        else {
+                          if (addr != s.get("beneficiary")) {
+                            lockState!(s) | ret2!((false, "not beneficiary"))
+                          } else {
+                            @lockPurse!("withdraw", (lpBrand, s.get("shares")), *payCh) |
+                            for (@p <- payCh) {
+                              match p {
+                                (true, payment) => {
+                                  lockState!(s.set("released", true)) |
+                                  ret2!((true, payment, s.get("shares")))
+                                }
+                                _ => { lockState!(s) | ret2!((false, "payment")) }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          } |
+
+          contract LiquidityLock(@"cancel", dId, @nonce, @sigs, ret2) = {
+            new gCh, vCh, payCh, pkCh, aCh in {
+              lockGovernor!(*gCh) |
+              for (Governor <- gCh) {
+                Governor!("authorize", "liquidity-lock", nonce, "cancel",
+                          terms.get("marketId"), sigs, *vCh) |
+                for (@v <- vCh) {
+                  match v {
+                    (true, Nil) => {
+                      deployerIdOps!("pubKeyBytes", *dId, *pkCh) |
+                      for (@pk <- pkCh) {
+                        revAddress!("fromPublicKey", pk, *aCh) |
+                        for (@addr <- aCh) {
+                          for (@s <- lockState) {
+                            if (s.get("funded") == false || s.get("released")
+                                || s.get("cancelled")) {
+                              lockState!(s) | ret2!((false, "closed"))
+                            } else {
+                              if (addr != s.get("funder") && addr != s.get("beneficiary")) {
+                                lockState!(s) | ret2!((false, "not funder"))
+                              } else {
+                                @lockPurse!("withdraw", (lpBrand, s.get("shares")), *payCh) |
+                                for (@p <- payCh) {
+                                  match p {
+                                    (true, payment) => {
+                                      lockState!(s.set("cancelled", true)) |
+                                      ret2!((true, payment, s.get("shares")))
+                                    }
+                                    _ => { lockState!(s) | ret2!((false, "payment")) }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                    _ => { ret2!(v) }
+                  }
+                }
+              }
+            }
+          } |
+
+          contract LiquidityLock(@"info", ret2) = {
+            for (@s <<- lockState) {
+              ret2!((true, {"marketId": terms.get("marketId"),
+                            "funded": s.get("funded"),
+                            "released": s.get("released"),
+                            "cancelled": s.get("cancelled"),
+                            "untilHeight": s.get("untilHeight"),
+                            "beneficiary": s.get("beneficiary"),
+                            "funder": s.get("funder"),
+                            "shares": s.get("shares")}))
+            }
+          } |
+
+          lockState!({"funded": false, "released": false, "cancelled": false,
+                      "untilHeight": 0, "beneficiary": "", "funder": "", "shares": 0}) |
+          rs!(bundle+{*LiquidityLock}, *uLock) |
+          for (@lockUri <- uLock) { ret!((true, lockUri)) }
+        }
+      }
+    }
+  } |
+
+  rl!(`__ROOT_URI__`, *rootCh) |
+  for (Root <- rootCh) {
+    rs!(bundle+{*LiquidityLockFactory}, *uFactory) |
+    for (@uri <- uFactory) {
+      Root!("register", "component:liquidity-lock-factory", uri, 1, "domain",
+           *deployerId, *ack) |
+      for (@r <- ack) { deployId!([uri]) }
+    }
+  }
+}

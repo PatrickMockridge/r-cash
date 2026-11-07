@@ -288,10 +288,18 @@ invariants:
   I20:
     statement: Capability provenance and bundleability.
     predicate: Rholphin.Linear.Prov
-    status: tool
-    tool: check_captures.py
-    note: No Lean model; the static capture checker is the current evidence.
-    theorems: []
+    status: covered
+    note: Provenance model; caller names are never stored and bundles exclude registry-resolved capabilities. Source adherence is checked by check_capabilities.py and unit_ocap.py.
+    theorems:
+      - name: Rholphin.Linear.caller_never_stored
+        strength: substantive
+        kind: preservation
+      - name: Rholphin.Linear.authority_use_requires_provenance
+        strength: substantive
+        kind: guard
+      - name: Rholphin.Linear.bundle_no_registry_cap
+        strength: substantive
+        kind: preservation
   I21:
     statement: Only the owner's deployerId passes owner arms.
     predicate: Rholphin.Model.Identity.accountGate_verify

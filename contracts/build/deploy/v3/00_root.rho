@@ -38,12 +38,12 @@ in {
         Nil => { ret!((false, "unknown component")) }
         entry => {
           match entry.get("status") {
-        "retired" => {
-            if (entry.get("version") < minVersion) { ret!((false, "stale")) }
-            else { ret!((true, entry.get("uri"), entry.get("version"))) }
+            "retired" => { ret!((false, "retired")) }
+            _ => {
+              if (entry.get("version") < minVersion) { ret!((false, "stale")) }
+              else { ret!((true, entry.get("uri"), entry.get("version"))) }
+            }
           }
-        _ => { ret!((false, "retired")) }
-      }
         }
       }
     }

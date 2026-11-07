@@ -34,6 +34,7 @@
 | `RiskParameters@"scheduleParams"` | `issuer.RiskParameters.scheduleParams` | — | OK | yes | `Rholphin.Model.Issuer.riskParameters_scheduleParams` | verified |  |
 | `RiskParameters@"applyParams"` | `issuer.RiskParameters.applyParams` | consume:1, post:1 | OK | yes | `Rholphin.Model.Issuer.riskParameters_applyParams` | verified |  |
 | `RiskParameters@"attest"` | `issuer.RiskParameters.attest` | — | OK | yes | `Rholphin.Model.Issuer.riskParameters_attest` | verified |  |
+| `VaultBook@"rotate"` | `vault.VaultBook.rotate` | consume:1, post:1 | OK | yes | `Rholphin.Model.Vault.vaultBook_rotate` | verified |  |
 | `VaultBook@"open"` | `vault.VaultBook.open` | peek:1, consume:1, post:1 | OK | yes | `Rholphin.Model.Vault.vaultBook_open` | verified |  |
 | `VaultBook@"deposit"` | `vault.VaultBook.deposit` | peek:2, consume:1, post:1 | OK | yes | `Rholphin.Model.Vault.vaultBook_deposit` | verified |  |
 | `VaultBook@"mint"` | `vault.VaultBook.mint` | peek:3, consume:1, post:1 | OK | yes | `Rholphin.Model.Vault.vaultBook_mint` | verified |  |
@@ -111,7 +112,7 @@
 | `ListingViews@"currencies"` | `market.ListingViews.currencies` | — | OK | yes | `Rholphin.Model.Market.listingViews_currencies` | verified |  |
 | `ListingViews@"markets"` | `market.ListingViews.markets` | — | OK | yes | `Rholphin.Model.Market.listingViews_markets` | verified |  |
 | `TradabilityGate@"admit"` | `market.TradabilityGate.admit` | — | OK | yes | `Rholphin.Model.Market.tradabilityGate_admit` | verified |  |
-| `PoolTemplate@"create"` | `pool.PoolTemplate.create` | post:2 | OK | yes | `Rholphin.Model.Pool.poolTemplate_create` | verified |  |
+| `PoolTemplate@"create"` | `pool.PoolTemplate.create` | post:1 | OK | yes | `Rholphin.Model.Pool.poolTemplate_create` | verified |  |
 | `FxPool@"pair"` | `pool.FxPool.pair` | — | OK | yes | `Rholphin.Model.Pool.fxPool_pair` | verified |  |
 | `FxPool@"reserves"` | `pool.FxPool.reserves` | peek:1 | OK | yes | `Rholphin.Model.Pool.fxPool_reserves` | verified |  |
 | `FxPool@"balances"` | `pool.FxPool.balances` | — | OK | yes | `Rholphin.Model.Pool.fxPool_balances` | verified |  |
@@ -120,6 +121,7 @@
 | `FxPool@"swap"` | `pool.FxPool.swap` | peek:1, consume:1, post:1 | OK | yes | `Rholphin.Model.Pool.fxPool_swap` | verified |  |
 | `FxPool@"addLiquidity"` | `pool.FxPool.addLiquidity` | peek:1, consume:1, post:1 | OK | yes | `Rholphin.Model.Pool.fxPool_addLiquidity` | verified |  |
 | `FxPool@"removeLiquidity"` | `pool.FxPool.removeLiquidity` | peek:1, consume:1, post:1 | OK | yes | `Rholphin.Model.Pool.fxPool_removeLiquidity` | verified |  |
+| `LiquidityLockFactory@"create"` | `pool.LiquidityLockFactory.create` | post:1 | OK | yes | `Rholphin.Model.Pool.liquidityLockFactory_create` | verified |  |
 | `LiquidityLock@"fund"` | `pool.LiquidityLock.fund` | consume:1, post:1 | OK | yes | `Rholphin.Model.Pool.liquidityLock_fund` | verified |  |
 | `LiquidityLock@"release"` | `pool.LiquidityLock.release` | consume:1, post:1 | OK | yes | `Rholphin.Model.Pool.liquidityLock_release` | verified |  |
 | `LiquidityLock@"cancel"` | `pool.LiquidityLock.cancel` | consume:1, post:1 | OK | yes | `Rholphin.Model.Pool.liquidityLock_cancel` | verified |  |
@@ -147,7 +149,7 @@
 | `OracleFeed@"activate"` | `oracle.OracleFeed.activate` | peek:1, consume:1, post:1 | OK | yes | `Rholphin.Model.Oracle.oracleFeed_activate` | verified |  |
 | `OracleFeed@"info"` | `oracle.OracleFeed.info` | peek:1 | OK | yes | `Rholphin.Model.Oracle.oracleFeed_info` | verified |  |
 | `OracleFeed@"admin"` | `oracle.OracleFeed.admin` | peek:1, consume:1, post:1 | OK | yes | `Rholphin.Model.Oracle.oracleFeed_admin` | verified |  |
-| `AccountFactory@"getOrCreate"` | `identity.AccountFactory.getOrCreate` | peek:1, consume:1, post:3 | OK | yes | `Rholphin.Model.Identity.accountFactory_getOrCreate` | verified |  |
+| `AccountFactory@"getOrCreate"` | `identity.AccountFactory.getOrCreate` | peek:1, consume:2, post:4 | OK | yes | `Rholphin.Model.Identity.accountFactory_getOrCreate` | verified |  |
 | `AccountFactory@"verify"` | `identity.AccountFactory.verify` | peek:1 | OK | yes | `Rholphin.Model.Identity.accountFactory_verify` | verified |  |
 | `AccountFactory@"accountOf"` | `identity.AccountFactory.accountOf` | peek:1 | OK | yes | `Rholphin.Model.Identity.accountFactory_accountOf` | verified |  |
 | `AccountGate@"verify"` | `identity.AccountGate.verify` | — | OK | yes | `Rholphin.Model.Identity.accountGate_verify` | verified |  |

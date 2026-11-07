@@ -1,11 +1,14 @@
 // v0.4 AccountFactory: one owner -> Account, PurseStore and AccountGate.
 // getOrCreate creates the account contracts with the vault proof in closure. The
-// proof is never returned or passed through a message; VaultBook.verify compares
-// it by name. Every account arm takes the caller's deployerId and checks it in
-// AccountGate, so a shared account capability still cannot act for the owner.
+// proof lives in the factory's dedicated proofState cell, never in the account
+// registry entry; AccountFactory.verify peeks that cell and compares by name.
+// vaultOpen takes a currency code and sends the proof only to the vault URI pinned
+// in the currency registry, so a caller cannot substitute a capturing vault. Every
+// account arm takes the caller's deployerId and checks it in AccountGate, so a
+// shared account capability still cannot act for the owner.
 // Placeholders: __ROOT_URI__, __ASSET_RESOLVER_URI__.
 new
-  AccountFactory, factoryState,
+  AccountFactory, factoryState, proofState, vaultOpenResolve,
   revAddress(`rho:rev:address`),
   revVault(`rho:rchain:revVault`),
   deployerIdOps(`rho:rchain:deployerId:ops`),
@@ -15,6 +18,47 @@ new
   deployId(`rho:rchain:deployId`),
   rootCh, Root, uFactory, ack
 in {
+
+  // The vault proof is only ever sent to the vault URI pinned in the currency
+  // registry. The caller supplies a currency code, never a URI, so a malicious
+  // "vault" cannot capture the proof and replay it against the real vault.
+  contract vaultOpenResolve(@code, @ownerId, proof, ret2) = {
+    new rCh, rCh2, cCh, eCh, vc in {
+      rl!(`__ROOT_URI__`, *rCh) |
+      for (Root <- rCh) {
+        Root!("resolve", "component:currency-registry", 1, *rCh2) |
+        for (@r <- rCh2) {
+          match r {
+            (true, regUri, _) => {
+              rl!(regUri, *cCh) |
+              for (Registry <- cCh) {
+                Registry!("currency", code, *eCh) |
+                for (@e <- eCh) {
+                  match e {
+                    (true, entry) => {
+                      match entry.get("vaultUri") {
+                        Nil => { ret2!((false, "no vault")) }
+                        vaultUri => {
+                          rl!(vaultUri, *vc) |
+                          for (VaultBook <- vc) {
+                            VaultBook!("open", ownerId, *proof, *ret2)
+                          }
+                        }
+                      }
+                    }
+                    (false, why) => { ret2!((false, why)) }
+                    _ => { ret2!(1 / 0) }
+                  }
+                }
+              }
+            }
+            (false, why) => { ret2!((false, why)) }
+            _ => { ret2!(1 / 0) }
+          }
+        }
+      }
+    }
+  } |
 
   contract AccountFactory(@"getOrCreate", @pubKeyBytes, ret) = {
     new addrCh in {
@@ -290,18 +334,13 @@ in {
                         }
                       } |
 
-                      contract account(@"vaultOpen", dId, @vaultUri, ret2) = {
+                      contract account(@"vaultOpen", dId, @code, ret2) = {
                         new vCh in {
                           AccountGate!("verify", *dId, *vCh) |
                           for (@v <- vCh) {
                             match v {
                               (true, Nil) => {
-                                new vc in {
-                                  rl!(vaultUri, *vc) |
-                                  for (VaultBook <- vc) {
-                                    VaultBook!("open", ownerId, *proof, *ret2)
-                                  }
-                                }
+                                vaultOpenResolve!(code, ownerId, *proof, *ret2)
                               }
                               _ => { ret2!((false, "not owner")) }
                             }
@@ -510,10 +549,14 @@ in {
 
                       factoryState!(s2.set("accounts",
                         s2.get("accounts").set(ownerId, {
-                          "account": bundle+{*account},
-                          "proof": *proof
+                          "account": bundle+{*account}
                         }))) |
-                      ret!((true, bundle+{*account}, ownerId))
+                      for (@ps <- proofState) {
+                        proofState!(ps.set("proofs",
+                          ps.get("proofs").set(ownerId, *proof))
+                          .set("rev", ps.get("rev") + 1)) |
+                        ret!((true, bundle+{*account}, ownerId))
+                      }
                     }
                   }
                   entry => {
@@ -533,10 +576,10 @@ in {
   } |
 
   contract AccountFactory(@"verify", @ownerId, proof, ret) = {
-    for (@s <<- factoryState) {
-      match s.get("accounts").get(ownerId) {
+    for (@ps <<- proofState) {
+      match ps.get("proofs").get(ownerId) {
         Nil => { ret!((true, false)) }
-        stored => { ret!((true, stored.get("proof") == *proof)) }
+        stored => { ret!((true, stored == *proof)) }
       }
     }
   } |
@@ -551,6 +594,7 @@ in {
   } |
 
   factoryState!({"accounts": {}}) |
+  proofState!({"proofs": {}, "rev": 0}) |
 
   rl!(`__ROOT_URI__`, *rootCh) |
   for (Root <- rootCh) {

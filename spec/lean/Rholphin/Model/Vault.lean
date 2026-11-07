@@ -383,6 +383,10 @@ theorem withdrawChecked_preserves_health {b b' : Book} {target : Owner}
 def vaultBook_open (b : Book) (target : Owner) (height : Nat) : Book :=
   { b with vaults := fun o => if o = target then emptyVault height else b.vaults o }
 
+/-- Rotating the vault capability is access control only: the ledger is
+unchanged. The auth lives in the contract closure, not in `Vault`. -/
+def vaultBook_rotate (b : Book) (_target : Owner) (_auth _newAuth : Nat) : Book := b
+
 def vaultBook_deposit := deposit
 def vaultBook_mint := mint
 def vaultBook_withdraw := withdraw

@@ -35,8 +35,11 @@ def load_env() -> tuple[dict, dict]:
     state = json.loads(STATE.read_text())
     if "currency_registry_uri" not in state:
         steps = state.get("steps", {})
-        state["currency_registry_uri"] = steps["currency_registry"]["uris"][1]
-        state["stablecoin_directory_uri"] = steps["currency_registry"]["uris"][0]
+        _steps = steps.get("currency_registry") or steps.get("32_currency_registry")
+
+        state["currency_registry_uri"] = _steps["uris"][1]
+
+        state["stablecoin_directory_uri"] = _steps["uris"][0]
     return keys, state
 
 
@@ -448,7 +451,7 @@ def seed_market(keys: dict, state: dict, config: dict, base: str, quote: str,
         term = (ROOT / "harness/scenarios/stablecoin_mint_hold.rho").read_text()
         replacements = {
             "__ROOT_URI__": state["root_uri"],
-            "__VAULT_URI__": entry["vaultUri"],
+            "__VAULT_URI__": entry["vaultUri"], "__CURRENCY__": code,
             "__PUBKEY__": deployer["public"],
             "__FUND__": str(collateral),
             "__COLLATERAL__": str(collateral),

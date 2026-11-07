@@ -17,12 +17,13 @@ components:
     transition: identity.AccountFactory.getOrCreate
     lean: Rholphin.Model.Identity.accountFactory_getOrCreate
     kind: mutate
-    source: {file: contracts/src/deploy/v3/09_identity.rho, line: 19}
+    source: {file: contracts/src/deploy/v3/09_identity.rho, line: 63}
     guards:
     - {id: owner, expr: ownerId = revAddress(pubKeyBytes), refusal: {reason: verify failed, phase: pre}}
     - {id: new, expr: 'accounts[ownerId] = Nil or return existing', refusal: {reason: exists, phase: pre}}
     effects:
-    - {target: 'accounts[ownerId]', formula: '{account: bundle, proof: proof}'}
+    - {target: 'accounts[ownerId]', formula: '{account: bundle}'}
+    - {target: proofState, formula: 'proofs[ownerId] = proof, rev: rev + 1'}
     - {target: purseState, formula: '{purses: {}, rev: 0}'}
     - {target: accountState, formula: '{nextTransferId: 0, ops: {}, rev: 0}'}
     access:
@@ -30,6 +31,8 @@ components:
     - {cell: factoryState, mode: consume, actor: arm, phase: commit}
     - {cell: accountState, mode: post, actor: arm, phase: commit}
     - {cell: factoryState, mode: post, actor: arm, phase: commit}
+    - {cell: proofState, mode: consume, actor: arm, phase: commit}
+    - {cell: proofState, mode: post, actor: arm, phase: commit}
     - {cell: purseState, mode: post, actor: arm, phase: commit}
     nested_calls: []
     refusals: []
@@ -42,12 +45,12 @@ components:
     transition: identity.AccountFactory.verify
     lean: Rholphin.Model.Identity.accountFactory_verify
     kind: read
-    source: {file: contracts/src/deploy/v3/09_identity.rho, line: 535}
+    source: {file: contracts/src/deploy/v3/09_identity.rho, line: 578}
     guards: []
     effects:
-    - {target: reply, formula: '(true, stored.proof = proof)'}
+    - {target: reply, formula: '(true, proofs[ownerId] = proof)'}
     access:
-    - {cell: factoryState, mode: peek, actor: arm, phase: pre}
+    - {cell: proofState, mode: peek, actor: arm, phase: pre}
     nested_calls: []
     refusals: []
     invariants:
@@ -59,7 +62,7 @@ components:
     transition: identity.AccountFactory.accountOf
     lean: Rholphin.Model.Identity.accountFactory_accountOf
     kind: read
-    source: {file: contracts/src/deploy/v3/09_identity.rho, line: 544}
+    source: {file: contracts/src/deploy/v3/09_identity.rho, line: 587}
     guards:
     - {id: exists, expr: 'accounts[ownerId] != Nil', refusal: {reason: no account, phase: pre}}
     effects:
@@ -84,7 +87,7 @@ components:
     transition: identity.AccountGate.verify
     lean: Rholphin.Model.Identity.accountGate_verify
     kind: read
-    source: {file: contracts/src/deploy/v3/09_identity.rho, line: 32}
+    source: {file: contracts/src/deploy/v3/09_identity.rho, line: 76}
     guards:
     - {id: owner, expr: revAddress(deployerId.pubKey) = ownerId, refusal: {reason: not owner, phase: pre}}
     effects:
@@ -108,7 +111,7 @@ components:
     transition: identity.PurseStore.ensure
     lean: Rholphin.Model.Identity.purseStore_ensure
     kind: mutate
-    source: {file: contracts/src/deploy/v3/09_identity.rho, line: 45}
+    source: {file: contracts/src/deploy/v3/09_identity.rho, line: 89}
     guards:
     - {id: asset, expr: AssetResolver.issuer(assetId) ok, refusal: {reason: no purse, phase: pre}}
     effects:
@@ -131,7 +134,7 @@ components:
     transition: identity.PurseStore.deposit
     lean: Rholphin.Model.Identity.purseStore_deposit
     kind: read
-    source: {file: contracts/src/deploy/v3/09_identity.rho, line: 92}
+    source: {file: contracts/src/deploy/v3/09_identity.rho, line: 136}
     guards:
     - {id: purse, expr: 'purses[assetId] != Nil', refusal: {reason: no purse, phase: pre}}
     - {id: deposit, expr: purse.deposit ok, refusal: {reason: deposit, phase: pre}}
@@ -151,7 +154,7 @@ components:
     transition: identity.PurseStore.withdraw
     lean: Rholphin.Model.Identity.purseStore_withdraw
     kind: read
-    source: {file: contracts/src/deploy/v3/09_identity.rho, line: 115}
+    source: {file: contracts/src/deploy/v3/09_identity.rho, line: 159}
     guards:
     - {id: amount, expr: amount > 0, refusal: {reason: amount, phase: pre}}
     - {id: purse, expr: 'purses[assetId] != Nil', refusal: {reason: no purse, phase: pre}}
@@ -174,7 +177,7 @@ components:
     transition: identity.PurseStore.balance
     lean: Rholphin.Model.Identity.purseStore_balance
     kind: read
-    source: {file: contracts/src/deploy/v3/09_identity.rho, line: 143}
+    source: {file: contracts/src/deploy/v3/09_identity.rho, line: 187}
     guards:
     - {id: purse, expr: 'purses[assetId] != Nil', refusal: {reason: no purse, phase: pre}}
     effects:
@@ -193,7 +196,7 @@ components:
     transition: identity.PurseStore.facet
     lean: Rholphin.Model.Identity.purseStore_facet
     kind: read
-    source: {file: contracts/src/deploy/v3/09_identity.rho, line: 166}
+    source: {file: contracts/src/deploy/v3/09_identity.rho, line: 210}
     guards:
     - {id: purse, expr: 'purses[assetId] != Nil', refusal: {reason: no purse, phase: pre}}
     effects:
@@ -219,16 +222,19 @@ components:
     transition: identity.account.vaultOpen
     lean: Rholphin.Model.Identity.account_vaultOpen
     kind: mutate
-    source: {file: contracts/src/deploy/v3/09_identity.rho, line: 293}
+    source: {file: contracts/src/deploy/v3/09_identity.rho, line: 337}
     guards:
     - {id: owner, expr: AccountGate.verify ok, refusal: {reason: not owner, phase: pre}}
+    - {id: vault, expr: registry entry has vaultUri, refusal: {reason: no vault, phase: pre}}
     effects:
     - {target: delegate, formula: 'VaultBook.open(ownerId, proof)'}
     access: []
     nested_calls:
+    - {callee: vaultOpenResolve, protocol: P0, takes: [], puts: [], post_owner: helper}
     - {callee: VaultBook@"open", protocol: P4, internal: true}
     refusals:
     - {reason: not owner, phase: pre, reposts: false, fail: false}
+    - {reason: no vault, phase: pre, reposts: false, fail: false}
     invariants:
     - I21
     status: verified
@@ -238,7 +244,7 @@ components:
     transition: identity.account.deposit
     lean: Rholphin.Model.Identity.account_deposit
     kind: mutate
-    source: {file: contracts/src/deploy/v3/09_identity.rho, line: 312}
+    source: {file: contracts/src/deploy/v3/09_identity.rho, line: 351}
     guards:
     - {id: owner, expr: AccountGate.verify ok, refusal: {reason: not owner, phase: pre}}
     effects:
@@ -257,7 +263,7 @@ components:
     transition: identity.account.withdraw
     lean: Rholphin.Model.Identity.account_withdraw
     kind: mutate
-    source: {file: contracts/src/deploy/v3/09_identity.rho, line: 326}
+    source: {file: contracts/src/deploy/v3/09_identity.rho, line: 365}
     guards:
     - {id: owner, expr: AccountGate.verify ok, refusal: {reason: not owner, phase: pre}}
     effects:
@@ -276,7 +282,7 @@ components:
     transition: identity.account.balance
     lean: Rholphin.Model.Identity.account_balance
     kind: read
-    source: {file: contracts/src/deploy/v3/09_identity.rho, line: 340}
+    source: {file: contracts/src/deploy/v3/09_identity.rho, line: 379}
     guards:
     - {id: owner, expr: AccountGate.verify ok, refusal: {reason: not owner, phase: pre}}
     effects:
@@ -294,7 +300,7 @@ components:
     transition: identity.account.depositFacet
     lean: Rholphin.Model.Identity.account_depositFacet
     kind: read
-    source: {file: contracts/src/deploy/v3/09_identity.rho, line: 356}
+    source: {file: contracts/src/deploy/v3/09_identity.rho, line: 395}
     guards: []
     effects:
     - {target: delegate, formula: PurseStore.facet(assetId)}
@@ -310,7 +316,7 @@ components:
     transition: identity.account.sendTransfer
     lean: Rholphin.Model.Identity.account_sendTransfer
     kind: mutate
-    source: {file: contracts/src/deploy/v3/09_identity.rho, line: 362}
+    source: {file: contracts/src/deploy/v3/09_identity.rho, line: 401}
     guards:
     - {id: owner, expr: AccountGate.verify ok, refusal: {reason: not owner, phase: pre}}
     - {id: reserve, expr: reserveSend ok, refusal: {reason: pending, phase: pre}}
@@ -347,7 +353,7 @@ components:
     transition: identity.account.claimTransfer
     lean: Rholphin.Model.Identity.account_claimTransfer
     kind: mutate
-    source: {file: contracts/src/deploy/v3/09_identity.rho, line: 457}
+    source: {file: contracts/src/deploy/v3/09_identity.rho, line: 496}
     guards:
     - {id: owner, expr: AccountGate.verify ok, refusal: {reason: not owner, phase: pre}}
     effects:
@@ -366,7 +372,7 @@ components:
     transition: identity.account.refundTransfer
     lean: Rholphin.Model.Identity.account_refundTransfer
     kind: mutate
-    source: {file: contracts/src/deploy/v3/09_identity.rho, line: 476}
+    source: {file: contracts/src/deploy/v3/09_identity.rho, line: 515}
     guards:
     - {id: owner, expr: AccountGate.verify ok, refusal: {reason: not owner, phase: pre}}
     effects:
@@ -385,7 +391,7 @@ components:
     transition: identity.account.transfers
     lean: Rholphin.Model.Identity.account_transfers
     kind: read
-    source: {file: contracts/src/deploy/v3/09_identity.rho, line: 495}
+    source: {file: contracts/src/deploy/v3/09_identity.rho, line: 534}
     guards:
     - {id: owner, expr: AccountGate.verify ok, refusal: {reason: not owner, phase: pre}}
     effects:

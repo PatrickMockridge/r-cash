@@ -16,11 +16,33 @@ components:
 - name: VaultBook
   lean_module: Rholphin.Model.Vault
   arms:
+  - arm: VaultBook@"rotate"
+    transition: vault.VaultBook.rotate
+    lean: Rholphin.Model.Vault.vaultBook_rotate
+    kind: mutate
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 919}
+    guards:
+    - {id: vault, expr: vault exists, refusal: {reason: no vault, phase: pre}}
+    - {id: auth, expr: 'vaults[ownerId].auth = auth', refusal: {reason: bad vault auth, phase: pre}}
+    effects:
+    - {target: 'vaults[ownerId].auth', formula: newAuth}
+    access:
+    - {cell: vaultState, mode: consume, actor: arm, phase: commit}
+    - {cell: vaultState, mode: post, actor: arm, phase: commit}
+    nested_calls: []
+    refusals:
+    - {reason: no vault, phase: pre, reposts: false, fail: false}
+    - {reason: bad vault auth, phase: pre, reposts: false, fail: false}
+    invariants:
+    - I21
+    status: verified
+    acceptance:
+    - AC-SPEC-ISS-01.1
   - arm: VaultBook@"open"
     transition: vault.VaultBook.open
     lean: Rholphin.Model.Vault.vaultBook_open
     kind: mutate
-    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 917}
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 937}
     guards:
     - {id: proof, expr: 'AccountFactory.verify(ownerId, proof)', refusal: {reason: verify failed, phase: pre}}
     effects:
@@ -45,7 +67,7 @@ components:
     transition: vault.VaultBook.deposit
     lean: Rholphin.Model.Vault.vaultBook_deposit
     kind: mutate
-    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 966}
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 986}
     guards:
     - {id: exists, expr: 'vaults[ownerId] != Nil', refusal: {reason: no vault, phase: pre}}
     - {id: auth, expr: 'vaults[ownerId].auth = auth', refusal: {reason: bad vault auth, phase: pre}}
@@ -83,7 +105,7 @@ components:
     transition: vault.VaultBook.mint
     lean: Rholphin.Model.Vault.vaultBook_mint
     kind: mutate
-    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1028}
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1048}
     guards:
     - {id: amount_pos, expr: amount > 0, refusal: {reason: amount, phase: pre}}
     - {id: exists, expr: 'vaults[ownerId] != Nil', refusal: {reason: no vault, phase: pre}}
@@ -139,7 +161,7 @@ components:
     transition: vault.VaultBook.withdraw
     lean: Rholphin.Model.Vault.vaultBook_withdraw
     kind: mutate
-    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1093}
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1113}
     guards:
     - {id: amount_pos, expr: amount > 0, refusal: {reason: amount, phase: pre}}
     - {id: exists, expr: 'vaults[ownerId] != Nil', refusal: {reason: no vault, phase: pre}}
@@ -189,7 +211,7 @@ components:
     transition: vault.VaultBook.repay
     lean: Rholphin.Model.Vault.vaultBook_repay
     kind: mutate
-    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1178}
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1198}
     guards:
     - {id: exists, expr: 'vaults[ownerId] != Nil', refusal: {reason: no vault, phase: pre}}
     - {id: auth, expr: 'vaults[ownerId].auth = auth', refusal: {reason: bad vault auth, phase: pre}}
@@ -240,7 +262,7 @@ components:
     transition: vault.VaultBook.liquidate
     lean: Rholphin.Model.Vault.vaultBook_liquidate
     kind: mutate
-    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1240}
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1260}
     guards:
     - {id: auth_liquidation, expr: auth = liquidationAuth, refusal: {reason: bad liquidation authority, phase: pre}}
     - {id: payment_asset, expr: isStablecoinPayment(payment), refusal: {reason: not a stablecoin payment, phase: pre}}
@@ -303,7 +325,7 @@ components:
     transition: vault.VaultBook.vault
     lean: Rholphin.Model.Vault.vaultBook_vault
     kind: read
-    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1333}
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1353}
     guards:
     - {id: exists, expr: 'vaults[ownerId] != Nil', refusal: {reason: no vault, phase: pre}}
     effects:
@@ -326,7 +348,7 @@ components:
     transition: vault.VaultBook.vaults
     lean: Rholphin.Model.Vault.vaultBook_vaults
     kind: read
-    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1376}
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1396}
     guards: []
     effects:
     - {target: reply, formula: '(true, keys(vaults))'}
@@ -342,7 +364,7 @@ components:
     transition: vault.VaultBook.totals
     lean: Rholphin.Model.Vault.vaultBook_totals
     kind: read
-    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1380}
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1400}
     guards: []
     effects:
     - {target: reply, formula: '(true, {totalDebt, totalAccruedInterest, totalCollateral, badDebt, sin, psmDebt, paused, rev})'}
@@ -361,7 +383,7 @@ components:
     transition: vault.VaultBook.params
     lean: Rholphin.Model.Vault.vaultBook_params
     kind: read
-    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1395}
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1415}
     guards: []
     effects:
     - {target: reply, formula: '(true, params)'}
@@ -377,7 +399,7 @@ components:
     transition: vault.VaultBook.pause
     lean: Rholphin.Model.Vault.vaultBook_pause
     kind: mutate
-    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1399}
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1419}
     guards:
     - {id: governor, expr: 'Governor.authorize(setPaused, paused.toString())', refusal: {reason: authorize, phase: pre}}
     effects:
@@ -400,7 +422,7 @@ components:
     transition: vault.VaultBook.attest
     lean: Rholphin.Model.Vault.vaultBook_attest
     kind: read
-    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1431}
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1451}
     guards: []
     effects:
     - {target: reply, formula: '(true, {currency, paramsHash, sponsor, template})'}
@@ -422,7 +444,7 @@ components:
     transition: vault.LiquidationEngine.liquidate
     lean: Rholphin.Model.Vault.liquidationEngine_liquidate
     kind: mutate
-    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1442}
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1462}
     guards: []
     effects:
     - {target: delegate, formula: 'VaultBook.liquidate(ownerId, liquidationAuth, payment, minCollateral)'}
@@ -440,7 +462,7 @@ components:
     transition: vault.LiquidationEngine.attest
     lean: Rholphin.Model.Vault.liquidationEngine_attest
     kind: read
-    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1446}
+    source: {file: contracts/src/deploy/v3/31_stablecoin.rho, line: 1466}
     guards: []
     effects:
     - {target: reply, formula: '(true, {currency, template})'}

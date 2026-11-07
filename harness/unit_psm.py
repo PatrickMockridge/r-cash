@@ -99,7 +99,7 @@ def main() -> int:
     check("small buffer balance", small["revBalance"], 1_000_000)
 
     sell_empty = render("stablecoin_psm_sell_only", {
-        "__ROOT_URI__": root, "__VAULT_URI__": vault, "__PSM_URI__": psm,
+        "__ROOT_URI__": root, "__VAULT_URI__": vault, "__CURRENCY__": "V4T", "__PSM_URI__": psm,
         "__PUBKEY__": actor["public"], "__FUND__": "15000000",
         "__COLLATERAL__": "8000000", "__MINT__": str(MINT), "__MIN_REV__": "0",
     })
@@ -134,7 +134,7 @@ def main() -> int:
     supply_before_sell = supply(stablecoin, deployer)
     debt_before_sell = after_buy["stableDebt"]
     sell = render("stablecoin_psm_sell_only", {
-        "__ROOT_URI__": root, "__VAULT_URI__": vault, "__PSM_URI__": psm,
+        "__ROOT_URI__": root, "__VAULT_URI__": vault, "__CURRENCY__": "V4T", "__PSM_URI__": psm,
         "__PUBKEY__": seller["public"], "__FUND__": "15000000",
         "__COLLATERAL__": "8000000", "__MINT__": str(MINT), "__MIN_REV__": "0",
     })
