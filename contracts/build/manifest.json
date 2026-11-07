@@ -1,13 +1,13 @@
 {
   "entries": {
     "contracts/build/deploy/v3/00_root.rho": {
-      "brace_depth": 20,
+      "brace_depth": 25,
       "contracts": 9,
-      "grammar_depth": 31,
-      "minified_bytes": 5969,
+      "grammar_depth": 39,
+      "minified_bytes": 6204,
       "operator_run": 3,
-      "sha256": "cbed42f45598169b17ce5975228899e633048ef9dde5166789adbcab9e55be89",
-      "source_bytes": 10068
+      "sha256": "f4b00300e72921c9f5afdba0bf5198e9f15da2591bae2c61566303d4eb3e9913",
+      "source_bytes": 10531
     },
     "contracts/build/deploy/v3/01_kernel.rho": {
       "brace_depth": 7,
@@ -28,13 +28,13 @@
       "source_bytes": 8092
     },
     "contracts/build/deploy/v3/03_admin_guard.rho": {
-      "brace_depth": 10,
+      "brace_depth": 14,
       "contracts": 3,
-      "grammar_depth": 17,
-      "minified_bytes": 1721,
-      "operator_run": 4,
-      "sha256": "9a948d8d406499c80c2f15066e8bb4ae1f718e41f9676380a5f68eac3df3fa9c",
-      "source_bytes": 2343
+      "grammar_depth": 25,
+      "minified_bytes": 2018,
+      "operator_run": 3,
+      "sha256": "e1d5559ccdbde5b399f800c4da3107ebe06976d8ce566d10232cf13baa923f85",
+      "source_bytes": 3043
     },
     "contracts/build/deploy/v3/04_governor.rho": {
       "brace_depth": 26,
@@ -42,8 +42,8 @@
       "grammar_depth": 41,
       "minified_bytes": 6122,
       "operator_run": 3,
-      "sha256": "5296a81c1b19e51e33e456ac8632649eb4f30991ad2a1910045114c7cd0be5da",
-      "source_bytes": 11340
+      "sha256": "2df63c4c1c4cf70bb00a1d24927fcee7c1af8829762555d20a0b089d8bba4f45",
+      "source_bytes": 11553
     },
     "contracts/build/deploy/v3/05_amm_math.rho": {
       "brace_depth": 10,
@@ -91,13 +91,13 @@
       "source_bytes": 29105
     },
     "contracts/build/deploy/v3/12_oracle_registry.rho": {
-      "brace_depth": 20,
+      "brace_depth": 25,
       "contracts": 11,
-      "grammar_depth": 35,
-      "minified_bytes": 6501,
+      "grammar_depth": 44,
+      "minified_bytes": 6813,
       "operator_run": 5,
-      "sha256": "ed03eb094dd12ff0391159320e9d8d448bbc52770132c1f7abde7e1e817af082",
-      "source_bytes": 10803
+      "sha256": "de5e94276090cdbe4fcdfb130378442664037b8ef65356b0f4df742117950007",
+      "source_bytes": 11788
     },
     "contracts/build/deploy/v3/13_oracle_hub.rho": {
       "brace_depth": 20,
@@ -117,14 +117,32 @@
       "sha256": "d494556248a153c181d98fbdecd5e2ce96803b28e8adfa998afa8b5e1f5e4666",
       "source_bytes": 4406
     },
+    "contracts/build/deploy/v3/31_buffer_savings.rho": {
+      "brace_depth": 25,
+      "contracts": 21,
+      "grammar_depth": 42,
+      "minified_bytes": 13928,
+      "operator_run": 5,
+      "sha256": "5f218f7867e2d4b11842f5a7cb9429b6f3b7e9298c20887f1ab9f798dae4eba1",
+      "source_bytes": 24833
+    },
     "contracts/build/deploy/v3/31_feed.rho": {
       "brace_depth": 26,
       "contracts": 12,
       "grammar_depth": 44,
-      "minified_bytes": 8496,
-      "operator_run": 4,
-      "sha256": "6f10696b3e1ab66a5a92282bcaf37b5f7c86a05d4c0ab4c9af8cc6e3993469ec",
-      "source_bytes": 15419
+      "minified_bytes": 8740,
+      "operator_run": 3,
+      "sha256": "5bc3cbcbf117c2ab7760874633be48da9ff78082e9073a6fe86d0ba8105a9e7a",
+      "source_bytes": 15744
+    },
+    "contracts/build/deploy/v3/31_psm.rho": {
+      "brace_depth": 31,
+      "contracts": 19,
+      "grammar_depth": 51,
+      "minified_bytes": 11774,
+      "operator_run": 3,
+      "sha256": "12a6e7ebbe08fcc3d938a0faf2ec9e3595ae4c8c47496a973c7c7e52bc5242b9",
+      "source_bytes": 23033
     },
     "contracts/build/deploy/v3/31_stablecoin.rho": {
       "brace_depth": 40,
@@ -135,41 +153,50 @@
       "sha256": "d85e698d43e0e9abf3f42d02ba0216bf093e658860d0d9a299fb6db9358c9fa7",
       "source_bytes": 84096
     },
+    "contracts/build/deploy/v3/31_vault.rho": {
+      "brace_depth": 33,
+      "contracts": 32,
+      "grammar_depth": 52,
+      "minified_bytes": 23615,
+      "operator_run": 4,
+      "sha256": "33b1d76430c54fb41568b0bae475aacf394f68bebc4f79c12db50582e9ea04fd",
+      "source_bytes": 51926
+    },
     "contracts/build/deploy/v3/32_currency_registry.rho": {
-      "brace_depth": 34,
-      "contracts": 11,
-      "grammar_depth": 56,
-      "minified_bytes": 8554,
-      "operator_run": 6,
-      "sha256": "26ffd6ddf56fde86650b23e0c368afd39c33db03ce3f7fc4ddb355107bba7fe1",
-      "source_bytes": 18202
+      "brace_depth": 40,
+      "contracts": 14,
+      "grammar_depth": 64,
+      "minified_bytes": 10706,
+      "operator_run": 3,
+      "sha256": "a84a058ac91c315a10027cd9c7be2d753d084f555fef0a41c65bac3f092bf29b",
+      "source_bytes": 24034
     },
     "contracts/build/deploy/v3/40_transfer.rho": {
       "brace_depth": 36,
       "contracts": 7,
       "grammar_depth": 62,
-      "minified_bytes": 5346,
+      "minified_bytes": 5409,
       "operator_run": 4,
-      "sha256": "13af9de41b86067e04b44c21c615cbaba950e1a9b077bb35b935acb41db1f681",
-      "source_bytes": 12525
+      "sha256": "abca80b793d7ea0314727dca9d5c944d0b41f357525d7f1094be2633ec06c726",
+      "source_bytes": 12970
     },
     "contracts/build/deploy/v3/50_market.rho": {
-      "brace_depth": 40,
+      "brace_depth": 45,
       "contracts": 34,
-      "grammar_depth": 63,
-      "minified_bytes": 22714,
-      "operator_run": 4,
-      "sha256": "ed3aca479f0592e6356c6441147020e697d42c2cdbb51d9738d36d64acec7800",
-      "source_bytes": 43755
+      "grammar_depth": 72,
+      "minified_bytes": 23979,
+      "operator_run": 3,
+      "sha256": "9b5ca0dc781ba3320d4ad71f3128ce62a231cf821abf9a3e7d7e8e01135b20a2",
+      "source_bytes": 46747
     },
     "contracts/build/deploy/v3/51_lock.rho": {
       "brace_depth": 22,
       "contracts": 7,
       "grammar_depth": 37,
-      "minified_bytes": 4841,
+      "minified_bytes": 5189,
       "operator_run": 3,
-      "sha256": "647b1bf614aebeb12e2e4f3afe79272450b0299e4afe8fdf4daac684d88746a8",
-      "source_bytes": 8685
+      "sha256": "13ac9b0611bf4b47c3dfcd6707c15b198771268689d170e1a25f7f779813accb",
+      "source_bytes": 9353
     },
     "contracts/build/deploy/v3/51_pool.rho": {
       "brace_depth": 29,

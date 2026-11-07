@@ -39,6 +39,26 @@
         "bytes": 24576,
         "depth": 96,
         "contracts": 26
+      },
+      "contracts/build/deploy/v3/31_vault.rho": {
+        "bytes": 24576,
+        "depth": 96,
+        "contracts": 32
+      },
+      "contracts/build/deploy/v3/31_buffer_savings.rho": {
+        "bytes": 16384,
+        "depth": 64,
+        "contracts": 21
+      },
+      "contracts/build/deploy/v3/31_psm.rho": {
+        "bytes": 16384,
+        "depth": 64,
+        "contracts": 19
+      },
+      "contracts/build/deploy/v3/32_currency_registry.rho": {
+        "bytes": 16384,
+        "depth": 64,
+        "contracts": 14
       }
     }
   },
@@ -1054,7 +1074,7 @@
       "system": [
         "rho:rchain:ertp"
       ],
-      "deploy": "contracts/src/deploy/v3/31_stablecoin.rho",
+      "deploy": "contracts/src/deploy/v3/31_vault.rho",
       "instance_key": "currency",
       "status": "implemented",
       "budget": {
@@ -1069,14 +1089,15 @@
       "stateful": false,
       "state_cell": null,
       "arms": [
-        "liquidate"
+        "liquidate",
+        "attest"
       ],
       "dependencies": [
         "VaultBook"
       ],
       "creates": [],
       "system": [],
-      "deploy": "contracts/src/deploy/v3/31_stablecoin.rho",
+      "deploy": "contracts/src/deploy/v3/31_vault.rho",
       "instance_key": "currency",
       "status": "implemented",
       "budget": {
@@ -1145,7 +1166,8 @@
         "withdraw",
         "notify",
         "info",
-        "position"
+        "position",
+        "attest"
       ],
       "dependencies": [
         "Root",
@@ -1156,7 +1178,7 @@
         "rho:rchain:deployerId:ops",
         "rho:rev:address"
       ],
-      "deploy": "contracts/src/deploy/v3/31_stablecoin.rho",
+      "deploy": "contracts/src/deploy/v3/31_buffer_savings.rho",
       "instance_key": "currency",
       "status": "implemented",
       "budget": {
@@ -1171,12 +1193,11 @@
       "stateful": true,
       "state_cell": "bufferState",
       "arms": [
-        "deposit",
-        "cover",
-        "paySavings",
+        "acceptFacet",
         "info",
         "scheduleShare",
-        "applyShare"
+        "applyShare",
+        "attest"
       ],
       "dependencies": [
         "Root",
@@ -1186,7 +1207,7 @@
       ],
       "creates": [],
       "system": [],
-      "deploy": "contracts/src/deploy/v3/31_stablecoin.rho",
+      "deploy": "contracts/src/deploy/v3/31_buffer_savings.rho",
       "instance_key": "currency",
       "status": "implemented",
       "budget": {
@@ -1201,13 +1222,15 @@
       "stateful": true,
       "state_cell": "psmState",
       "arms": [
+        "acceptFacet",
         "fundRev",
-        "buyStable",
         "sellStable",
+        "buyStable",
+        "schedulePolicy",
+        "applyPolicy",
         "info",
         "debt",
-        "schedulePolicy",
-        "applyPolicy"
+        "attest"
       ],
       "dependencies": [
         "Root",
@@ -1221,13 +1244,83 @@
         "rho:rchain:ertp",
         "rho:rchain:revVault"
       ],
-      "deploy": "contracts/src/deploy/v3/31_stablecoin.rho",
+      "deploy": "contracts/src/deploy/v3/31_psm.rho",
       "instance_key": "currency",
       "status": "implemented",
       "budget": {
         "bytes": 16384,
         "depth": 96,
         "contracts": 7
+      }
+    },
+    {
+      "name": "VaultAccept",
+      "kind": "domain",
+      "stateful": true,
+      "state_cell": "provisionedState",
+      "arms": [
+        "acceptFacet"
+      ],
+      "dependencies": [
+        "Root"
+      ],
+      "creates": [],
+      "system": [],
+      "deploy": "contracts/src/deploy/v3/31_vault.rho",
+      "instance_key": null,
+      "status": "implemented",
+      "budget": {
+        "bytes": 24576,
+        "depth": 48,
+        "contracts": 2
+      }
+    },
+    {
+      "name": "LiquidationAuthLedger",
+      "kind": "registry",
+      "stateful": true,
+      "state_cell": "liquidationAuthState",
+      "arms": [
+        "rotate"
+      ],
+      "dependencies": [
+        "Root",
+        "Governor"
+      ],
+      "creates": [],
+      "system": [],
+      "deploy": "contracts/src/deploy/v3/31_vault.rho",
+      "instance_key": null,
+      "status": "implemented",
+      "budget": {
+        "bytes": 24576,
+        "depth": 48,
+        "contracts": 2
+      }
+    },
+    {
+      "name": "BufferFacetShop",
+      "kind": "registry",
+      "stateful": true,
+      "state_cell": "bufferProvisionState",
+      "arms": [
+        "provision",
+        "isFacet"
+      ],
+      "dependencies": [
+        "Root",
+        "Verifier",
+        "Codec"
+      ],
+      "creates": [],
+      "system": [],
+      "deploy": "contracts/src/deploy/v3/31_buffer_savings.rho",
+      "instance_key": null,
+      "status": "implemented",
+      "budget": {
+        "bytes": 16384,
+        "depth": 48,
+        "contracts": 2
       }
     }
   ]

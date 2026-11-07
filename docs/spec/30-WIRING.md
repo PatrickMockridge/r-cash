@@ -46,13 +46,19 @@ created capability in its closure, so no live capability crosses a deploy.
 | `CurrencyRegistry` (signed system deploy) | `StablecoinDirectory` | `currency → {stablecoinUri, custodyUri, paramsUri, vaultUri, liquidationUri, savingsUri, psmUri, bufferUri, paramsHash, sponsor, status}` |
 | `MarketFactory` | `MarketDirectory` | `marketId → {poolUri, lockUri, termsHash}` |
 
-There is no separate stablecoin factory in v0.4: `31_stablecoin.rho` verifies the sponsor
-signature, bounds and params hash before creating the system, so the deploy is the creation
-gate. `CurrencyRegistry` verifies the live attestation and writes the directory; the
-directory's only write capability is in the registry's closure. The system deploy creates
-the issuer, custody, vault book, liquidation engine, risk parameters, savings pool, surplus
-buffer and PSM in one term, because the mint/burn/settlement/purse capabilities cannot
-cross a deploy boundary.
+There is no separate stablecoin factory in v0.4: the sponsor-signed term deploys verify the
+sponsor signature, bounds and params hash before creating anything, so the deploy is the
+creation gate. `CurrencyRegistry` verifies the live attestations and writes the directory;
+the directory's only write capability is in the registry's closure.
+
+The system is five deploy terms: T1 issuer (issuer kit, `Stablecoin`,
+`CollateralCustody`, auth ledger, facet shop), T5 risk parameters, T3 buffer/savings,
+T4 PSM and T2 vault. The mint/burn/settlement/custody authorities stay in T1; the buffer
+authorities stay in T3; each term publishes a facet shop. The sponsor then signs one
+provisioning payload per consumer; each shop delivers its facet in the same deploy and the
+consumer verifies it with the shop pinned for that kind, storing it in a private bare-name
+slot. The eight registry URIs name components across the five terms. See
+[MULTI-TERM.md](MULTI-TERM.md).
 
 `OracleFeed` is deployed per currency by its sponsor; `OracleRegistry.registerFeed` binds
 the URI after the sponsor signature and feed attestation check. There is no feed factory.
@@ -90,7 +96,7 @@ by a block boundary before the next.
 | 10c | `PoolTemplate` | `component:pool-template` |
 | 10d | `MarketTerms`, `MarketIndex`, `MarketDirectory`, `MarketFactory`, `TradabilityGate`, `ListingViews` | `component:market-*`, `component:tradability-gate`, `component:listing-views` |
 | 11 | `AccountFactory` (creates `Account`, `PurseStore`, `AccountGate` per owner) | `component:account-factory` |
-| 12 | per currency: deploy `31_stablecoin` with signed params v2, then `CurrencyRegistry.register` with the sponsor signature and all seven URIs | `currency:<CODE>` |
+| 12 | per currency: deploy T1 issuer, T5 params, T3 buffer/savings, T4 PSM, T2 vault; provision T3 (burn), T4 (mint/burn), T2 (mint/burn/settle/custody from the issuer shop, buffer from the buffer shop); then `CurrencyRegistry.register` with the sponsor signature and all eight URIs | `currency:<CODE>` |
 | 12b | per currency: `OracleFeed`, then `OracleRegistry.registerFeed` | `feed:<CODE>` |
 | 13 | per market: `MarketFactory.createMarket`, seed, lock, activate | `market:<PAIR>:vN` |
 | 99 | `Root.freeze` | — |
@@ -103,14 +109,17 @@ failed step aborts the install; it never writes a half-installed manifest.
 
 Listing is evidence-first and idempotent per code:
 
-1. The sponsor deploys `31_stablecoin` with the canonical params v2, hash and signature; the
-   deploy refuses a bad signature, out-of-bounds params, a hash mismatch or a duplicate
-   system for the code (the registry check below is the authoritative duplicate gate).
+1. The sponsor deploys T1, T5, T3, T4 and T2 in that order with the canonical params and
+   hash; each sponsor-signed deploy refuses a bad signature, out-of-bounds params, a hash
+   mismatch or a duplicate system for the code (the registry check below is the
+   authoritative duplicate gate). The sponsor then provisions the facets: T3's burn facet
+   from the issuer shop, T4's mint/burn from the issuer shop, and T2's
+   mint/burn/settle/custody from the issuer shop plus its buffer facet from the buffer shop.
 2. `CurrencyRegistry.register(code, scUri, custodyUri, paramsUri, vaultUri, liqUri,
-   savingsUri, psmUri, bufferUri, paramsHash, sponsor, sig)` verifies
-   `rcash:currency-register:v3|code|scUri|custodyUri|paramsUri|vaultUri|liqUri|savingsUri|psmUri|bufferUri|paramsHash|sponsor`,
-   calls the live `Stablecoin.attest`, and requires the currency, params hash and sponsor to
-   match. It then writes `StablecoinDirectory` and the currency record in one commit.
+   savingsUri, psmUri, bufferUri, paramsHash, sponsor, sig)` verifies the canonical register
+   preimage, calls each component's `attest`, and requires all eight currency/params-hash/
+   sponsor/kind fields to match. It then writes `StablecoinDirectory` and the currency
+   record in one commit.
 3. A duplicate code is refused before the signature check; a bad signature is refused before
    the directory write. `setPaused` is governor-gated per domain `stablecoin:<CODE>`, calls
    `VaultBook.pause`, and mirrors the status in the registry only after the issuer accepts.
